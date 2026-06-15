@@ -39,3 +39,15 @@ body {
   scrollbar-width: none;
 }
 
+/* Leaflet Map Tile Rendering Fixes (Resolves 1px gaps/grid seams on high-DPI/Retina screens) */
+.leaflet-tile {
+  outline: 1px solid transparent;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Smoother transitions on Leaflet container background adjustments */
+.leaflet-container {
+  transition: background-color 0.3s ease;
+}
+

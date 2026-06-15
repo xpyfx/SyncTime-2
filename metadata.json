@@ -1,6 +1,6 @@
 {
-  "name": "WanderBuddy",
-  "description": "A premium, Apple-inspired mobile application for finding travel partners, sharing travel experiences (Travel Bar), and real-time chatting.",
-  "requestFramePermissions": [],
+  "name": "SyncTime",
+  "description": "SyncTime 共時 - A premium, Apple-inspired mobile application for finding travel partners, sharing travel experiences, and real-time chatting.",
+  "requestFramePermissions": ["geolocation"],
   "majorCapabilities": []
 }

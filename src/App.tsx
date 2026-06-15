@@ -56,11 +56,11 @@ const AppContent = () => {
         >
           <div className="w-20 h-20 bg-apple-gray-600 rounded-2xl mx-auto flex items-center justify-center text-white">
              {/* Logo Placeholder */}
-             <div className="text-3xl font-bold">W</div>
+             <div className="text-3xl font-bold font-mono">S</div>
           </div>
           <div className="space-y-2">
-            <h1 className="text-3xl font-bold tracking-tight">WanderBuddy</h1>
-            <p className="text-apple-gray-400 font-light px-4">探索世界，找尋最合適的旅伴。</p>
+            <h1 className="text-3xl font-bold tracking-tight">SyncTime 共時</h1>
+            <p className="text-apple-gray-400 font-light px-4">探索世界，找尋最合適的旅伴，精彩生活，與君共時。</p>
           </div>
           <button
             onClick={login}
@@ -77,7 +77,7 @@ const AppContent = () => {
   const renderPage = () => {
     switch (activeTab) {
       case 'home': return <HomeView onTripClick={setSelectedTripId} onAvatarClick={setSelectedUserId} onAddClick={() => setActiveTab('add')} />;
-      case 'bar': return <TravelBarView onChatClick={handleOpenChat} />;
+      case 'bar': return <TravelBarView onChatClick={handleOpenChat} onAvatarClick={setSelectedUserId} />;
       case 'add': return <CreateTripView onCancel={() => setActiveTab('home')} />;
       case 'chat': return (
         <ChatPage 
@@ -90,7 +90,14 @@ const AppContent = () => {
         />
       );
       case 'notifications': return <NotificationsPage onTripClick={setSelectedTripId} onUserClick={setSelectedUserId} />;
-      case 'profile': return <ProfilePage onMyPostsClick={() => setViewingUserPostsId(user?.uid || null)} onTripClick={setSelectedTripId} onChatClick={handleOpenChat} />;
+      case 'profile': return (
+        <ProfilePage 
+          onMyPostsClick={() => setViewingUserPostsId(user?.uid || null)} 
+          onTripClick={setSelectedTripId} 
+          onChatClick={handleOpenChat} 
+          onUserClick={setSelectedUserId}
+        />
+      );
       default: return <HomeView onTripClick={setSelectedTripId} onAvatarClick={setSelectedUserId} onAddClick={() => setActiveTab('add')} />;
     }
   };

@@ -92,19 +92,43 @@ export const COMMON_CITIES: Record<string, string[]> = {
     "高雄", "屏東", "宜蘭", "花蓮", "台東", "澎湖", "金門",
     "連江"
   ],
-  "日本": ["東京", "大阪", "京都", "札幌", "福岡", "名古屋", "橫濱",
-    "神戶", "奈良", "廣島", "仙台", "金澤", "長崎", "函館",
-    "沖繩", "那霸", "富良野", "小樽", "旭川", "青森", "秋田",
-    "盛岡", "山形", "福島", "宇都宮", "水戶", "前橋", "埼玉",
-    "千葉", "川崎", "鎌倉", "箱根", "熱海", "靜岡", "濱松",
-    "新潟", "長野", "松本", "富山", "福井", "岐阜", "高山",
-    "津", "大津", "和歌山", "姬路", "岡山", "倉敷", "松江",
-    "鳥取", "山口", "下關", "德島", "高松", "松山", "高知",
-    "北九州", "久留米", "佐賀", "佐世保", "熊本", "大分", "別府",
-    "宮崎", "鹿兒島", "那霸", "石垣島", "宮古島",
-
-    "富士山周邊", "河口湖", "輕井澤", "白川鄉", "伊豆", "日光",
-    "由布院", "黑川溫泉", "草津溫泉", "銀山溫泉"
+  "日本": [
+    "東京", "Tokyo", "大阪", "Osaka", "京都", "Kyoto", "札幌", "Sapporo", "福岡", "Fukuoka", 
+    "北海道", "Hokkaido", "九州", "Kyushu", "名古屋", "Nagoya", "橫濱", "Yokohama", "神戶", "Kobe", 
+    "奈良", "Nara", "廣島", "Hiroshima", "仙台", "Sendai", "金澤", "Kanazawa", "長崎", "Nagasaki", 
+    "函館", "Hakodate", "沖繩", "Okinawa", "那霸", "Naha", "富良野", "Furano", "小樽", "Otaru", 
+    "旭川", "Asahikawa", "青森", "Aomori", "秋田", "Akita", "盛岡", "Morioka", "山形", "Yamagata", 
+    "福島", "Fukushima", "宇都宮", "Utsunomiya", "水戶", "Mito", "前橋", "Maebashi", "埼玉", "Saitama", 
+    "千葉", "Chiba", "川崎", "Kawasaki", "鎌倉", "Kamakura", "箱根", "Hakone", "熱海", "Atami", 
+    "靜岡", "Shizuoka", "濱松", "Hamamatsu", "新潟", "Niigata", "長野", "Nagano", "松本", "Matsumoto", 
+    "富山", "Toyama", "福井", "Fukui", "岐阜", "Gifu", "高山", "Takayama", "津", "Tsu", 
+    "大津", "Otsu", "和歌山", "Wakayama", "姬路", "Himeji", "岡山", "Okayama", "倉敷", "Kurashiki", 
+    "松江", "Matsue", "鳥取", "Tottori", "山口", "Yamaguchi", "下關", "Shimonoseki", "德島", "Tokushima", 
+    "高松", "Takamatsu", "松山", "Matsuyama", "高知", "Kochi", "北九州", "Kitakyushu", "久留米", "Kurume", 
+    "佐賀", "Saga", "佐世保", "Sasebo", "熊本", "Kumamoto", "大分", "Oita", "別府", "Beppu", 
+    "宮崎", "Miyazaki", "鹿兒島", "Kagoshima", "石垣島", "Ishigaki", "宮古島", "Miyako",
+    "富士山周邊", "Mount Fuji", "河口湖", "Kawaguchiko", "輕井澤", "Karuizawa", "白川鄉", "Shirakawa-go", 
+    "伊豆", "Izu", "日光", "Nikko", "由布院", "Yufuin", "黑川溫泉", "Kurokawa Onsen", "草津溫泉", "Kusatsu Onsen", 
+    "銀山溫泉", "Ginzan Onsen"
+  ],
+  "Japan": [
+    "東京", "Tokyo", "大阪", "Osaka", "京都", "Kyoto", "札幌", "Sapporo", "福岡", "Fukuoka", 
+    "北海道", "Hokkaido", "九州", "Kyushu", "名古屋", "Nagoya", "橫濱", "Yokohama", "神戶", "Kobe", 
+    "奈良", "Nara", "廣島", "Hiroshima", "仙台", "Sendai", "金澤", "Kanazawa", "長崎", "Nagasaki", 
+    "函館", "Hakodate", "沖繩", "Okinawa", "那霸", "Naha", "富良野", "Furano", "小樽", "Otaru", 
+    "旭川", "Asahikawa", "青森", "Aomori", "秋田", "Akita", "盛岡", "Morioka", "山形", "Yamagata", 
+    "福島", "Fukushima", "宇都宮", "Utsunomiya", "水戶", "Mito", "前橋", "Maebashi", "埼玉", "Saitama", 
+    "千葉", "Chiba", "川崎", "Kawasaki", "鎌倉", "Kamakura", "箱根", "Hakone", "熱海", "Atami", 
+    "靜岡", "Shizuoka", "濱松", "Hamamatsu", "新潟", "Niigata", "長野", "Nagano", "松本", "Matsumoto", 
+    "富山", "Toyama", "福井", "Fukui", "岐阜", "Gifu", "高山", "Takayama", "津", "Tsu", 
+    "大津", "Otsu", "和歌山", "Wakayama", "姬路", "Himeji", "岡山", "Okayama", "倉敷", "Kurashiki", 
+    "松江", "Matsue", "鳥取", "Tottori", "山口", "Yamaguchi", "下關", "Shimonoseki", "德島", "Tokushima", 
+    "高松", "Takamatsu", "松山", "Matsuyama", "高知", "Kochi", "北九州", "Kitakyushu", "久留米", "Kurume", 
+    "佐賀", "Saga", "佐世保", "Sasebo", "熊本", "Kumamoto", "大分", "Oita", "別府", "Beppu", 
+    "宮崎", "Miyazaki", "鹿兒島", "Kagoshima", "石垣島", "Ishigaki", "宮古島", "Miyako",
+    "富士山周邊", "Mount Fuji", "河口湖", "Kawaguchiko", "輕井澤", "Karuizawa", "白川鄉", "Shirakawa-go", 
+    "伊豆", "Izu", "日光", "Nikko", "由布院", "Yufuin", "黑川溫泉", "Kurokawa Onsen", "草津溫泉", "Kusatsu Onsen", 
+    "銀山溫泉", "Ginzan Onsen"
   ],
   "韓國": [
     "首爾", "釜山", "仁川", "大邱", "大田", "光州", "蔚山", "世宗",
@@ -238,8 +262,16 @@ export const COMMON_CITIES: Record<string, string[]> = {
     "薄荷島", "伊洛伊洛", "卡加延德奧羅", "杜馬蓋地",
   ],
   "印尼": [
-    "雅加達", "峇里島", "泗水", "萬隆", "日惹", "龍目島",
-    "望加錫", "棉蘭", "科摩多", "班達亞齊",
+    "雅加達", "Jakarta", "峇里島", "Bali", "泗水", "Surabaya", "萬隆", "Bandung", "日惹", "Yogyakarta", "龍目島", "Lombok",
+    "望加錫", "Makassar", "棉蘭", "Medan", "科摩多", "Komodo", "班達亞齊", "Banda Aceh"
+  ],
+  "Indonesia": [
+    "雅加達", "Jakarta", "峇里島", "Bali", "泗水", "Surabaya", "萬隆", "Bandung", "日惹", "Yogyakarta", "龍目島", "Lombok",
+    "望加錫", "Makassar", "棉蘭", "Medan", "科摩多", "Komodo", "班達亞齊", "Banda Aceh"
+  ],
+  "印度尼西亞": [
+    "雅加達", "Jakarta", "峇里島", "Bali", "泗水", "Surabaya", "萬隆", "Bandung", "日惹", "Yogyakarta", "龍目島", "Lombok",
+    "望加錫", "Makassar", "棉蘭", "Medan", "科摩多", "Komodo", "班達亞齊", "Banda Aceh"
   ],
   "緬甸": ["仰光", "曼德勒", "蒲甘", "茵萊湖", "奈比多", "大其力"],
   "寮國": ["永珍", "琅勃拉邦", "萬榮", "巴色", "占巴塞"],
@@ -591,19 +623,58 @@ export const COUNTRIES = Array.from(new Set([
   ...ENGLISH_COUNTRIES
 ]));
 
+const ALIAS_MAPPING: Record<string, string> = {
+  "Indonesia": "印尼",
+  "印度尼西亞": "印尼",
+  "Japan": "日本",
+  "South Korea": "韓國",
+  "United States": "美國",
+  "United Kingdom": "英國",
+  "Germany": "德國",
+  "France": "法國",
+  "Italy": "義大利",
+  "Spain": "西班牙",
+  "Canada": "加拿大",
+  "Vietnam": "越南",
+  "Thailand": "泰國",
+};
+
 /** 
  * 取得特定國家的城市列表
  * 優先從手動維護的 COMMON_CITIES 獲取中文城市，
  * 若無資料則從 country-state-city 套件獲取英文城市
  */
 export function getCitiesByCountry(countryName: string): string[] {
-  // 1. 優先查詢手動維護的中文城市列表
+  if (!countryName) return [];
+
+  const normalized = ALIAS_MAPPING[countryName] || countryName;
+  if (COMMON_CITIES[normalized]) {
+    return COMMON_CITIES[normalized];
+  }
+
+  // 1. Try direct lookup first
   if (COMMON_CITIES[countryName]) {
     return COMMON_CITIES[countryName];
   }
 
+  // Normalize via Alpha 2 code translation mapping
+  const alpha2 = countriesIso.getAlpha2Code(countryName, 'en') || countriesIso.getAlpha2Code(countryName, 'zh');
+  if (alpha2) {
+    const zhName = countriesIso.getName(alpha2, 'zh');
+    if (zhName && COMMON_CITIES[zhName]) {
+      return COMMON_CITIES[zhName];
+    }
+    const enName = countriesIso.getName(alpha2, 'en');
+    if (enName && COMMON_CITIES[enName]) {
+      return COMMON_CITIES[enName];
+    }
+  }
+
   // 2. 備援：查詢套件資料
-  const country = Country.getAllCountries().find(c => c.name === countryName);
+  const country = Country.getAllCountries().find(c => 
+    c.name.toLowerCase() === countryName.toLowerCase() || 
+    (alpha2 && c.isoCode.toLowerCase() === alpha2.toLowerCase())
+  );
   if (!country) return [];
   
   return City.getCitiesOfCountry(country.isoCode)?.map(city => city.name) || [];
@@ -691,6 +762,9 @@ export function getCountryISO3(countryName: string): string {
     '越南': 'VNM',
     'Thailand': 'THA',
     '泰國': 'THA',
+    'Indonesia': 'IDN',
+    '印尼': 'IDN',
+    '印度尼西亞': 'IDN',
   };
 
   if (manualMap[name]) return manualMap[name];

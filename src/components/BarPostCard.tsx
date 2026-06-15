@@ -219,7 +219,7 @@ export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatCl
         {/* Avatar */}
         <div className="flex flex-col items-center gap-2">
           <div 
-            className="w-12 h-12 rounded-full bg-apple-gray-50 border border-apple-gray-100 overflow-hidden shadow-apple-sm"
+            className="w-12 h-12 rounded-full bg-apple-gray-50 border border-apple-gray-100 overflow-hidden shadow-apple-sm cursor-pointer hover:opacity-80 active:scale-95 transition-all"
             onClick={() => onAvatarClick?.(post.authorId)}
           >
             {author?.avatarUrl ? (
@@ -236,8 +236,8 @@ export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatCl
         {/* Content */}
         <div className="flex-1 space-y-2.5">
           <div className="flex items-center justify-between">
-            <div className="flex flex-col" onClick={() => onAvatarClick?.(post.authorId)}>
-               <span className="font-bold text-sm tracking-tight">{author?.displayName || '用戶'}</span>
+            <div className="flex flex-col cursor-pointer hover:text-apple-blue transition-colors group" onClick={() => onAvatarClick?.(post.authorId)}>
+               <span className="font-bold text-sm tracking-tight group-hover:underline">{author?.displayName || '用戶'}</span>
                <span className="text-[10px] text-apple-gray-300 font-medium">@{author?.username || 'unknown'}</span>
             </div>
             
@@ -384,18 +384,28 @@ export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatCl
                 <div className="space-y-4 max-h-60 overflow-y-auto no-scrollbar pb-2">
                   {comments.map(c => (
                     <div key={c.id} className="flex gap-2">
-                      <div className="w-7 h-7 rounded-full bg-apple-gray-50 flex-shrink-0 overflow-hidden">
+                      <button 
+                        type="button"
+                        onClick={() => onAvatarClick?.(c.authorId)}
+                        className="w-7 h-7 rounded-full bg-apple-gray-50 flex-shrink-0 overflow-hidden cursor-pointer hover:opacity-80 active:scale-95 transition-all outline-none"
+                      >
                         {commentAuthors[c.authorId]?.avatarUrl ? (
                           <img src={commentAuthors[c.authorId].avatarUrl} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-[10px] text-apple-gray-200 font-bold lowercase">
-                             {commentAuthors[c.authorId]?.displayName?.[0]}
+                             {commentAuthors[c.authorId]?.displayName?.[0] || '?'}
                           </div>
                         )}
-                      </div>
+                      </button>
                       <div className="flex-1 bg-apple-gray-50 rounded-2xl px-3 py-2">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-[10px]">{commentAuthors[c.authorId]?.displayName || '用戶'}</span>
+                          <button 
+                            type="button" 
+                            onClick={() => onAvatarClick?.(c.authorId)}
+                            className="font-bold text-[10px] text-left hover:text-apple-blue transition-colors cursor-pointer outline-none"
+                          >
+                            {commentAuthors[c.authorId]?.displayName || '用戶'}
+                          </button>
                           <span className="text-[8px] text-apple-gray-300">{new Date(c.createdAt).toLocaleDateString()}</span>
                         </div>
                         <p className="text-[11px] text-apple-gray-600 mt-0.5 leading-relaxed">{c.content}</p>

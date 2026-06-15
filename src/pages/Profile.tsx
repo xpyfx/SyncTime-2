@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import TravelTrajectory from './TravelTrajectory';
 import { 
   Settings, 
   Bell, 
@@ -19,7 +20,10 @@ import {
   Globe,
   MapPin,
   ArrowLeft,
-  EyeOff
+  EyeOff,
+  Lock,
+  Star,
+  Sparkles
 } from 'lucide-react';
 import { getOrCreateChatRoom } from '../lib/chatUtils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -41,10 +45,10 @@ import {
   deleteDoc,
   documentId
 } from 'firebase/firestore';
-import { UserProfile, Notification, Trip, BarPost, GestureSettings } from '../types';
+import { UserProfile, Notification, Trip, BarPost, GestureSettings, UserReview } from '../types';
 import { TripCard } from '../components/TripCard';
 import { BarPostCard } from '../components/BarPostCard';
-import { COUNTRIES, ENGLISH_COUNTRIES, getCountryISO3 } from '../lib/locationData';
+import { COUNTRIES, ENGLISH_COUNTRIES, getCountryISO3, searchCities } from '../lib/locationData';
 
 const getZodiacSign = (dateVal: any) => {
   if (!dateVal) return 'Unknown';
@@ -178,8 +182,9 @@ export const ProfilePage: React.FC<{
   onBack?: () => void,
   onMyPostsClick: () => void, 
   onTripClick: (id: string) => void,
-  onChatClick: (roomId: string) => void 
-}> = ({ targetUserId, onBack, onMyPostsClick, onTripClick, onChatClick }) => {
+  onChatClick: (roomId: string) => void,
+  onUserClick?: (uid: string) => void
+}> = ({ targetUserId, onBack, onMyPostsClick, onTripClick, onChatClick, onUserClick }) => {
   const { user, profile: myProfile, logout } = useAuth();
   const effectiveUserId = targetUserId || user?.uid;
   const isOwnProfile = !targetUserId || targetUserId === user?.uid;
@@ -210,10 +215,22 @@ export const ProfilePage: React.FC<{
   const [showGestureSettings, setShowGestureSettings] = useState(false);
   const [gestureSubMenu, setGestureSubMenu] = useState<keyof GestureSettings | null>(null);
   const [showEditPassport, setShowEditPassport] = useState(false);
+  const [showTravelTrajectory, setShowTravelTrajectory] = useState(false);
   const [showFootprintInfo, setShowFootprintInfo] = useState(false);
   const [showFootprintDetail, setShowFootprintDetail] = useState(false);
-  const [activeTab, setActiveTab] = useState<'trips' | 'saved' | 'friends' | 'posts'>('trips');
+  const [activeTab, setActiveTab] = useState<'trips' | 'saved' | 'friends' | 'posts' | 'about'>('trips');
   const [postTab, setPostTab] = useState<'recruitment' | 'blog'>('recruitment');
+  
+  // "關於" (About) subtab and form states
+  const [aboutSubTab, setAboutSubTab] = useState<'reviews' | 'me'>('reviews');
+  const [reviewsList, setReviewsList] = useState<UserReview[]>([]);
+  const [newReviewRating, setNewReviewRating] = useState(5);
+  const [newReviewContent, setNewReviewContent] = useState('');
+  const [newReviewTags, setNewReviewTags] = useState<string[]>([]);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [bioEditVal, setBioEditVal] = useState('');
+  const [isEditingBio, setIsEditingBio] = useState(false);
+  const [isSavingBio, setIsSavingBio] = useState(false);
   
   // Search states for each tab
   const [tripsSearch, setTripsSearch] = useState('');
@@ -245,8 +262,28 @@ export const ProfilePage: React.FC<{
     };
   }, [showCountryDropdown]);
 
+  const [residenceSearch, setResidenceSearch] = useState('');
+  const [showResidenceDropdown, setShowResidenceDropdown] = useState(false);
+  const residenceDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (residenceDropdownRef.current && !residenceDropdownRef.current.contains(event.target as Node)) {
+        setShowResidenceDropdown(false);
+        setResidenceSearch('');
+      }
+    }
+    if (showResidenceDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showResidenceDropdown]);
+
   const [searchRequestPending, setSearchRequestPending] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<{ id: string, sender: UserProfile }[]>([]);
+  const [sentRequests, setSentRequests] = useState<{ id: string, receiver: UserProfile }[]>([]);
   const [showRequests, setShowRequests] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
   const [showHiddenPosts, setShowHiddenPosts] = useState(false);
@@ -476,8 +513,87 @@ export const ProfilePage: React.FC<{
         residence: profile.residence || '',
         visitedCities: profile.visitedCities || 0
       });
+      setBioEditVal(profile.bio || '');
     }
   }, [profile]);
+
+  // Load user reviews in real-time
+  useEffect(() => {
+    if (!effectiveUserId) return;
+    const qReviews = query(
+      collection(db, 'userReviews'),
+      where('targetUserId', '==', effectiveUserId)
+    );
+    const unsubReviews = onSnapshot(qReviews, (snap) => {
+      const items: UserReview[] = [];
+      snap.forEach((docSnap) => {
+        items.push({ id: docSnap.id, ...docSnap.data() } as UserReview);
+      });
+      // Sort on the client-side to prevent compound index requirement in Firestore
+      items.sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+      setReviewsList(items);
+    }, (error) => {
+      console.error('Error fetching user reviews:', error);
+      handleFirestoreError(error, OperationType.GET, 'userReviews');
+    });
+
+    return () => unsubReviews();
+  }, [effectiveUserId]);
+
+  const handleSaveBio = async () => {
+    if (!user) return;
+    setIsSavingBio(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        bio: bioEditVal
+      });
+      setIsEditingBio(false);
+      alert('自我介紹已成功儲存！');
+    } catch (error: any) {
+      console.error('Error saving bio:', error);
+      alert('儲存失敗，原因：' + (error.message || '權限錯誤'));
+    } finally {
+      setIsSavingBio(false);
+    }
+  };
+
+  const handleSubmitReview = async () => {
+    if (!user || !profile) {
+      alert('請先登入！');
+      return;
+    }
+    if (!newReviewContent.trim()) {
+      alert('請填寫評價內容！');
+      return;
+    }
+    setIsSubmittingReview(true);
+    try {
+      const payload = {
+        targetUserId: effectiveUserId,
+        reviewerId: user.uid,
+        reviewerName: (myProfile?.displayName || user.displayName || '旅人').slice(0, 100),
+        reviewerAvatar: myProfile?.avatarUrl || user.photoURL || '',
+        rating: newReviewRating,
+        tags: newReviewTags,
+        content: newReviewContent,
+        createdAt: new Date().toISOString()
+      };
+      await addDoc(collection(db, 'userReviews'), payload);
+      setNewReviewContent('');
+      setNewReviewRating(5);
+      setNewReviewTags([]);
+      alert('送出評價成功！');
+    } catch (error: any) {
+      console.error('Submit review error:', error);
+      alert('評價送出失敗，原因為：' + (error.message || '權限不足或網路錯誤'));
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
 
   const handleUpdatePassport = async () => {
     if (!user) return;
@@ -501,6 +617,10 @@ export const ProfilePage: React.FC<{
     }
     if (!passportForm.gender) {
       alert('性別 (GENDER) 為必填欄位');
+      return;
+    }
+    if (!passportForm.residence.trim()) {
+      alert('目前居住地 (RESIDENCY / CURRENT CITY) 為必填欄位');
       return;
     }
 
@@ -557,6 +677,7 @@ export const ProfilePage: React.FC<{
 
     // Listen to friend requests (Only for own profile)
     let unsubReq = () => {};
+    let unsubSentReq = () => {};
     if (isOwnProfile) {
       const qReq = query(collection(db, 'friendRequests'), where('receiverId', '==', effectiveUserId), where('status', '==', 'pending'));
       unsubReq = onSnapshot(qReq, async (s) => {
@@ -572,6 +693,22 @@ export const ProfilePage: React.FC<{
           }
         }
         setPendingRequests(reqs);
+      });
+
+      const qSentReq = query(collection(db, 'friendRequests'), where('senderId', '==', effectiveUserId), where('status', '==', 'pending'));
+      unsubSentReq = onSnapshot(qSentReq, async (s) => {
+        const reqs = [];
+        for (const d of s.docs) {
+          const data = d.data();
+          if (!profileCache[data.receiverId]) {
+            const uS = await getDoc(doc(db, 'users', data.receiverId));
+            if (uS.exists()) profileCache[data.receiverId] = uS.data() as UserProfile;
+          }
+          if (profileCache[data.receiverId]) {
+            reqs.push({ id: d.id, receiver: profileCache[data.receiverId] });
+          }
+        }
+        setSentRequests(reqs);
       });
     }
 
@@ -668,6 +805,7 @@ export const ProfilePage: React.FC<{
 
     return () => { 
       unsubReq(); 
+      unsubSentReq();
       unsubTrips(); 
       unsubBar();
       unsubSaved(); 
@@ -776,6 +914,17 @@ export const ProfilePage: React.FC<{
   const handleRejectRequest = async (requestId: string) => {
     try {
       await updateDoc(doc(db, 'friendRequests', requestId), { status: 'rejected' });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleCancelRequest = async (requestId: string) => {
+    try {
+      if (confirm('確定要收回此好友邀請嗎？')) {
+        await deleteDoc(doc(db, 'friendRequests', requestId));
+        alert('已收回好友邀請');
+      }
     } catch (e) {
       console.error(e);
     }
@@ -990,6 +1139,62 @@ export const ProfilePage: React.FC<{
                 
                 <ProfileItem icon={Settings} label="手勢設定" onClick={() => setShowGestureSettings(true)} />
                 <ProfileItem icon={EyeOff} label="隱藏的貼文" onClick={() => setShowHiddenPosts(true)} />
+
+                {/* Trajectory Privacy Toggle Item */}
+                <div className="w-full flex items-center justify-between p-4 bg-white border-b border-apple-gray-50">
+                  <div className="flex items-center gap-4">
+                    <div className="w-8 h-8 rounded-lg bg-apple-gray-50 flex items-center justify-center text-apple-gray-600">
+                      <Globe size={18} />
+                    </div>
+                    <div className="flex flex-col text-left">
+                      <span className="text-sm font-semibold text-apple-gray-900">公開我的旅遊軌跡</span>
+                      <span className="text-[10px] text-apple-gray-400">允許其他旅伴查看您的旅遊足跡</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!user) return;
+                      // Default is true. Check if it's explicitly false.
+                      const currentVal = profile?.isTrajectoryPublic !== false;
+                      const newVal = !currentVal;
+
+                      // Step 1: Optimistic update
+                      if (profile) {
+                        setProfile({
+                          ...profile,
+                          isTrajectoryPublic: newVal
+                        });
+                      }
+
+                      try {
+                        // Step 2: Write to Firestore
+                        await updateDoc(doc(db, 'users', user.uid), {
+                          isTrajectoryPublic: newVal
+                        });
+                      } catch (err: any) {
+                        console.error('Error toggling trajectory privacy:', err);
+                        // Step 3: Revert on failure
+                        if (profile) {
+                          setProfile({
+                            ...profile,
+                            isTrajectoryPublic: currentVal
+                          });
+                        }
+                        alert('更新隱私設定失敗，原因為：' + (err.message || '權限不足或網路錯誤'));
+                      }
+                    }}
+                    className={`w-11 h-6 rounded-full transition-colors relative focus:outline-none flex items-center p-0.5 shrink-0 select-none cursor-pointer ${
+                      profile?.isTrajectoryPublic !== false ? 'bg-emerald-500' : 'bg-apple-gray-200'
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform ${
+                        profile?.isTrajectoryPublic !== false ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
 
                 <div className="w-full flex items-center justify-between p-4 bg-white active:bg-apple-gray-50 transition-colors border-b border-apple-gray-50 last:border-0 cursor-not-allowed opacity-50">
                   <div className="flex items-center gap-4">
@@ -1274,6 +1479,47 @@ export const ProfilePage: React.FC<{
                     )}
                   </div>
                 </div>
+                <div className="relative" ref={residenceDropdownRef}>
+                  <label className="text-xs font-bold text-apple-gray-300 mb-2 block uppercase">目前居住地 (Residency / Current City) <span className="text-red-400">*</span></label>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-apple-gray-300 pointer-events-none">
+                      <MapPin size={16} />
+                    </div>
+                    <input 
+                      type="text" 
+                      placeholder="搜尋或選擇您目前的現居地/城市..."
+                      value={showResidenceDropdown ? residenceSearch : passportForm.residence}
+                      onFocus={() => {
+                        setShowResidenceDropdown(true);
+                        setResidenceSearch('');
+                      }}
+                      onChange={e => setResidenceSearch(e.target.value)}
+                      className="w-full bg-apple-gray-50 rounded-xl pl-11 pr-4 h-12 text-sm focus:outline-apple-blue font-bold text-apple-gray-900"
+                    />
+                    {showResidenceDropdown && (
+                      <div className="absolute top-[calc(100%+4px)] left-0 right-0 bg-white rounded-2xl shadow-apple-lg border border-apple-gray-100 max-h-[250px] overflow-y-auto z-[300] py-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                        {searchCities(residenceSearch).length > 0 ? (
+                          searchCities(residenceSearch).map(city => (
+                            <button
+                              key={city}
+                              type="button"
+                              onClick={() => {
+                                setPassportForm(p => ({ ...p, residence: city }));
+                                setShowResidenceDropdown(false);
+                                setResidenceSearch('');
+                              }}
+                              className="w-full text-left px-4 py-3 text-sm hover:bg-apple-gray-50 active:bg-apple-gray-100 transition-colors border-b border-apple-gray-50 last:border-0"
+                            >
+                              <div className="font-bold text-apple-gray-700">{city}</div>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-4 py-6 text-center text-xs text-apple-gray-300 italic">找不到符合的城市名稱</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
                 <div>
                   <label className="text-xs font-bold text-apple-gray-300 mb-2 block uppercase">出生日期 (Date of Birth) <span className="text-red-400">*</span></label>
                   <input 
@@ -1352,12 +1598,15 @@ export const ProfilePage: React.FC<{
 
                   {searchResult && (
                     <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-apple-gray-100 animate-in fade-in zoom-in-95 duration-300">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-apple-gray-50 overflow-hidden border border-apple-gray-100">
+                      <div 
+                        className="flex items-center gap-3 cursor-pointer hover:text-apple-blue transition-colors group"
+                        onClick={() => onUserClick?.(searchResult.uid)}
+                      >
+                        <div className="w-10 h-10 rounded-full bg-apple-gray-50 overflow-hidden border border-apple-gray-100 group-hover:opacity-80 transition-opacity">
                           {searchResult.avatarUrl ? <img src={searchResult.avatarUrl} className="w-full h-full object-cover" /> : <User className="w-full h-full p-2 text-apple-gray-200" />}
                         </div>
                         <div>
-                          <div className="text-sm font-bold">{searchResult.displayName}</div>
+                          <div className="text-sm font-bold group-hover:underline leading-tight">{searchResult.displayName}</div>
                           <div className="text-[10px] text-apple-gray-300">@{searchResult.username}</div>
                         </div>
                       </div>
@@ -1379,37 +1628,72 @@ export const ProfilePage: React.FC<{
                   )}
                 </div>
 
-                <div className="border-t border-apple-gray-50 pt-4">
-                  <h3 className="text-xs font-bold text-apple-gray-300 uppercase mb-3">待處理申請</h3>
-                  {pendingRequests.length ? pendingRequests.map(req => (
-                <div key={req.id} className="flex items-center justify-between p-4 bg-apple-gray-50 rounded-2xl">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-white overflow-hidden shadow-sm">
-                      {req.sender.avatarUrl && <img src={req.sender.avatarUrl} className="w-full h-full object-cover" />}
-                    </div>
-                    <div>
-                      <div className="text-sm font-bold">{req.sender.displayName}</div>
-                      <div className="text-[10px] text-apple-gray-300">@{req.sender.username}</div>
-                    </div>
+                <div className="border-t border-apple-gray-50 pt-4 space-y-6">
+                  <div>
+                    <h3 className="text-xs font-bold text-apple-gray-300 uppercase mb-3">待處理申請 (收到的)</h3>
+                    {pendingRequests.length ? pendingRequests.map(req => (
+                      <div key={req.id} className="flex items-center justify-between p-4 bg-apple-gray-50 rounded-2xl mb-2">
+                        <div 
+                          className="flex items-center gap-3 cursor-pointer hover:text-apple-blue transition-colors group"
+                          onClick={() => onUserClick?.(req.sender.uid)}
+                        >
+                          <div className="w-10 h-10 rounded-full bg-white overflow-hidden shadow-sm group-hover:opacity-80 transition-opacity">
+                            {req.sender.avatarUrl ? <img src={req.sender.avatarUrl} className="w-full h-full object-cover" /> : <User className="w-full h-full p-2 text-apple-gray-200" />}
+                          </div>
+                          <div>
+                            <div className="text-sm font-bold group-hover:underline leading-tight">{req.sender.displayName}</div>
+                            <div className="text-[10px] text-apple-gray-300">@{req.sender.username}</div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => handleApproveRequest(req.id, req.sender.uid)}
+                            className="bg-apple-blue text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-apple-sm cursor-pointer"
+                          >
+                            同意
+                          </button>
+                          <button 
+                            onClick={() => handleRejectRequest(req.id)}
+                            className="bg-white text-apple-gray-400 px-3 py-1.5 rounded-lg text-xs font-bold border border-apple-gray-100 cursor-pointer"
+                          >
+                            拒絕
+                          </button>
+                        </div>
+                      </div>
+                    )) : (
+                      <div className="text-center py-6 text-apple-gray-300 italic text-[13px]">尚無收到的申請內容</div>
+                    )}
                   </div>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => handleApproveRequest(req.id, req.sender.uid)}
-                      className="bg-apple-blue text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-apple-sm"
-                    >
-                      同意
-                    </button>
-                    <button 
-                      onClick={() => handleRejectRequest(req.id)}
-                      className="bg-white text-apple-gray-400 px-3 py-1.5 rounded-lg text-xs font-bold border border-apple-gray-100"
-                    >
-                      拒絕
-                    </button>
+
+                  <div className="border-t border-apple-gray-50 pt-4">
+                    <h3 className="text-xs font-bold text-apple-gray-300 uppercase mb-3">已送出的申請 (待對方核准)</h3>
+                    {sentRequests.length ? sentRequests.map(req => (
+                      <div key={req.id} className="flex items-center justify-between p-4 bg-apple-gray-50 rounded-2xl mb-2">
+                        <div 
+                          className="flex items-center gap-3 cursor-pointer hover:text-apple-blue transition-colors group"
+                          onClick={() => onUserClick?.(req.receiver.uid)}
+                        >
+                          <div className="w-10 h-10 rounded-full bg-white overflow-hidden shadow-sm group-hover:opacity-80 transition-opacity">
+                            {req.receiver.avatarUrl ? <img src={req.receiver.avatarUrl} className="w-full h-full object-cover" /> : <User className="w-full h-full p-2 text-apple-gray-200" />}
+                          </div>
+                          <div>
+                            <div className="text-sm font-bold group-hover:underline leading-tight">{req.receiver.displayName}</div>
+                            <div className="text-[10px] text-apple-gray-300">@{req.receiver.username}</div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => handleCancelRequest(req.id)}
+                            className="bg-white text-rose-500 px-3 py-1.5 rounded-lg text-xs font-bold border border-rose-100 cursor-pointer hover:bg-rose-50"
+                          >
+                            收回
+                          </button>
+                        </div>
+                      </div>
+                    )) : (
+                      <div className="text-center py-6 text-apple-gray-300 italic text-[13px]">尚無送出的申請紀錄</div>
+                    )}
                   </div>
-                </div>
-              )) : (
-                <div className="text-center py-20 text-apple-gray-300 italic">尚無申請內容</div>
-              )}
                 </div>
               </div>
             </motion.div>
@@ -1508,6 +1792,33 @@ export const ProfilePage: React.FC<{
           )}
         </motion.div>
 
+        {/* Travel Footprints Trajectory Trigger Button */}
+        {profileLoading ? (
+          <div className="mt-4">
+            <div className="w-full h-11 bg-apple-gray-100/75 border border-apple-gray-100 text-apple-gray-400 rounded-2xl font-black text-xs flex items-center justify-center gap-2 select-none animate-pulse">
+              <span>正在確認隱私設定...</span>
+            </div>
+          </div>
+        ) : (!isOwnProfile && (!profile || profile.isTrajectoryPublic === false)) ? (
+          <div className="mt-4">
+            <div className="w-full h-11 bg-apple-gray-100/70 border border-apple-gray-200 text-apple-gray-400 rounded-2xl font-black text-xs flex items-center justify-center gap-2 select-none">
+              <Lock size={12} className="text-apple-gray-400" />
+              <span>此使用者的旅遊軌跡已設為不公開 (私人)</span>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4">
+            <button 
+              type="button"
+              onClick={() => setShowTravelTrajectory(true)}
+              className="w-full h-11 bg-[#ece9db]/40 border border-[#d6cfb8]/70 text-[#8e7d55] rounded-2xl font-black text-xs flex items-center justify-center gap-2 shadow-apple-sm active:scale-95 transition-all hover:bg-[#e5e0cc] hover:text-[#746644]"
+            >
+              <Globe size={14} className="text-[#8e7d55]" />
+              <span>{isOwnProfile ? "開啟我的旅遊軌跡" : "查看旅遊軌跡"}</span>
+            </button>
+          </div>
+        )}
+
         {/* Action Buttons for non-own profile */}
         {!isOwnProfile && (
           <div className="flex justify-center gap-4 mt-6">
@@ -1578,7 +1889,8 @@ export const ProfilePage: React.FC<{
               { id: 'trips', label: `旅程 (${myTrips.length})` },
               { id: 'saved', label: `收藏 (${savedTrips.length + savedBarPosts.length})` },
               { id: 'friends', label: `好友 (${profile?.friends?.length || 0})` },
-              { id: 'posts', label: `發佈 (${postsCount})` }
+              { id: 'posts', label: `發佈 (${postsCount})` },
+              { id: 'about', label: '關於' }
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -1770,12 +2082,21 @@ export const ProfilePage: React.FC<{
                 });
                 return filtered.length ? filtered.map(f => (
                   <div key={f.uid} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-apple-gray-50 shadow-apple-xs">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-apple-gray-50 overflow-hidden border border-apple-gray-100">
-                        {f.avatarUrl && <img src={f.avatarUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />}
+                    <div 
+                      className="flex items-center gap-3 cursor-pointer hover:text-apple-blue transition-colors group"
+                      onClick={() => onUserClick?.(f.uid)}
+                    >
+                      <div className="w-10 h-10 rounded-full bg-apple-gray-50 overflow-hidden border border-apple-gray-100 group-hover:opacity-80 transition-opacity flex-shrink-0">
+                        {f.avatarUrl ? (
+                          <img src={f.avatarUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-apple-gray-300 font-bold text-xs lowercase">
+                            {f.displayName?.[0] || '?'}
+                          </div>
+                        )}
                       </div>
                       <div>
-                        <div className="text-sm font-bold">{f.displayName}</div>
+                        <div className="text-sm font-bold group-hover:underline leading-tight">{f.displayName}</div>
                         <div className="text-[10px] text-apple-gray-300">@{f.username}</div>
                       </div>
                     </div>
@@ -1899,6 +2220,386 @@ export const ProfilePage: React.FC<{
                 }
               })()}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'about' && (
+          <div className="space-y-6">
+            {/* Sub-tabs segment toggle */}
+            <div className="flex bg-apple-gray-50 p-1 rounded-xl mb-6">
+              <button
+                onClick={() => setAboutSubTab('reviews')}
+                className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${
+                  aboutSubTab === 'reviews' 
+                    ? 'bg-white shadow-apple-xs text-apple-gray-900 font-bold' 
+                    : 'text-apple-gray-300 hover:text-apple-gray-400'
+                }`}
+              >
+                別人評價的我 ({reviewsList.length})
+              </button>
+              <button
+                onClick={() => setAboutSubTab('me')}
+                className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${
+                  aboutSubTab === 'me' 
+                    ? 'bg-white shadow-apple-xs text-apple-gray-900 font-bold' 
+                    : 'text-apple-gray-300 hover:text-apple-gray-400'
+                }`}
+              >
+                我
+              </button>
+            </div>
+
+            {/* Sub-tab: 我 (About Me) */}
+            {aboutSubTab === 'me' && (
+              <div className="space-y-6 animate-fade-in">
+                {/* 自我介紹 (Bio) Section */}
+                <div className="bg-white rounded-3xl p-6 border border-apple-gray-100 shadow-apple-xs">
+                  <div className="flex justify-between items-center mb-4">
+                    <div className="flex items-center gap-2">
+                      <Sparkles size={16} className="text-[#007aff]" />
+                      <h3 className="text-sm font-black text-apple-gray-900">自我介紹</h3>
+                    </div>
+                    {isOwnProfile && !isEditingBio && (
+                      <button
+                        onClick={() => {
+                          setBioEditVal(profile?.bio || '');
+                          setIsEditingBio(true);
+                        }}
+                        className="text-xs text-apple-blue font-bold px-3 py-1.5 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center gap-1"
+                      >
+                        <Edit2 size={12} />
+                        編輯
+                      </button>
+                    )}
+                  </div>
+
+                  {isEditingBio ? (
+                    <div className="space-y-3">
+                      <textarea
+                        value={bioEditVal}
+                        onChange={(e) => setBioEditVal(e.target.value)}
+                        placeholder="介紹一下您的旅行風格、興趣愛好，或想對旅伴說的話吧！"
+                        className="w-full h-32 bg-apple-gray-50 rounded-2xl p-4 text-sm focus:outline-apple-blue border border-apple-gray-100 resize-none font-medium"
+                        maxLength={1000}
+                      />
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-apple-gray-300">{(bioEditVal || '').length} / 1000 字</span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setIsEditingBio(false)}
+                            className="px-4 py-2 bg-apple-gray-100 text-apple-gray-600 rounded-xl font-bold hover:bg-apple-gray-200 transition-colors"
+                          >
+                            取消
+                          </button>
+                          <button
+                            onClick={handleSaveBio}
+                            disabled={isSavingBio}
+                            className="px-4 py-2 bg-[#007aff] text-white rounded-xl font-bold hover:bg-opacity-90 disabled:opacity-50 transition-colors"
+                          >
+                            {isSavingBio ? '儲存中...' : '儲存'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-apple-gray-600 leading-relaxed whitespace-pre-wrap">
+                      {profile?.bio ? (
+                        profile.bio
+                      ) : (
+                        <p className="text-apple-gray-300 italic text-[12px] text-center py-4">
+                          {isOwnProfile 
+                            ? "您尚未填寫自我介紹。點擊「編輯」跟大家介紹自己吧！" 
+                            : "這個旅人很神祕，還沒有填寫自我介紹哦。"}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* 基本資料卡 (Passport profile stats) */}
+                <div className="bg-white rounded-3xl p-6 border border-apple-gray-100 shadow-apple-xs space-y-4">
+                  <div className="flex items-center gap-2 border-b border-apple-gray-50 pb-3">
+                    <User size={16} className="text-apple-gray-900" />
+                    <h3 className="text-sm font-black text-apple-gray-900">旅人基本資料</h3>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 bg-apple-gray-50/50 rounded-2xl">
+                      <span className="text-[10px] font-black text-apple-gray-300 block uppercase">姓名 (Name)</span>
+                      <span className="text-sm font-black text-apple-gray-900 mt-0.5 block">{profile?.displayName || '未設定'}</span>
+                    </div>
+
+                    <div className="p-3 bg-apple-gray-50/50 rounded-2xl">
+                      <span className="text-[10px] font-black text-apple-gray-300 block uppercase">註冊帳號 (Username)</span>
+                      <span className="text-sm font-black text-apple-gray-900 mt-0.5 block">@{profile?.username || '未設定'}</span>
+                    </div>
+
+                    <div className="p-3 bg-apple-gray-50/50 rounded-2xl">
+                      <span className="text-[10px] font-black text-apple-gray-300 block uppercase">國籍 (Nationality)</span>
+                      <span className="text-sm font-black text-apple-gray-900 mt-0.5 block">{profile?.nationality || '未設定'}</span>
+                    </div>
+
+                    <div className="p-3 bg-apple-gray-50/50 rounded-2xl">
+                      <span className="text-[10px] font-black text-apple-gray-300 block uppercase">居住地 (Residence)</span>
+                      <span className="text-sm font-black text-apple-gray-900 mt-0.5 block">{profile?.residence || '未設定'}</span>
+                    </div>
+
+                    <div className="p-3 bg-apple-gray-50/50 rounded-2xl">
+                      <span className="text-[10px] font-black text-apple-gray-300 block uppercase">性別 (Gender)</span>
+                      <span className="text-sm font-black text-apple-gray-900 mt-0.5 block">
+                        {profile?.gender === 'M' ? '男 (Male)' : profile?.gender === 'F' ? '女 (Female)' : '其他 (Other)'}
+                      </span>
+                    </div>
+
+                    <div className="p-3 bg-apple-gray-50/50 rounded-2xl">
+                      <span className="text-[10px] font-black text-apple-gray-300 block uppercase">生日 (Birthday)</span>
+                      <span className="text-sm font-black text-apple-gray-900 mt-0.5 block">{profile?.birthday || '未設定'}</span>
+                    </div>
+
+                    <div className="p-3 bg-apple-gray-50/50 rounded-2xl">
+                      <span className="text-[10px] font-black text-apple-gray-300 block uppercase">已旅地區數 (Visited)</span>
+                      <span className="text-sm font-black text-[#007aff] mt-0.5 block">{profile?.visitedCities || 0} 個城市/國家</span>
+                    </div>
+
+                    <div className="p-3 bg-apple-gray-50/50 rounded-2xl">
+                      <span className="text-[10px] font-black text-apple-gray-300 block uppercase">加入日期 (Joined At)</span>
+                      <span className="text-sm font-black text-apple-gray-900 mt-0.5 block">
+                        {profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }) : '未記錄'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Sub-tab: 別人評價的我 (User Reviews) */}
+            {aboutSubTab === 'reviews' && (
+              <div className="space-y-6 animate-fade-in">
+                {/* 綜合評分摘要 */}
+                <div className="bg-white rounded-3xl p-6 border border-apple-gray-100 shadow-apple-xs flex flex-col md:flex-row items-center gap-6">
+                  {/* 平均得分 */}
+                  <div className="flex flex-col items-center justify-center p-4 bg-apple-gray-50/70 rounded-2xl min-w-[120px] text-center">
+                    <div className="text-3xl font-black text-apple-gray-900">
+                      {reviewsList.length > 0 
+                        ? (reviewsList.reduce((acc, curr) => acc + curr.rating, 0) / reviewsList.length).toFixed(1) 
+                        : "0.0"}
+                    </div>
+                    {/* Stars */}
+                    <div className="flex gap-0.5 mt-1">
+                      {[1, 2, 3, 4, 5].map((s) => {
+                        const avg = reviewsList.length > 0 
+                          ? reviewsList.reduce((acc, curr) => acc + curr.rating, 0) / reviewsList.length 
+                          : 0;
+                        return (
+                          <Star 
+                            key={s} 
+                            size={12} 
+                            className={s <= Math.round(avg) ? 'text-yellow-400 fill-yellow-400' : 'text-apple-gray-200'} 
+                          />
+                        );
+                      })}
+                    </div>
+                    <div className="text-[10px] text-apple-gray-300 mt-2 font-bold uppercase tracking-wider">
+                      共 {reviewsList.length} 則評價
+                    </div>
+                  </div>
+
+                  {/* 熱門標籤統計 */}
+                  <div className="flex-1 space-y-2 w-full">
+                    <div className="text-xs font-black text-apple-gray-900 mb-1 border-b border-apple-gray-50 pb-1">熱門旅伴標籤</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(() => {
+                        const tagCounts: Record<string, number> = {};
+                        reviewsList.forEach(r => {
+                          (r.tags || []).forEach(t => {
+                            tagCounts[t] = (tagCounts[t] || 0) + 1;
+                          });
+                        });
+                        const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
+                        
+                        if (sortedTags.length === 0) {
+                          return <span className="text-[11px] text-apple-gray-300 italic animate-pulse">尚無特色標籤</span>;
+                        }
+                        
+                        return sortedTags.map(([tag, count]) => (
+                          <span 
+                            key={tag} 
+                            className="bg-apple-gray-50 border border-apple-gray-100 text-apple-gray-600 text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1"
+                          >
+                            #{tag} <span className="text-apple-blue font-black bg-blue-50 px-1 rounded">{count}</span>
+                          </span>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 填寫新評價 (僅在查看其他旅伴時顯示) */}
+                {!isOwnProfile && (
+                  <div className="bg-[#fcfbf9] rounded-3xl p-6 border border-[#eeebe0] shadow-apple-xs space-y-4">
+                    <div className="flex items-center gap-2 border-b border-[#eeebe0] pb-2">
+                      <Sparkles size={16} className="text-[#a08b5e]" />
+                      <h4 className="text-sm font-black text-apple-gray-900">為這名旅伴留下評價</h4>
+                    </div>
+
+                    <div className="space-y-4">
+                      {/* 星星評分選擇 */}
+                      <div>
+                        <label className="text-[11px] font-black text-apple-gray-300 uppercase block mb-1.5">點選星評 (Rating)</label>
+                        <div className="flex gap-1.5">
+                          {[1, 2, 3, 4, 5].map((starVal) => (
+                            <button
+                              key={starVal}
+                              onClick={() => setNewReviewRating(starVal)}
+                              type="button"
+                              className="focus:outline-none transition-transform hover:scale-110 active:scale-95"
+                            >
+                              <Star
+                                size={24}
+                                className={
+                                  starVal <= newReviewRating 
+                                    ? 'text-yellow-400 fill-yellow-400' 
+                                    : 'text-apple-gray-200'
+                                }
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 旅伴特質標籤選擇 */}
+                      <div>
+                        <label className="text-[11px] font-black text-apple-gray-300 uppercase block mb-1.5">旅伴特質標籤 (可複選)</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {["守時好夥伴", "大方幽默", "溝通順暢", "規劃高手", "隨和好相處", "拍照技術佳", "能獨立行動", "配合度極高"].map((tag) => {
+                            const isSelected = newReviewTags.includes(tag);
+                            return (
+                              <button
+                                key={tag}
+                                type="button"
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setNewReviewTags(prev => prev.filter(t => t !== tag));
+                                  } else {
+                                    setNewReviewTags(prev => [...prev, tag]);
+                                  }
+                                }}
+                                className={`text-[10px] font-bold px-3 py-1.5 rounded-full border transition-all ${
+                                  isSelected 
+                                    ? 'bg-[#007aff] text-white border-[#007aff] shadow-apple-xs' 
+                                    : 'bg-white text-apple-gray-600 border-apple-gray-200 hover:border-apple-gray-300'
+                                }`}
+                              >
+                                {tag}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* 評價細節內容 */}
+                      <div>
+                        <label className="text-[11px] font-black text-apple-gray-300 uppercase block mb-1.5">評價內容 (Comment)</label>
+                        <textarea
+                          placeholder="和這位夥伴的旅途互動如何？分享一些細節或感想吧..."
+                          value={newReviewContent}
+                          onChange={(e) => setNewReviewContent(e.target.value)}
+                          className="w-full h-24 bg-white rounded-2xl p-4 text-xs focus:outline-apple-blue border border-apple-gray-200 resize-none font-medium"
+                          maxLength={500}
+                        />
+                      </div>
+
+                      {/* 送出 */}
+                      <div className="flex justify-between items-center text-[10px] text-apple-gray-300">
+                        <span>最長 500 字</span>
+                        <button
+                          type="button"
+                          onClick={handleSubmitReview}
+                          disabled={isSubmittingReview}
+                          className="px-6 py-2 bg-apple-gray-900 text-white rounded-xl font-bold text-xs hover:bg-apple-gray-800 transition-colors disabled:opacity-50 flex items-center gap-1 shadow-apple-sm"
+                        >
+                          {isSubmittingReview ? '正在送出...' : '送出評價'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 歷史評價列表 */}
+                <div className="space-y-4">
+                  <div className="text-xs font-black text-apple-gray-400 uppercase tracking-wider">
+                    全部評語 ({reviewsList.length})
+                  </div>
+
+                  {reviewsList.length === 0 ? (
+                    <div className="text-center py-12 bg-apple-gray-50/50 rounded-3xl border border-dashed border-apple-gray-200 text-apple-gray-300 italic text-[11px]">
+                      {isOwnProfile 
+                        ? '您目前還沒有收到任何評價。與其他夥伴完成探險後，快邀請他們評價您吧！' 
+                        : '這名旅人目前還沒有任何評價，寫下第一個評價吧！'}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {reviewsList.map((rev) => (
+                        <div key={rev.id} className="bg-white rounded-3xl p-5 border border-apple-gray-100 shadow-apple-xs space-y-3 relative">
+                          {/* 評價頭部資訊 */}
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center gap-2.5">
+                              {/* reviewer avatar */}
+                              <div className="w-9 h-9 rounded-full bg-apple-gray-100 overflow-hidden border border-apple-gray-200 flex-shrink-0">
+                                {rev.reviewerAvatar ? (
+                                  <img src={rev.reviewerAvatar} alt={rev.reviewerName} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center bg-apple-gray-50 text-apple-gray-300">
+                                    <User size={16} />
+                                  </div>
+                                )}
+                              </div>
+                              {/* reviewer details */}
+                              <div>
+                                <div className="text-xs font-black text-apple-gray-900">{rev.reviewerName}</div>
+                                <div className="text-[10px] text-apple-gray-300 font-bold mt-0.5">
+                                  {rev.createdAt ? new Date(rev.createdAt).toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }) : '未記錄日期'}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Score Display */}
+                            <div className="flex gap-0.5 bg-yellow-50/50 px-2 py-1 rounded-lg">
+                              {[1, 2, 3, 4, 5].map((s) => (
+                                <Star 
+                                  key={s} 
+                                  size={10} 
+                                  className={s <= rev.rating ? 'text-yellow-400 fill-yellow-400' : 'text-apple-gray-100'} 
+                                />
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* 評價給予的特色標籤 */}
+                          {rev.tags && rev.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {rev.tags.map(t => (
+                                <span 
+                                  key={t} 
+                                  className="text-[9px] bg-blue-50/60 text-[#007aff] px-2 py-0.5 rounded font-black uppercase tracking-wider"
+                                >
+                                  #{t}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* 評語文字 */}
+                          <div className="text-xs text-[#555] leading-relaxed pl-1">
+                            {rev.content}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -2227,6 +2928,29 @@ export const ProfilePage: React.FC<{
                 )
               )}
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Travel Trajectory Full-screen Screen overlay layer */}
+      <AnimatePresence>
+        {showTravelTrajectory && (
+          <motion.div
+            initial={{ opacity: 0, x: '100%' }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: '100%' }}
+            transition={{ type: 'spring', damping: 26, stiffness: 220 }}
+            className="fixed inset-0 z-[500]"
+          >
+            <TravelTrajectory 
+              userId={effectiveUserId!} 
+              isOwnProfile={isOwnProfile}
+              onClose={() => setShowTravelTrajectory(false)} 
+              onUserClick={(uid) => {
+                setShowTravelTrajectory(false);
+                onUserClick?.(uid);
+              }}
+            />
           </motion.div>
         )}
       </AnimatePresence>

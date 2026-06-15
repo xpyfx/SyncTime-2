@@ -15,9 +15,27 @@
         "visitedCities": { "type": "number", "description": "Number of unique countries/cities visited" },
         "blockedUsers": { "type": "array", "items": { "type": "string" } },
         "friends": { "type": "array", "items": { "type": "string" } },
+        "isTrajectoryPublic": { "type": "boolean", "description": "Whether user's travel trajectory is visible to others" },
+        "bio": { "type": "string", "description": "Self introduction bio of the user" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["displayName", "username"]
+    },
+    "UserReview": {
+      "title": "User Review / Evaluation",
+      "description": "Reviews left by other users regarding a travel partner",
+      "type": "object",
+      "properties": {
+        "targetUserId": { "type": "string", "description": "User ID of the person being reviewed" },
+        "reviewerId": { "type": "string", "description": "User ID of the reviewer" },
+        "reviewerName": { "type": "string", "description": "Display name of the reviewer" },
+        "reviewerAvatar": { "type": "string", "description": "Avatar URL of the reviewer" },
+        "rating": { "type": "number", "description": "Star rating from 1 to 5" },
+        "tags": { "type": "array", "items": { "type": "string" }, "description": "Selected travel companion feedback tags" },
+        "content": { "type": "string", "description": "Detailed written feedback text" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["targetUserId", "reviewerId", "reviewerName", "rating", "content", "createdAt"]
     },
     "Trip": {
       "title": "Travel Recruitment Post",
@@ -114,12 +132,31 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["senderId", "text", "createdAt"]
+    },
+    "Stay": {
+      "title": "Travel Stay Footprint",
+      "description": "Record of a user's stay in a country/city",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "country": { "type": "string" },
+        "city": { "type": "string" },
+        "remark": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "country", "city", "startDate", "endDate"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "User",
       "description": "User profiles"
+    },
+    "/stays/{stayId}": {
+      "schema": "Stay",
+      "description": "User travel footprints"
     },
     "/trips/{tripId}": {
       "schema": "Trip",
@@ -144,6 +181,10 @@
     "/chatRooms/{roomId}/messages/{messageId}": {
       "schema": "Message",
       "description": "Messages in a chat room"
+    },
+    "/userReviews/{reviewId}": {
+      "schema": "UserReview",
+      "description": "Reviews left by other users regarding a travel partner"
     }
   }
 }

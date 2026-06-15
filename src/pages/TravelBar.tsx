@@ -8,7 +8,10 @@ import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { SwipeableWrapper } from '../components/SwipeableWrapper';
 
-export const TravelBarView: React.FC<{ onChatClick: (roomId: string) => void }> = ({ onChatClick }) => {
+export const TravelBarView: React.FC<{ 
+  onChatClick: (roomId: string) => void,
+  onAvatarClick?: (uid: string) => void
+}> = ({ onChatClick, onAvatarClick }) => {
   const [posts, setPosts] = useState<BarPost[]>([]);
   const [activeTab, setActiveTab] = useState<'recommended' | 'friends'>('recommended');
   const [authors, setAuthors] = useState<Record<string, UserProfile>>({});
@@ -212,7 +215,7 @@ export const TravelBarView: React.FC<{ onChatClick: (roomId: string) => void }> 
                   onTrigger: () => handleAction(post, gestureSettings.barRight) 
                 }}
               >
-                <BarPostCard post={post} author={authors[post.authorId]} onChatClick={onChatClick} />
+                <BarPostCard post={post} author={authors[post.authorId]} onChatClick={onChatClick} onAvatarClick={onAvatarClick} />
               </SwipeableWrapper>
             </motion.div>
           ))}

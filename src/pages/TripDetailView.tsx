@@ -118,7 +118,12 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, tripAuthorId, tripId
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-xs">{authorProfile?.displayName}</span>
+            <span 
+              className="font-bold text-xs cursor-pointer hover:text-apple-blue hover:underline transition-colors"
+              onClick={() => onAvatarClick(comment.authorId)}
+            >
+              {authorProfile?.displayName}
+            </span>
             {comment.authorId === tripAuthorId && (
               <span className="bg-apple-blue/10 text-apple-blue px-1.5 py-0.5 rounded text-[8px] font-bold">發布者</span>
             )}
@@ -150,21 +155,27 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, tripAuthorId, tripId
         <div className="ml-12 space-y-4 pt-1 border-l-2 border-apple-gray-50 pl-4">
           {replies.map(r => (
             <div key={r.id} className="flex gap-3">
-              <div 
-                className="w-7 h-7 rounded-full bg-apple-gray-50 flex-shrink-0 overflow-hidden"
+              <button 
+                type="button"
+                className="w-7 h-7 rounded-full bg-apple-gray-50 flex-shrink-0 overflow-hidden cursor-pointer hover:opacity-80 active:scale-95 transition-all outline-none"
                 onClick={() => onAvatarClick(r.authorId)}
               >
                 {replyAuthors[r.authorId]?.avatarUrl ? (
-                  <img src={replyAuthors[r.authorId].avatarUrl} className="w-full h-full object-cover" />
+                  <img src={replyAuthors[r.authorId].url || replyAuthors[r.authorId].avatarUrl} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-xs text-apple-gray-200 font-bold lowercase">
-                    {replyAuthors[r.authorId]?.displayName?.[0]}
+                    {replyAuthors[r.authorId]?.displayName?.[0] || '?'}
                   </div>
                 )}
-              </div>
+              </button>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-[10px]">{replyAuthors[r.authorId]?.displayName}</span>
+                  <span 
+                    className="font-bold text-[10px] cursor-pointer hover:text-apple-blue hover:underline transition-colors"
+                    onClick={() => onAvatarClick(r.authorId)}
+                  >
+                    {replyAuthors[r.authorId]?.displayName}
+                  </span>
                   {r.authorId === tripAuthorId && (
                     <span className="bg-apple-blue/10 text-apple-blue px-1.5 py-0.5 rounded text-[8px] font-bold">發布者</span>
                   )}
@@ -207,7 +218,11 @@ interface TripDetailViewProps {
   onAvatarClick: (userId: string) => void;
 }
 
-const FriendItem: React.FC<{ uid: string, onAdd: (p: UserProfile) => void | Promise<void> }> = ({ uid, onAdd }) => {
+const FriendItem: React.FC<{ 
+  uid: string, 
+  onAdd: (p: UserProfile) => void | Promise<void>,
+  onAvatarClick?: (uid: string) => void
+}> = ({ uid, onAdd, onAvatarClick }) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   useEffect(() => {
     getDoc(doc(db, 'users', uid)).then(s => s.exists() && setProfile(s.data() as UserProfile));
@@ -216,15 +231,18 @@ const FriendItem: React.FC<{ uid: string, onAdd: (p: UserProfile) => void | Prom
   if (!profile) return null;
   return (
     <div className="flex items-center justify-between p-3 bg-white border border-apple-gray-100 rounded-xl shadow-apple-sm">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-apple-gray-50 overflow-hidden">
-          {profile.avatarUrl && <img src={profile.avatarUrl} className="w-full h-full object-cover" />}
+      <div 
+        className="flex items-center gap-3 cursor-pointer hover:text-apple-blue transition-colors group"
+        onClick={() => onAvatarClick?.(uid)}
+      >
+        <div className="w-8 h-8 rounded-full bg-apple-gray-50 overflow-hidden group-hover:opacity-80 transition-opacity">
+          {profile.avatarUrl ? <img src={profile.avatarUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-xs font-bold text-apple-gray-300">{profile.displayName?.[0] || '?'}</div>}
         </div>
-        <div className="text-sm font-medium">{profile.displayName}</div>
+        <div className="text-sm font-medium group-hover:underline leading-tight">{profile.displayName}</div>
       </div>
       <button 
         onClick={() => onAdd(profile)}
-        className="text-apple-blue text-xs font-bold px-3 py-1 bg-apple-blue/5 rounded-lg"
+        className="text-apple-blue text-xs font-bold px-3 py-1 bg-apple-blue/5 rounded-lg whitespace-nowrap"
       >
         加入旅程
       </button>
@@ -1169,14 +1187,27 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
                 <>
                   {memberProfiles.length > 0 ? memberProfiles.map(m => (
                     <div key={m.uid} className="flex items-center justify-between p-4 bg-apple-gray-50 rounded-2xl">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-full bg-white overflow-hidden shadow-sm">
-                          {m.avatarUrl && <img src={m.avatarUrl} className="w-full h-full object-cover" />}
+                      <div 
+                        className="flex items-center gap-3 cursor-pointer hover:text-apple-blue transition-colors group"
+                        onClick={() => {
+                          setShowMemberManager(false);
+                          setShowAddMember(false);
+                          onAvatarClick(m.uid);
+                        }}
+                      >
+                        <div className="w-12 h-12 rounded-full bg-white overflow-hidden shadow-sm group-hover:opacity-80 transition-opacity">
+                          {m.avatarUrl ? (
+                            <img src={m.avatarUrl} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-sm font-bold text-apple-gray-300">
+                              {m.displayName?.[0] || '?'}
+                            </div>
+                          )}
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <div className="text-sm font-bold">{m.displayName}</div>
-                            {m.uid === trip.authorId && (
+                            <div className="text-sm font-bold group-hover:underline leading-tight">{m.displayName}</div>
+                            {trip && m.uid === trip.authorId && (
                               <span className="bg-apple-gray-900 text-white px-2 py-0.5 rounded text-[8px] font-bold">主揪</span>
                             )}
                           </div>
@@ -1229,12 +1260,25 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
 
                   {searchMemberResult && (
                     <div className="p-4 bg-apple-blue/5 rounded-2xl flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-white overflow-hidden">
-                          {searchMemberResult.avatarUrl && <img src={searchMemberResult.avatarUrl} className="w-full h-full object-cover" />}
+                      <div 
+                        className="flex items-center gap-3 cursor-pointer hover:text-apple-blue transition-colors group"
+                        onClick={() => {
+                          setShowMemberManager(false);
+                          setShowAddMember(false);
+                          onAvatarClick(searchMemberResult.uid);
+                        }}
+                      >
+                        <div className="w-10 h-10 rounded-full bg-white overflow-hidden group-hover:opacity-80 transition-opacity">
+                          {searchMemberResult.avatarUrl ? (
+                            <img src={searchMemberResult.avatarUrl} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-xs font-bold text-apple-gray-300">
+                              {searchMemberResult.displayName?.[0] || '?'}
+                            </div>
+                          )}
                         </div>
                         <div>
-                          <div className="text-sm font-bold">{searchMemberResult.displayName}</div>
+                          <div className="text-sm font-bold group-hover:underline leading-tight">{searchMemberResult.displayName}</div>
                           <div className="text-[10px] text-apple-gray-300">@{searchMemberResult.username}</div>
                         </div>
                       </div>
@@ -1252,7 +1296,7 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
                     <h3 className="text-xs font-bold text-apple-gray-300 uppercase tracking-wider">我的好友</h3>
                     <div className="space-y-2">
                       {profile?.friends?.filter(fid => !trip.members?.includes(fid)).map(fid => (
-                        <FriendItem key={fid} uid={fid} onAdd={handleAddMember} />
+                        <FriendItem key={fid} uid={fid} onAdd={handleAddMember} onAvatarClick={onAvatarClick} />
                       ))}
                       {(!profile?.friends?.length || profile.friends.every(fid => trip.members?.includes(fid))) && (
                         <div className="text-[10px] text-apple-gray-200 italic">無可加入的好友</div>

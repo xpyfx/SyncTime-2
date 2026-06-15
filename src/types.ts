@@ -22,6 +22,20 @@ export interface UserProfile {
   // Gesture and Privacy
   gestureSettings?: GestureSettings;
   hiddenItems?: string[]; // IDs of hidden trips or bar posts
+  isTrajectoryPublic?: boolean; // Whether user's travel trajectory is visible to others
+  bio?: string; // Self introduction
+}
+
+export interface UserReview {
+  id: string;
+  targetUserId: string;
+  reviewerId: string;
+  reviewerName: string;
+  reviewerAvatar?: string;
+  rating: number; // 1-5
+  tags: string[];
+  content: string;
+  createdAt: string;
 }
 
 export type BudgetLevel = '高價' | '中價' | '低價';
@@ -135,4 +149,16 @@ export interface Message {
   text: string;
   sharedPostId?: string;
   createdAt: string;
+}
+
+export interface Stay {
+  id: string;
+  userId: string;
+  country: string;
+  city: string;
+  startDate: string;
+  endDate: string;
+  remark?: string;
+  createdAt: string;
+  companionIds?: string[];
 }

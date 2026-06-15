@@ -60,13 +60,13 @@ export const TripCard: React.FC<TripCardProps> = ({ trip, onClick, onAvatarClick
     >
       <div className="flex items-center justify-between mb-4">
         <div 
-          className="flex items-center gap-3"
+          className="flex items-center gap-3 cursor-pointer hover:text-apple-blue transition-colors group"
           onClick={(e) => {
             e.stopPropagation();
             if (onAvatarClick) onAvatarClick(trip.authorId);
           }}
         >
-          <div className="w-10 h-10 rounded-full bg-apple-gray-50 border border-apple-gray-100 overflow-hidden shadow-apple-sm">
+          <div className="w-10 h-10 rounded-full bg-apple-gray-50 border border-apple-gray-100 overflow-hidden shadow-apple-sm group-hover:opacity-80 transition-opacity">
             {author?.avatarUrl ? (
               <img src={author.avatarUrl} alt="avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             ) : (
@@ -76,7 +76,7 @@ export const TripCard: React.FC<TripCardProps> = ({ trip, onClick, onAvatarClick
             )}
           </div>
           <div className="flex flex-col">
-            <span className="font-bold text-xs tracking-tight">{author?.displayName || '載入中...'}</span>
+            <span className="font-bold text-xs tracking-tight group-hover:underline">{author?.displayName || '載入中...'}</span>
             <span className="text-[10px] text-apple-gray-300 font-medium">@{author?.username || 'unknown'}</span>
           </div>
         </div>
