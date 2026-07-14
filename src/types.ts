@@ -36,6 +36,14 @@ export interface UserReview {
   tags: string[];
   content: string;
   createdAt: string;
+  // Slider metrics (-100 to 100; negative is left option, positive is right option, 0 is neutral)
+  moneySpend?: number;   // -100 to 100 (節省型 -> 高消費)
+  sleep?: number;        // -100 to 100 (打呼 -> 不打呼)
+  journey?: number;      // -100 to 100 (規劃 -> 不規劃)
+  cleanliness?: number;  // -100 to 100 (整潔 -> 隨性)
+  personality?: number;  // -100 to 100 (活潑 -> 安靜)
+  targetUserName?: string;
+  targetUserAvatar?: string;
 }
 
 export type BudgetLevel = '高價' | '中價' | '低價';
@@ -149,6 +157,7 @@ export interface Message {
   text: string;
   sharedPostId?: string;
   createdAt: string;
+  mediaList?: { type: 'image' | 'video', url: string }[];
 }
 
 export interface Stay {

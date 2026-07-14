@@ -615,7 +615,7 @@ export const COMMON_CITIES: Record<string, string[]> = {
 };
 
 /** 獲取所有國家的名稱列表 (英文版，來自 npm 套件) */
-export const ENGLISH_COUNTRIES = Country.getAllCountries().map(c => c.name);
+export const ENGLISH_COUNTRIES = Array.from(new Set(Country.getAllCountries().map(c => c.name)));
 
 /** 獲取所有國家的名稱列表 (合併手動中文與套件英文) */
 export const COUNTRIES = Array.from(new Set([
@@ -706,12 +706,15 @@ export function searchCities(keyword: string): string[] {
   
   // 優化：先從手動資料庫找，再從套件找
   const manualMatches = ALL_CITIES.filter(c => c.toLowerCase().includes(lower));
-  if (manualMatches.length > 0) return manualMatches.slice(0, 50);
+  if (manualMatches.length > 0) {
+    return Array.from(new Set(manualMatches)).slice(0, 50);
+  }
 
-  return City.getAllCities()
+  const matchedNames = City.getAllCities()
     .filter((c) => c.name.toLowerCase().includes(lower))
-    .slice(0, 50)
     .map(c => c.name);
+    
+  return Array.from(new Set(matchedNames)).slice(0, 50);
 }
 
 /** 模糊搜尋國家 */

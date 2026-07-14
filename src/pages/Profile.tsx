@@ -48,6 +48,7 @@ import {
 import { UserProfile, Notification, Trip, BarPost, GestureSettings, UserReview } from '../types';
 import { TripCard } from '../components/TripCard';
 import { BarPostCard } from '../components/BarPostCard';
+import { CompanionRadarChart } from '../components/CompanionRadarChart';
 import { COUNTRIES, ENGLISH_COUNTRIES, getCountryISO3, searchCities } from '../lib/locationData';
 
 const getZodiacSign = (dateVal: any) => {
@@ -194,6 +195,7 @@ export const ProfilePage: React.FC<{
 
   useEffect(() => {
     if (!effectiveUserId) return;
+    setProfile(null);
     setProfileLoading(true);
     const unsub = onSnapshot(doc(db, 'users', effectiveUserId), (snap) => {
       if (snap.exists()) {
@@ -224,6 +226,8 @@ export const ProfilePage: React.FC<{
   // "關於" (About) subtab and form states
   const [aboutSubTab, setAboutSubTab] = useState<'reviews' | 'me'>('reviews');
   const [reviewsList, setReviewsList] = useState<UserReview[]>([]);
+  const [givenReviewsList, setGivenReviewsList] = useState<UserReview[]>([]);
+  const [reviewsMode, setReviewsMode] = useState<'received' | 'given'>('received');
   const [newReviewRating, setNewReviewRating] = useState(5);
   const [newReviewContent, setNewReviewContent] = useState('');
   const [newReviewTags, setNewReviewTags] = useState<string[]>([]);
@@ -520,6 +524,7 @@ export const ProfilePage: React.FC<{
   // Load user reviews in real-time
   useEffect(() => {
     if (!effectiveUserId) return;
+    setReviewsList([]);
     const qReviews = query(
       collection(db, 'userReviews'),
       where('targetUserId', '==', effectiveUserId)
@@ -544,6 +549,59 @@ export const ProfilePage: React.FC<{
     return () => unsubReviews();
   }, [effectiveUserId]);
 
+  // Load given reviews in real-time (only if viewing own profile)
+  useEffect(() => {
+    if (!effectiveUserId || !isOwnProfile) {
+      setGivenReviewsList([]);
+      return;
+    }
+    const qGivenReviews = query(
+      collection(db, 'userReviews'),
+      where('reviewerId', '==', effectiveUserId)
+    );
+    const unsubGivenReviews = onSnapshot(qGivenReviews, async (snap) => {
+      const items: UserReview[] = [];
+      snap.forEach((docSnap) => {
+        items.push({ id: docSnap.id, ...docSnap.data() } as UserReview);
+      });
+      items.sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+
+      const enriched: UserReview[] = [];
+      for (const item of items) {
+        if (item.targetUserId) {
+          try {
+            const userSnap = await getDoc(doc(db, 'users', item.targetUserId));
+            if (userSnap.exists()) {
+              const uData = userSnap.data();
+              enriched.push({
+                ...item,
+                targetUserName: uData.displayName || '旅人',
+                targetUserAvatar: uData.avatarUrl || ''
+              });
+              continue;
+            }
+          } catch (e) {
+            console.error('Error fetching target user profile:', e);
+          }
+        }
+        enriched.push({
+          ...item,
+          targetUserName: '未知旅伴',
+          targetUserAvatar: ''
+        });
+      }
+      setGivenReviewsList(enriched);
+    }, (error) => {
+      console.error('Error fetching given reviews:', error);
+    });
+
+    return () => unsubGivenReviews();
+  }, [effectiveUserId, isOwnProfile]);
+
   const handleSaveBio = async () => {
     if (!user) return;
     setIsSavingBio(true);
@@ -564,6 +622,11 @@ export const ProfilePage: React.FC<{
   const handleSubmitReview = async () => {
     if (!user || !profile) {
       alert('請先登入！');
+      return;
+    }
+    const hasSharedTrip = myTrips.some(trip => trip.members?.includes(user.uid));
+    if (!hasSharedTrip) {
+      alert('您必須與該成員有共同的旅遊記錄，才能撰寫評價！');
       return;
     }
     if (!newReviewContent.trim()) {
@@ -672,6 +735,14 @@ export const ProfilePage: React.FC<{
   useEffect(() => {
     if (!effectiveUserId) return;
     
+    // Clear state when switching users to avoid stale data
+    setMyTrips([]);
+    setMyPosts([]);
+    setSavedTrips([]);
+    setSavedBarPosts([]);
+    setPendingRequests([]);
+    setSentRequests([]);
+    
     // Cache for profiles and trips to avoid redundant fetches
     const profileCache: Record<string, UserProfile> = {};
 
@@ -726,18 +797,23 @@ export const ProfilePage: React.FC<{
 
       // Fetch authors for these trips
       const authorIds = Array.from(new Set(trips.map(t => t.authorId)));
-      const newAuthors = { ...barAuthors };
-      let changed = false;
-      for (const id of authorIds) {
-        if (!newAuthors[id]) {
+      if (authorIds.length > 0) {
+        Promise.all(authorIds.map(async (id) => {
           const uDoc = await getDoc(doc(db, 'users', id));
           if (uDoc.exists()) {
-            newAuthors[id] = uDoc.data() as UserProfile;
-            changed = true;
+            return { id, profile: uDoc.data() as UserProfile };
           }
-        }
+          return null;
+        })).then(results => {
+          const fetched: Record<string, UserProfile> = {};
+          results.forEach(r => {
+            if (r) fetched[r.id] = r.profile;
+          });
+          if (Object.keys(fetched).length > 0) {
+            setBarAuthors(prev => ({ ...prev, ...fetched }));
+          }
+        }).catch(console.error);
       }
-      if (changed) setBarAuthors(newAuthors);
     });
 
     // Listen to saved bar posts
@@ -754,18 +830,23 @@ export const ProfilePage: React.FC<{
 
       // Fetch authors for these posts
       const authorIds = Array.from(new Set(posts.map(p => p.authorId)));
-      const newAuthors = { ...barAuthors };
-      let changed = false;
-      for (const id of authorIds) {
-        if (!newAuthors[id]) {
+      if (authorIds.length > 0) {
+        Promise.all(authorIds.map(async (id) => {
           const uDoc = await getDoc(doc(db, 'users', id));
           if (uDoc.exists()) {
-            newAuthors[id] = uDoc.data() as UserProfile;
-            changed = true;
+            return { id, profile: uDoc.data() as UserProfile };
           }
-        }
+          return null;
+        })).then(results => {
+          const fetched: Record<string, UserProfile> = {};
+          results.forEach(r => {
+            if (r) fetched[r.id] = r.profile;
+          });
+          if (Object.keys(fetched).length > 0) {
+            setBarAuthors(prev => ({ ...prev, ...fetched }));
+          }
+        }).catch(console.error);
       }
-      if (changed) setBarAuthors(newAuthors);
     });
 
     // Listen to my joined trips (inclusive of authoring)
@@ -776,18 +857,23 @@ export const ProfilePage: React.FC<{
 
       // Fetch authors for these trips
       const authorIds = Array.from(new Set(trips.map(t => t.authorId)));
-      const newAuthors = { ...barAuthors };
-      let changed = false;
-      for (const id of authorIds) {
-        if (!newAuthors[id]) {
+      if (authorIds.length > 0) {
+        Promise.all(authorIds.map(async (id) => {
           const uDoc = await getDoc(doc(db, 'users', id));
           if (uDoc.exists()) {
-            newAuthors[id] = uDoc.data() as UserProfile;
-            changed = true;
+            return { id, profile: uDoc.data() as UserProfile };
           }
-        }
+          return null;
+        })).then(results => {
+          const fetched: Record<string, UserProfile> = {};
+          results.forEach(r => {
+            if (r) fetched[r.id] = r.profile;
+          });
+          if (Object.keys(fetched).length > 0) {
+            setBarAuthors(prev => ({ ...prev, ...fetched }));
+          }
+        }).catch(console.error);
       }
-      if (changed) setBarAuthors(newAuthors);
     });
 
     // Listen to my authored trips
@@ -1045,18 +1131,23 @@ export const ProfilePage: React.FC<{
 
       // Fetch authors for these items
       const authorIds = Array.from(new Set([...trips.map(t => t.authorId), ...barPosts.map(p => p.authorId)]));
-      const newAuthors = { ...barAuthors };
-      let changed = false;
-      for (const id of authorIds) {
-        if (!newAuthors[id]) {
+      if (authorIds.length > 0) {
+        Promise.all(authorIds.map(async (id) => {
           const uDoc = await getDoc(doc(db, 'users', id));
           if (uDoc.exists()) {
-            newAuthors[id] = uDoc.data() as UserProfile;
-            changed = true;
+            return { id, profile: uDoc.data() as UserProfile };
           }
-        }
+          return null;
+        })).then(results => {
+          const fetched: Record<string, UserProfile> = {};
+          results.forEach(r => {
+            if (r) fetched[r.id] = r.profile;
+          });
+          if (Object.keys(fetched).length > 0) {
+            setBarAuthors(prev => ({ ...prev, ...fetched }));
+          }
+        }).catch(console.error);
       }
-      if (changed) setBarAuthors(newAuthors);
     };
 
     fetchHidden();
@@ -1459,9 +1550,9 @@ export const ProfilePage: React.FC<{
                     {showCountryDropdown && (
                       <div className="absolute top-[calc(100%+4px)] left-0 right-0 bg-white rounded-2xl shadow-apple-lg border border-apple-gray-100 max-h-[250px] overflow-y-auto z-[300] py-2 animate-in fade-in slide-in-from-top-2 duration-200">
                         {ENGLISH_COUNTRIES.filter(c => c.toLowerCase().includes(countrySearch.toLowerCase())).length > 0 ? (
-                          ENGLISH_COUNTRIES.filter(c => c.toLowerCase().includes(countrySearch.toLowerCase())).slice(0, 50).map(country => (
+                          ENGLISH_COUNTRIES.filter(c => c.toLowerCase().includes(countrySearch.toLowerCase())).slice(0, 50).map((country, index) => (
                             <button
-                              key={country}
+                              key={`${country}-${index}`}
                               onClick={() => {
                                 setPassportForm(p => ({ ...p, nationality: country }));
                                 setShowCountryDropdown(false);
@@ -1499,9 +1590,9 @@ export const ProfilePage: React.FC<{
                     {showResidenceDropdown && (
                       <div className="absolute top-[calc(100%+4px)] left-0 right-0 bg-white rounded-2xl shadow-apple-lg border border-apple-gray-100 max-h-[250px] overflow-y-auto z-[300] py-2 animate-in fade-in slide-in-from-top-2 duration-200">
                         {searchCities(residenceSearch).length > 0 ? (
-                          searchCities(residenceSearch).map(city => (
+                          searchCities(residenceSearch).map((city, index) => (
                             <button
-                              key={city}
+                              key={`${city}-${index}`}
                               type="button"
                               onClick={() => {
                                 setPassportForm(p => ({ ...p, residence: city }));
@@ -2100,27 +2191,29 @@ export const ProfilePage: React.FC<{
                         <div className="text-[10px] text-apple-gray-300">@{f.username}</div>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => openChatWithFriend(f.uid)} className="text-apple-blue p-2 active:scale-90 transition-transform"><MessageCircle size={18} /></button>
-                      <button 
-                        onClick={() => {
-                          if (Date.now() < skipFriendWarningUntil) {
-                            // Directly remove
-                            setGoodbyeFriend(f);
-                            setTimeout(() => {
-                              const btn = document.getElementById('direct-remove-trigger');
-                              if (btn) btn.click();
-                            }, 50);
-                          } else {
-                            setDontWarnAgain(false);
-                            setGoodbyeFriend(f);
-                          }
-                        }} 
-                        className="text-red-400 text-[10px] font-black px-3 py-1.5 bg-red-50 rounded-lg active:scale-95 transition-transform"
-                      >
-                        再見朋友
-                      </button>
-                    </div>
+                    {isOwnProfile && (
+                      <div className="flex gap-2">
+                        <button onClick={() => openChatWithFriend(f.uid)} className="text-apple-blue p-2 active:scale-90 transition-transform"><MessageCircle size={18} /></button>
+                        <button 
+                          onClick={() => {
+                            if (Date.now() < skipFriendWarningUntil) {
+                              // Directly remove
+                              setGoodbyeFriend(f);
+                              setTimeout(() => {
+                                const btn = document.getElementById('direct-remove-trigger');
+                                if (btn) btn.click();
+                              }, 50);
+                            } else {
+                              setDontWarnAgain(false);
+                              setGoodbyeFriend(f);
+                            }
+                          }} 
+                          className="text-red-400 text-[10px] font-black px-3 py-1.5 bg-red-50 rounded-lg active:scale-95 transition-transform"
+                        >
+                          再見朋友
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )) : (
                   <div className="text-center py-20 text-apple-gray-300 italic text-sm">尚無相符好友</div>
@@ -2137,13 +2230,13 @@ export const ProfilePage: React.FC<{
                 onClick={() => setPostTab('recruitment')}
                 className={`flex-1 py-1.5 text-[10px] font-black rounded-lg transition-all ${postTab === 'recruitment' ? 'bg-white shadow-apple-xs text-apple-gray-900' : 'text-apple-gray-300'}`}
               >
-                我的徵文
+                {isOwnProfile ? "我的徵文" : "招募的徵文"}
               </button>
               <button
                 onClick={() => setPostTab('blog')}
                 className={`flex-1 py-1.5 text-[10px] font-black rounded-lg transition-all ${postTab === 'blog' ? 'bg-white shadow-apple-xs text-apple-gray-900' : 'text-apple-gray-300'}`}
               >
-                我的旅文
+                {isOwnProfile ? "我的旅文" : "發表的旅文"}
               </button>
             </div>
 
@@ -2235,7 +2328,7 @@ export const ProfilePage: React.FC<{
                     : 'text-apple-gray-300 hover:text-apple-gray-400'
                 }`}
               >
-                別人評價的我 ({reviewsList.length})
+                {isOwnProfile ? '旅伴對我的評價' : '旅伴對他的評價'} ({reviewsList.length})
               </button>
               <button
                 onClick={() => setAboutSubTab('me')}
@@ -2245,9 +2338,35 @@ export const ProfilePage: React.FC<{
                     : 'text-apple-gray-300 hover:text-apple-gray-400'
                 }`}
               >
-                我
+                關於我
               </button>
             </div>
+
+            {/* Segmented control for Received vs Given (only shown for own profile under reviews tab) */}
+            {aboutSubTab === 'reviews' && isOwnProfile && (
+              <div className="flex bg-apple-gray-100 p-1 rounded-xl mb-4 border border-apple-gray-200/50">
+                <button
+                  onClick={() => setReviewsMode('received')}
+                  className={`flex-1 py-1.5 text-xs font-black rounded-lg transition-all ${
+                    reviewsMode === 'received' 
+                      ? 'bg-white shadow-apple-xs text-apple-gray-900 font-bold' 
+                      : 'text-apple-gray-400 hover:text-apple-gray-500'
+                  }`}
+                >
+                  我收到的評價 ({reviewsList.length})
+                </button>
+                <button
+                  onClick={() => setReviewsMode('given')}
+                  className={`flex-1 py-1.5 text-xs font-black rounded-lg transition-all ${
+                    reviewsMode === 'given' 
+                      ? 'bg-white shadow-apple-xs text-apple-gray-900 font-bold' 
+                      : 'text-apple-gray-400 hover:text-apple-gray-500'
+                  }`}
+                >
+                  我給出的評價 ({givenReviewsList.length})
+                </button>
+              </div>
+            )}
 
             {/* Sub-tab: 我 (About Me) */}
             {aboutSubTab === 'me' && (
@@ -2375,228 +2494,278 @@ export const ProfilePage: React.FC<{
             {/* Sub-tab: 別人評價的我 (User Reviews) */}
             {aboutSubTab === 'reviews' && (
               <div className="space-y-6 animate-fade-in">
-                {/* 綜合評分摘要 */}
-                <div className="bg-white rounded-3xl p-6 border border-apple-gray-100 shadow-apple-xs flex flex-col md:flex-row items-center gap-6">
-                  {/* 平均得分 */}
-                  <div className="flex flex-col items-center justify-center p-4 bg-apple-gray-50/70 rounded-2xl min-w-[120px] text-center">
-                    <div className="text-3xl font-black text-apple-gray-900">
-                      {reviewsList.length > 0 
-                        ? (reviewsList.reduce((acc, curr) => acc + curr.rating, 0) / reviewsList.length).toFixed(1) 
-                        : "0.0"}
+                {/* 我給出的評價 - 隱私提示 banner */}
+                {reviewsMode === 'given' && isOwnProfile && (
+                  <div className="bg-blue-50/40 rounded-3xl p-5 border border-blue-100/50 text-blue-900 text-xs leading-relaxed space-y-1.5 shadow-apple-xs">
+                    <div className="font-bold flex items-center gap-1.5 text-[#007aff]">
+                      <Sparkles size={14} />
+                      我給出的評價 (My Submitted Reviews)
                     </div>
-                    {/* Stars */}
-                    <div className="flex gap-0.5 mt-1">
-                      {[1, 2, 3, 4, 5].map((s) => {
-                        const avg = reviewsList.length > 0 
-                          ? reviewsList.reduce((acc, curr) => acc + curr.rating, 0) / reviewsList.length 
-                          : 0;
-                        return (
-                          <Star 
-                            key={s} 
-                            size={12} 
-                            className={s <= Math.round(avg) ? 'text-yellow-400 fill-yellow-400' : 'text-apple-gray-200'} 
-                          />
-                        );
-                      })}
-                    </div>
-                    <div className="text-[10px] text-apple-gray-300 mt-2 font-bold uppercase tracking-wider">
-                      共 {reviewsList.length} 則評價
-                    </div>
+                    <p className="text-apple-gray-600 font-medium leading-relaxed">
+                      此列表列出了您曾寫給其他旅伴的真實評語。為保護隱私安全，您的評價在對方的個人頁面上
+                      <span className="font-bold text-[#007aff] px-1 bg-blue-50/70 rounded border border-blue-100">一律以「匿名旅伴」形式</span>顯示，其他人（包含該旅伴本人）皆無法得知是由您撰寫。
+                    </p>
                   </div>
+                )}
 
-                  {/* 熱門標籤統計 */}
-                  <div className="flex-1 space-y-2 w-full">
-                    <div className="text-xs font-black text-apple-gray-900 mb-1 border-b border-apple-gray-50 pb-1">熱門旅伴標籤</div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(() => {
-                        const tagCounts: Record<string, number> = {};
-                        reviewsList.forEach(r => {
-                          (r.tags || []).forEach(t => {
-                            tagCounts[t] = (tagCounts[t] || 0) + 1;
-                          });
-                        });
-                        const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
-                        
-                        if (sortedTags.length === 0) {
-                          return <span className="text-[11px] text-apple-gray-300 italic animate-pulse">尚無特色標籤</span>;
-                        }
-                        
-                        return sortedTags.map(([tag, count]) => (
-                          <span 
-                            key={tag} 
-                            className="bg-apple-gray-50 border border-apple-gray-100 text-apple-gray-600 text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1"
-                          >
-                            #{tag} <span className="text-apple-blue font-black bg-blue-50 px-1 rounded">{count}</span>
-                          </span>
-                        ));
-                      })()}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 填寫新評價 (僅在查看其他旅伴時顯示) */}
-                {!isOwnProfile && (
-                  <div className="bg-[#fcfbf9] rounded-3xl p-6 border border-[#eeebe0] shadow-apple-xs space-y-4">
-                    <div className="flex items-center gap-2 border-b border-[#eeebe0] pb-2">
-                      <Sparkles size={16} className="text-[#a08b5e]" />
-                      <h4 className="text-sm font-black text-apple-gray-900">為這名旅伴留下評價</h4>
-                    </div>
-
-                    <div className="space-y-4">
-                      {/* 星星評分選擇 */}
-                      <div>
-                        <label className="text-[11px] font-black text-apple-gray-300 uppercase block mb-1.5">點選星評 (Rating)</label>
-                        <div className="flex gap-1.5">
-                          {[1, 2, 3, 4, 5].map((starVal) => (
-                            <button
-                              key={starVal}
-                              onClick={() => setNewReviewRating(starVal)}
-                              type="button"
-                              className="focus:outline-none transition-transform hover:scale-110 active:scale-95"
-                            >
-                              <Star
-                                size={24}
-                                className={
-                                  starVal <= newReviewRating 
-                                    ? 'text-yellow-400 fill-yellow-400' 
-                                    : 'text-apple-gray-200'
-                                }
-                              />
-                            </button>
-                          ))}
+                {(reviewsMode === 'received' || !isOwnProfile) && (
+                  <>
+                    {/* 綜合評分摘要 */}
+                    <div className="bg-white rounded-3xl p-6 border border-apple-gray-100 shadow-apple-xs flex flex-col md:flex-row items-center gap-6">
+                      {/* 平均得分 */}
+                      <div className="flex flex-col items-center justify-center p-4 bg-apple-gray-50/70 rounded-2xl min-w-[120px] text-center">
+                        <div className="text-3xl font-black text-apple-gray-900">
+                          {reviewsList.length > 0 
+                            ? (reviewsList.reduce((acc, curr) => acc + curr.rating, 0) / reviewsList.length).toFixed(1) 
+                            : "0.0"}
                         </div>
-                      </div>
-
-                      {/* 旅伴特質標籤選擇 */}
-                      <div>
-                        <label className="text-[11px] font-black text-apple-gray-300 uppercase block mb-1.5">旅伴特質標籤 (可複選)</label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {["守時好夥伴", "大方幽默", "溝通順暢", "規劃高手", "隨和好相處", "拍照技術佳", "能獨立行動", "配合度極高"].map((tag) => {
-                            const isSelected = newReviewTags.includes(tag);
+                        {/* Stars */}
+                        <div className="flex gap-0.5 mt-1">
+                          {[1, 2, 3, 4, 5].map((s) => {
+                            const avg = reviewsList.length > 0 
+                              ? reviewsList.reduce((acc, curr) => acc + curr.rating, 0) / reviewsList.length 
+                              : 0;
                             return (
-                              <button
-                                key={tag}
-                                type="button"
-                                onClick={() => {
-                                  if (isSelected) {
-                                    setNewReviewTags(prev => prev.filter(t => t !== tag));
-                                  } else {
-                                    setNewReviewTags(prev => [...prev, tag]);
-                                  }
-                                }}
-                                className={`text-[10px] font-bold px-3 py-1.5 rounded-full border transition-all ${
-                                  isSelected 
-                                    ? 'bg-[#007aff] text-white border-[#007aff] shadow-apple-xs' 
-                                    : 'bg-white text-apple-gray-600 border-apple-gray-200 hover:border-apple-gray-300'
-                                }`}
-                              >
-                                {tag}
-                              </button>
+                              <Star 
+                                key={s} 
+                                size={12} 
+                                className={s <= Math.round(avg) ? 'text-yellow-400 fill-yellow-400' : 'text-apple-gray-200'} 
+                              />
                             );
                           })}
                         </div>
+                        <div className="text-[10px] text-apple-gray-300 mt-2 font-bold uppercase tracking-wider">
+                          共 {reviewsList.length} 則評價
+                        </div>
                       </div>
 
-                      {/* 評價細節內容 */}
-                      <div>
-                        <label className="text-[11px] font-black text-apple-gray-300 uppercase block mb-1.5">評價內容 (Comment)</label>
-                        <textarea
-                          placeholder="和這位夥伴的旅途互動如何？分享一些細節或感想吧..."
-                          value={newReviewContent}
-                          onChange={(e) => setNewReviewContent(e.target.value)}
-                          className="w-full h-24 bg-white rounded-2xl p-4 text-xs focus:outline-apple-blue border border-apple-gray-200 resize-none font-medium"
-                          maxLength={500}
-                        />
-                      </div>
-
-                      {/* 送出 */}
-                      <div className="flex justify-between items-center text-[10px] text-apple-gray-300">
-                        <span>最長 500 字</span>
-                        <button
-                          type="button"
-                          onClick={handleSubmitReview}
-                          disabled={isSubmittingReview}
-                          className="px-6 py-2 bg-apple-gray-900 text-white rounded-xl font-bold text-xs hover:bg-apple-gray-800 transition-colors disabled:opacity-50 flex items-center gap-1 shadow-apple-sm"
-                        >
-                          {isSubmittingReview ? '正在送出...' : '送出評價'}
-                        </button>
+                      {/* 熱門標籤統計 */}
+                      <div className="flex-1 space-y-2 w-full">
+                        <div className="text-xs font-black text-apple-gray-900 mb-1 border-b border-apple-gray-50 pb-1">熱門旅伴標籤</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(() => {
+                            const tagCounts: Record<string, number> = {};
+                            reviewsList.forEach(r => {
+                              (r.tags || []).forEach(t => {
+                                tagCounts[t] = (tagCounts[t] || 0) + 1;
+                              });
+                            });
+                            const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
+                            
+                            if (sortedTags.length === 0) {
+                              return <span className="text-[11px] text-apple-gray-300 italic animate-pulse">尚無特色標籤</span>;
+                            }
+                            
+                            return sortedTags.map(([tag, count]) => (
+                              <span 
+                                key={tag} 
+                                className="bg-apple-gray-50 border border-apple-gray-100 text-apple-gray-600 text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1"
+                              >
+                                #{tag} <span className="text-apple-blue font-black bg-blue-50 px-1 rounded">{count}</span>
+                              </span>
+                            ));
+                          })()}
+                        </div>
                       </div>
                     </div>
-                  </div>
+
+                    {/* 旅伴特質綜合分析 */}
+                    {reviewsList.length > 0 && reviewsList.some(r => r.moneySpend !== undefined) && (
+                      (() => {
+                        const reviewsWithTraits = reviewsList.filter(r => r.moneySpend !== undefined);
+                        const traitCount = reviewsWithTraits.length;
+                        
+                        const getAvgPercentOf = (key: 'moneySpend' | 'sleep' | 'journey' | 'cleanliness' | 'personality') => {
+                          if (traitCount === 0) return 50;
+                          const total = reviewsWithTraits.reduce((acc, r) => {
+                            const val = r[key] !== undefined ? r[key] : 0;
+                            return acc + ((val / 2) + 50);
+                          }, 0);
+                          return total / traitCount;
+                        };
+
+                        const averageRating = reviewsList.reduce((acc, curr) => acc + curr.rating, 0) / reviewsList.length;
+
+                        const scores = {
+                          planning: 100 - getAvgPercentOf('journey'),
+                          tidiness: 100 - getAvgPercentOf('cleanliness'),
+                          budgeting: 100 - getAvgPercentOf('moneySpend'),
+                          sleep: getAvgPercentOf('sleep'),
+                          sociability: 100 - getAvgPercentOf('personality'),
+                          compatibility: (averageRating / 5) * 100,
+                        };
+
+                        return (
+                          <CompanionRadarChart 
+                            scores={scores} 
+                            reviewCount={reviewsList.length} 
+                          />
+                        );
+                      })()
+                    )}
+                  </>
                 )}
 
                 {/* 歷史評價列表 */}
                 <div className="space-y-4">
                   <div className="text-xs font-black text-apple-gray-400 uppercase tracking-wider">
-                    全部評語 ({reviewsList.length})
+                    {reviewsMode === 'given' && isOwnProfile ? `送出的評語 (${givenReviewsList.length})` : `收到的評語 (${reviewsList.length})`}
                   </div>
 
-                  {reviewsList.length === 0 ? (
-                    <div className="text-center py-12 bg-apple-gray-50/50 rounded-3xl border border-dashed border-apple-gray-200 text-apple-gray-300 italic text-[11px]">
-                      {isOwnProfile 
-                        ? '您目前還沒有收到任何評價。與其他夥伴完成探險後，快邀請他們評價您吧！' 
-                        : '這名旅人目前還沒有任何評價，寫下第一個評價吧！'}
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {reviewsList.map((rev) => (
-                        <div key={rev.id} className="bg-white rounded-3xl p-5 border border-apple-gray-100 shadow-apple-xs space-y-3 relative">
-                          {/* 評價頭部資訊 */}
-                          <div className="flex justify-between items-start">
-                            <div className="flex items-center gap-2.5">
-                              {/* reviewer avatar */}
-                              <div className="w-9 h-9 rounded-full bg-apple-gray-100 overflow-hidden border border-apple-gray-200 flex-shrink-0">
-                                {rev.reviewerAvatar ? (
-                                  <img src={rev.reviewerAvatar} alt={rev.reviewerName} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center bg-apple-gray-50 text-apple-gray-300">
-                                    <User size={16} />
+                  {(() => {
+                    const displayList = (reviewsMode === 'given' && isOwnProfile) ? givenReviewsList : reviewsList;
+                    const isGivenMode = reviewsMode === 'given' && isOwnProfile;
+
+                    if (displayList.length === 0) {
+                      return (
+                        <div className="text-center py-12 bg-apple-gray-50/50 rounded-3xl border border-dashed border-apple-gray-200 text-apple-gray-300 italic text-[11px]">
+                          {isGivenMode 
+                            ? '您目前還沒有寫過任何評價。在旅程結束後，可以到旅遊行程頁面評價您的旅伴喔！' 
+                            : (isOwnProfile 
+                                ? '您目前還沒有收到任何評價。與其他夥伴完成探險後，快邀請他們評價您吧！' 
+                                : '這名旅人目前還沒有任何評價，寫下第一個評價吧！')}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-4">
+                        {displayList.map((rev) => {
+                          const isMyOwnWrittenReview = rev.reviewerId === user?.uid;
+                          
+                          // Determine displayed name and avatar
+                          let displayName = '匿名旅伴';
+                          let avatarUrl = '';
+                          let showRealAvatar = false;
+
+                          if (isGivenMode) {
+                            displayName = rev.targetUserName || '神秘旅伴';
+                            avatarUrl = rev.targetUserAvatar || '';
+                            showRealAvatar = !!avatarUrl;
+                          } else {
+                            if (isMyOwnWrittenReview) {
+                              displayName = '你 (以匿名發表)';
+                              avatarUrl = rev.reviewerAvatar || '';
+                              showRealAvatar = !!avatarUrl;
+                            } else {
+                              displayName = '匿名旅伴';
+                              avatarUrl = '';
+                              showRealAvatar = false;
+                            }
+                          }
+
+                          return (
+                            <div key={rev.id} className="bg-white rounded-3xl p-5 border border-apple-gray-100 shadow-apple-xs space-y-3 relative">
+                              {/* 評價頭部資訊 */}
+                              <div className="flex justify-between items-start">
+                                <div className="flex items-center gap-2.5">
+                                  {/* avatar */}
+                                  <div className="w-9 h-9 rounded-full bg-apple-gray-100 overflow-hidden border border-apple-gray-200 flex-shrink-0 flex items-center justify-center">
+                                    {showRealAvatar && avatarUrl ? (
+                                      <img src={avatarUrl} alt={displayName} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center bg-apple-gray-50 text-apple-gray-300">
+                                        <User size={16} />
+                                      </div>
+                                    )}
                                   </div>
-                                )}
-                              </div>
-                              {/* reviewer details */}
-                              <div>
-                                <div className="text-xs font-black text-apple-gray-900">{rev.reviewerName}</div>
-                                <div className="text-[10px] text-apple-gray-300 font-bold mt-0.5">
-                                  {rev.createdAt ? new Date(rev.createdAt).toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }) : '未記錄日期'}
+                                  {/* details */}
+                                  <div>
+                                    <div className="text-xs font-black text-apple-gray-900 flex items-center gap-1.5">
+                                      {displayName}
+                                      {isGivenMode && (
+                                        <span className="text-[9px] bg-amber-50 text-[#a08b5e] px-1.5 py-0.5 rounded-md font-bold">對此旅伴</span>
+                                      )}
+                                    </div>
+                                    <div className="text-[10px] text-apple-gray-300 font-bold mt-0.5">
+                                      {rev.createdAt ? new Date(rev.createdAt).toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }) : '未記錄日期'}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Score Display */}
+                                <div className="flex gap-0.5 bg-yellow-50/50 px-2 py-1 rounded-lg">
+                                  {[1, 2, 3, 4, 5].map((s) => (
+                                    <Star 
+                                      key={s} 
+                                      size={10} 
+                                      className={s <= rev.rating ? 'text-yellow-400 fill-yellow-400' : 'text-apple-gray-100'} 
+                                    />
+                                  ))}
                                 </div>
                               </div>
-                            </div>
 
-                            {/* Score Display */}
-                            <div className="flex gap-0.5 bg-yellow-50/50 px-2 py-1 rounded-lg">
-                              {[1, 2, 3, 4, 5].map((s) => (
-                                <Star 
-                                  key={s} 
-                                  size={10} 
-                                  className={s <= rev.rating ? 'text-yellow-400 fill-yellow-400' : 'text-apple-gray-100'} 
-                                />
-                              ))}
-                            </div>
-                          </div>
+                              {/* 評價給予的特色標籤 */}
+                              {rev.tags && rev.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {rev.tags.map((t, idx) => (
+                                    <span 
+                                      key={`${t}-${idx}`} 
+                                      className="text-[9px] bg-blue-50/60 text-[#007aff] px-2 py-0.5 rounded font-black uppercase tracking-wider"
+                                    >
+                                      #{t}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
 
-                          {/* 評價給予的特色標籤 */}
-                          {rev.tags && rev.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5">
-                              {rev.tags.map(t => (
-                                <span 
-                                  key={t} 
-                                  className="text-[9px] bg-blue-50/60 text-[#007aff] px-2 py-0.5 rounded font-black uppercase tracking-wider"
-                                >
-                                  #{t}
-                                </span>
-                              ))}
-                            </div>
-                          )}
+                              {/* 旅伴特質分析 (僅當有數值時顯示) */}
+                              {rev.moneySpend !== undefined && (
+                                <div className="my-3 p-3 bg-apple-gray-50/70 rounded-2xl border border-apple-gray-100/50 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-[10px]">
+                                  {(() => {
+                                    const renderMiniBar = (label: string, dbVal: number, leftOpt: string, rightOpt: string) => {
+                                      const uiVal = (dbVal / 2) + 50; 
+                                      const pct = Math.round(Math.abs(dbVal));
+                                      const isLeft = dbVal < 0;
+                                      const isRight = dbVal > 0;
+                                      const isCenter = dbVal === 0;
 
-                          {/* 評語文字 */}
-                          <div className="text-xs text-[#555] leading-relaxed pl-1">
-                            {rev.content}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                                      return (
+                                        <div className="flex items-center justify-between gap-2 py-0.5" key={label}>
+                                          <span className="text-apple-gray-400 font-bold w-[48px] truncate">{label}</span>
+                                          <div className="flex-1 flex items-center gap-1.5 justify-end">
+                                            <span className={`text-[9px] font-medium ${isLeft ? 'font-black text-apple-gray-800' : 'text-apple-gray-300'}`}>{leftOpt}</span>
+                                            <div className="w-16 h-1 bg-apple-gray-100 rounded-full relative overflow-hidden">
+                                              <div 
+                                                className="absolute top-0 bottom-0 bg-apple-blue"
+                                                style={{
+                                                  left: isLeft ? `${uiVal}%` : '50%',
+                                                  right: isLeft ? '50%' : `${100 - uiVal}%`
+                                                }}
+                                              />
+                                            </div>
+                                            <span className={`text-[9px] font-medium ${isRight ? 'font-black text-apple-gray-800' : 'text-apple-gray-300'}`}>{rightOpt}</span>
+                                            <span className="text-[8px] font-mono font-bold bg-white text-apple-gray-400 px-1 py-0.5 rounded border border-apple-gray-50">
+                                              {isCenter ? '等同' : `${pct}%`}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      );
+                                    };
+
+                                    return (
+                                      <>
+                                        {renderMiniBar('花錢', rev.moneySpend, '節省', '高消')}
+                                        {renderMiniBar('睡覺', rev.sleep, '打呼', '不打')}
+                                        {renderMiniBar('行程', rev.journey, '規劃', '不規')}
+                                        {renderMiniBar('整潔', rev.cleanliness, '整潔', '隨性')}
+                                        {renderMiniBar('人格', rev.personality, '活潑', '安靜')}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              )}
+
+                              {/* 評語文字 */}
+                              <div className="text-xs text-[#555] leading-relaxed pl-1">
+                                {rev.content}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}

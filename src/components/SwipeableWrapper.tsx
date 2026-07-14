@@ -8,12 +8,14 @@ interface SwipeableWrapperProps {
   rightAction: { icon: React.ElementType, color: string, label: string, onTrigger: () => void };
   onHide?: () => void;
   onRestore?: () => void;
+  onTap?: () => void;
 }
 
 export const SwipeableWrapper: React.FC<SwipeableWrapperProps> = ({ 
   children, 
   leftAction, 
   rightAction,
+  onTap,
 }) => {
   const [dragProgress, setDragProgress] = useState(0); // -1 to 1
   const controls = useAnimation();
@@ -83,6 +85,19 @@ export const SwipeableWrapper: React.FC<SwipeableWrapperProps> = ({
         dragElastic={0.8}
         onDrag={handleDrag}
         onDragEnd={handleDragEnd}
+        onTap={(e: any) => {
+          const target = e.target as HTMLElement;
+          if (
+            target.closest('button') || 
+            target.closest('a') || 
+            target.closest('img') || 
+            target.closest('.group') || 
+            target.closest('.on-click-stop')
+          ) {
+            return;
+          }
+          if (onTap) onTap();
+        }}
         style={{ x, touchAction: 'pan-y' }}
         className="relative z-10 will-change-transform"
       >

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Search, UserPlus, Send, ArrowLeft, Users, Plane } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Search, UserPlus, Send, ArrowLeft, Users, Plane, Image as ImageIcon, Video, Plus, X, Lock, Play, Camera, ShieldCheck } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where, doc, getDoc, getDocs, updateDoc, arrayUnion } from 'firebase/firestore';
 import { ChatRoom, Message, UserProfile } from '../types';
@@ -63,6 +63,67 @@ const ChatRoomItem: React.FC<ChatRoomItemProps> = ({ room, onClick }) => {
   );
 };
 
+const PRESET_ALBUM_MEDIA = [
+  { type: 'image' as const, url: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=400&q=80', title: '日本東京' },
+  { type: 'image' as const, url: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=400&q=80', title: '瑞士雪山' },
+  { type: 'image' as const, url: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=400&q=80', title: '法國巴黎' },
+  { type: 'image' as const, url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=400&q=80', title: '馬爾地夫' },
+  { type: 'image' as const, url: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&w=400&q=80', title: '日本京都' },
+  { type: 'image' as const, url: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?auto=format&fit=crop&w=400&q=80', title: '美國紐約' },
+  { type: 'image' as const, url: 'https://images.unsplash.com/photo-1483168527879-c66136b56105?auto=format&fit=crop&w=400&q=80', title: '冰島極光' },
+  { type: 'video' as const, url: 'https://assets.mixkit.co/videos/preview/mixkit-waves-in-the-ocean-near-a-cliff-43319-large.mp4', title: '大海海浪' },
+  { type: 'video' as const, url: 'https://assets.mixkit.co/videos/preview/mixkit-aerial-view-of-thick-snow-covered-forest-42526-large.mp4', title: '北歐雪林' }
+];
+
+const INITIAL_MOCK_USER_PHOTOS = [
+  { type: 'image' as const, url: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=400&q=80', title: '湖畔小木屋' },
+  { type: 'image' as const, url: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=400&q=80', title: '山遊漫步' },
+  { type: 'image' as const, url: 'https://images.unsplash.com/photo-1506197603052-3cc9c3a201bd?auto=format&fit=crop&w=400&q=80', title: '落日峽灣' },
+  { type: 'image' as const, url: 'https://images.unsplash.com/photo-1475924156734-496f6cac6ec1?auto=format&fit=crop&w=400&q=80', title: '晨曦海岸' },
+  { type: 'image' as const, url: 'https://images.unsplash.com/photo-1472214222541-d510753a8707?auto=format&fit=crop&w=400&q=80', title: '翠綠山谷' },
+  { type: 'image' as const, url: 'https://images.unsplash.com/photo-1488085061387-422e29b40080?auto=format&fit=crop&w=400&q=80', title: '歐洲小鎮' }
+];
+
+const compressImage = (base64Str: string, maxWidth = 800, maxHeight = 800, quality = 0.6): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(base64Str);
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, width, height);
+      const compressed = canvas.toDataURL('image/jpeg', quality);
+      resolve(compressed);
+    };
+    img.onerror = () => {
+      resolve(base64Str);
+    };
+  });
+};
+
 const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (tripId: string) => void }> = ({ roomId, onBack, onBackToTrip }) => {
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -73,6 +134,20 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
   const [isSending, setIsSending] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
+
+  // Photo & Video Attachments Feature States
+  const [draftMedia, setDraftMedia] = useState<{ type: 'image' | 'video', url: string }[]>([]);
+  const [tempSelectedMedia, setTempSelectedMedia] = useState<{ type: 'image' | 'video', url: string }[]>([]);
+  const [localUploadedMedia, setLocalUploadedMedia] = useState<{ type: 'image' | 'video', url: string }[]>(INITIAL_MOCK_USER_PHOTOS);
+  const [activeMediaTab, setActiveMediaTab] = useState<'my-photos' | 'samples'>('my-photos');
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
+  const [permissionState, setPermissionState] = useState<'undetermined' | 'granted' | 'denied'>(() => {
+    return (localStorage.getItem('album_permission_granted') as any) || 'undetermined';
+  });
+  const [fullScreenMedia, setFullScreenMedia] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -110,19 +185,29 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
   const otherUser = room?.type !== 'group' ? (Object.values(participantProfiles) as UserProfile[]).find(p => p.uid !== user?.uid) : null;
 
   const sendMsg = async () => {
-    if (!text.trim() || !user || isSending) return;
+    if ((!text.trim() && draftMedia.length === 0) || !user || isSending) return;
     const msg = text;
+    const mediaToSend = [...draftMedia];
+    
     setText('');
+    setDraftMedia([]);
     setIsSending(true);
+    
     try {
       await addDoc(collection(db, 'chatRooms', roomId, 'messages'), {
         senderId: user.uid,
         text: msg,
-        createdAt: serverTimestamp()
+        mediaList: mediaToSend,
+        createdAt: new Date().toISOString()
       });
       
+      let lastMsgText = msg;
+      if (mediaToSend.length > 0 && !lastMsgText) {
+        lastMsgText = `[傳送了 ${mediaToSend.length} 個媒體內容]`;
+      }
+      
       await updateDoc(doc(db, 'chatRooms', roomId), {
-        lastMessage: msg,
+        lastMessage: lastMsgText,
         lastUpdatedAt: serverTimestamp()
       });
     } catch (e) {
@@ -139,6 +224,116 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
     } else {
       onBack();
     }
+  };
+
+  const handleMediaClick = () => {
+    if (permissionState === 'granted') {
+      setTempSelectedMedia([...draftMedia]);
+      setShowMediaPicker(true);
+    } else if (permissionState === 'denied') {
+      setShowPermissionModal(true);
+    } else {
+      setShowPermissionModal(true);
+    }
+  };
+
+  const grantPermission = () => {
+    localStorage.setItem('album_permission_granted', 'granted');
+    setPermissionState('granted');
+    setShowPermissionModal(false);
+    setTempSelectedMedia([...draftMedia]);
+    setShowMediaPicker(true);
+  };
+
+  const denyPermission = () => {
+    localStorage.setItem('album_permission_granted', 'denied');
+    setPermissionState('denied');
+    setShowPermissionModal(false);
+  };
+
+  const toggleMediaSelection = (item: { type: 'image' | 'video', url: string }) => {
+    const isSelected = tempSelectedMedia.some(m => m.url === item.url);
+    if (isSelected) {
+      setTempSelectedMedia(prev => prev.filter(m => m.url !== item.url));
+    } else {
+      setTempSelectedMedia(prev => [...prev, item]);
+    }
+  };
+
+  const handleSystemFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    setIsCompressing(true);
+    const fileList: any[] = Array.from(files);
+    const validResults: { type: 'image' | 'video', url: string }[] = [];
+    
+    try {
+      for (const file of fileList) {
+        const result = await new Promise<{ type: 'image' | 'video', url: string } | null>((resolve) => {
+          const isImage = file.type.startsWith('image/');
+          const isVideo = file.type.startsWith('video/');
+          
+          if (!isImage && !isVideo) {
+            alert(`不支援的格式：${file.name}，請選擇圖片或影片文件！`);
+            resolve(null);
+            return;
+          }
+
+          // Strict limit for video at 600KB to ensure Base64 encoding stays well below 1MB Firestore limit
+          if (isVideo && file.size > 600 * 1024) {
+            alert(`影片 "${file.name}" 超過限制 (600KB)。為了確保聊天訊息能成功傳送並保存於資料庫，上傳的影片請限制在 600KB 以內喔！`);
+            resolve(null);
+            return;
+          }
+
+          const reader = new FileReader();
+          reader.onload = async (event) => {
+            const resultUrl = event.target?.result as string;
+            if (resultUrl) {
+              let finalUrl = resultUrl;
+              if (isImage) {
+                try {
+                  // Compress image to 600x600 with 0.4 quality so the file is around 20KB-40KB, making it render instantly and save perfectly
+                  finalUrl = await compressImage(resultUrl, 600, 600, 0.4);
+                } catch (err) {
+                  console.error('Compression failed, using original', err);
+                }
+              }
+              resolve({ type: isImage ? 'image' as const : 'video' as const, url: finalUrl });
+            } else {
+              resolve(null);
+            }
+          };
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(file);
+        });
+
+        if (result) {
+          validResults.push(result);
+        }
+      }
+      
+      if (validResults.length > 0) {
+        // Automatically prepend to local uploaded media library AND select them
+        setLocalUploadedMedia(prev => [...validResults, ...prev]);
+        setTempSelectedMedia(prev => [...prev, ...validResults]);
+        // Switch to 'my-photos' tab so they can see their newly uploaded photos
+        setActiveMediaTab('my-photos');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsCompressing(false);
+      if (e.target) {
+        e.target.value = '';
+      }
+    }
+  };
+
+  const confirmMediaSelection = () => {
+    setDraftMedia(tempSelectedMedia);
+    setShowMediaPicker(false);
   };
 
   return (
@@ -192,6 +387,8 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
           </div>
         </div>
       </div>
+      
+      {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
         {messages.map((m, index) => {
           const isMe = m.senderId === user?.uid;
@@ -215,8 +412,32 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                 {!isMe && showAvatar && room?.type === 'group' && (
                   <span className="text-[10px] text-apple-gray-400 ml-1 mb-1">{sender?.displayName}</span>
                 )}
-                <div className={`px-4 py-2 rounded-2xl text-sm ${isMe ? 'bg-apple-gray-600 text-white rounded-tr-none' : 'bg-apple-gray-50 text-apple-gray-600 rounded-tl-none'}`}>
-                  {m.text}
+                <div className={`px-4 py-2 rounded-2xl text-sm ${isMe ? 'bg-apple-gray-600 text-white rounded-tr-none' : 'bg-apple-gray-50 text-apple-gray-600 rounded-tl-none'} space-y-2`}>
+                  {m.text && <div className="break-words whitespace-pre-wrap">{m.text}</div>}
+                  
+                  {/* Media attachment block within bubble */}
+                  {m.mediaList && m.mediaList.length > 0 && (
+                    <div className={`grid gap-1.5 mt-1 ${m.mediaList.length === 1 ? 'grid-cols-1' : m.mediaList.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                      {m.mediaList.map((media, idx) => (
+                        <div 
+                          key={idx} 
+                          onClick={() => setFullScreenMedia(media.url)}
+                          className="relative rounded-xl overflow-hidden border border-black/5 bg-black/5 cursor-pointer hover:opacity-90 transition-opacity aspect-square w-24 h-24"
+                        >
+                          {media.type === 'image' ? (
+                            <img src={media.url} className="w-full h-full object-cover rounded-xl" referrerPolicy="no-referrer" />
+                          ) : (
+                            <div className="relative w-full h-full">
+                              <video src={media.url} className="w-full h-full object-cover rounded-xl" controls={false} />
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                                <span className="bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded-md font-bold">影片</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -224,13 +445,50 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
         })}
         <div ref={messagesEndRef} />
       </div>
-      <div className="p-4 safe-bottom border-t border-apple-gray-50 flex gap-2">
+
+      {/* Selected previews bar just above input */}
+      {draftMedia.length > 0 && (
+        <div className="px-4 py-2 border-t border-apple-gray-50 bg-apple-gray-50/50 flex gap-2 overflow-x-auto no-scrollbar">
+          {draftMedia.map((media, idx) => (
+            <div key={idx} className="relative w-16 h-16 rounded-xl overflow-hidden border border-apple-gray-100 flex-shrink-0 bg-white shadow-apple-xs">
+              {media.type === 'image' ? (
+                <img src={media.url} className="w-full h-full object-cover" />
+              ) : (
+                <div className="relative w-full h-full">
+                  <video src={media.url} className="w-full h-full object-cover" muted />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+                    <Play size={14} className="text-white fill-white" />
+                  </div>
+                </div>
+              )}
+              <button 
+                onClick={() => setDraftMedia(prev => prev.filter((_, i) => i !== idx))}
+                className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white rounded-full p-0.5 transition-colors"
+              >
+                <X size={10} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Message input & actions area */}
+      <div className="p-4 safe-bottom border-t border-apple-gray-50 flex items-center gap-2 bg-white">
+        {/* Attachment Button */}
+        <button 
+          onClick={handleMediaClick}
+          className="w-10 h-10 rounded-full bg-apple-gray-50 flex items-center justify-center text-apple-gray-600 active:scale-90 transition-transform"
+        >
+          <ImageIcon size={20} />
+        </button>
+
         <input 
           value={text} onChange={e => setText(e.target.value)}
           placeholder="輸入訊息..."
           className="flex-1 h-10 bg-apple-gray-50 rounded-full px-4 text-sm focus:outline-none"
           onKeyDown={(e) => e.key === 'Enter' && sendMsg()}
         />
+
         <button 
           onClick={sendMsg} 
           disabled={isSending}
@@ -239,6 +497,266 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
           <Send size={18} className={isSending ? 'animate-pulse' : ''} />
         </button>
       </div>
+
+      {/* iOS-style Album Read Authorization Modal */}
+      <AnimatePresence>
+        {showPermissionModal && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl max-w-xs w-full shadow-apple-lg overflow-hidden flex flex-col items-center p-6 text-center"
+            >
+              <div className="w-12 h-12 rounded-full bg-apple-blue/10 text-apple-blue flex items-center justify-center mb-4">
+                <ShieldCheck size={28} />
+              </div>
+              <h3 className="font-black text-apple-gray-900 text-base mb-2">「旅友」想要讀取您的相簿資料</h3>
+              <p className="text-xs text-apple-gray-400 font-light mb-6 leading-relaxed">
+                此權限將用於在群組或個人聊天室中，分享您的旅遊照片與影片，豐富與伴侶的互動回憶。
+              </p>
+              <div className="w-full flex flex-col border-t border-apple-gray-50">
+                <button 
+                  onClick={grantPermission}
+                  className="w-full py-3.5 text-sm font-bold text-apple-blue hover:bg-apple-gray-50 transition-colors border-b border-apple-gray-50"
+                >
+                  允許讀取所有照片與影片
+                </button>
+                <button 
+                  onClick={denyPermission}
+                  className="w-full py-3.5 text-sm font-medium text-red-500 hover:bg-apple-gray-50 transition-colors"
+                >
+                  不允許
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modern In-App Media Selector Sheet (Supports multi-selection & real system uploads) */}
+      <AnimatePresence>
+        {showMediaPicker && (
+          <div className="fixed inset-0 z-[110] bg-black/30 backdrop-blur-xs flex flex-col justify-end">
+            <div className="fixed inset-0 bg-transparent" onClick={() => setShowMediaPicker(false)} />
+            <motion.div 
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+              className="bg-white rounded-t-3xl shadow-apple-lg max-h-[85vh] flex flex-col z-20 relative overflow-hidden"
+            >
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-apple-gray-50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-apple-gray-900">手機相簿</span>
+                  <span className="text-xs bg-apple-gray-100 text-apple-gray-500 px-2 py-0.5 rounded-full font-medium">
+                    已選擇 {tempSelectedMedia.length} 項
+                  </span>
+                  {isCompressing && (
+                    <span className="text-[10px] text-apple-blue font-bold animate-pulse bg-apple-blue/5 px-2.5 py-0.5 rounded-full">
+                      處理中...
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => !isCompressing && fileInputRef.current?.click()}
+                    disabled={isCompressing}
+                    className={`text-xs font-bold flex items-center gap-1 px-2.5 py-1 rounded-full transition-colors ${
+                      isCompressing 
+                        ? 'bg-apple-gray-100 text-apple-gray-400 cursor-not-allowed' 
+                        : 'text-apple-blue bg-apple-blue/5 hover:bg-apple-blue/10'
+                    }`}
+                  >
+                    <Plus size={14} /> 從系統上傳
+                  </button>
+                  <button 
+                    onClick={() => setShowMediaPicker(false)}
+                    className="p-1 rounded-full bg-apple-gray-50 text-apple-gray-400 hover:text-apple-gray-600 transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Tab Selector */}
+              <div className="flex px-6 border-b border-apple-gray-50 bg-apple-gray-50/50">
+                <button
+                  onClick={() => setActiveMediaTab('my-photos')}
+                  className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-all ${
+                    activeMediaTab === 'my-photos'
+                      ? 'border-apple-blue text-apple-blue'
+                      : 'border-transparent text-apple-gray-400 hover:text-apple-gray-600'
+                  }`}
+                >
+                  手機相片 ({localUploadedMedia.length})
+                </button>
+                <button
+                  onClick={() => setActiveMediaTab('samples')}
+                  className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-all ${
+                    activeMediaTab === 'samples'
+                      ? 'border-apple-blue text-apple-blue'
+                      : 'border-transparent text-apple-gray-400 hover:text-apple-gray-600'
+                  }`}
+                >
+                  系統範本 (9)
+                </button>
+              </div>
+
+              {/* Hidden System File Input */}
+              <input 
+                type="file" 
+                ref={fileInputRef}
+                onChange={handleSystemFileUpload}
+                multiple 
+                accept="image/*,video/*"
+                className="hidden"
+              />
+
+              {/* Media Album Container */}
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 no-scrollbar max-h-[50vh]">
+                {activeMediaTab === 'my-photos' ? (
+                  localUploadedMedia.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 px-6 text-center">
+                      <div className="w-16 h-16 rounded-full bg-apple-gray-50 flex items-center justify-center text-apple-gray-400 mb-4 shadow-inner">
+                        <ImageIcon size={32} className="text-apple-gray-300" />
+                      </div>
+                      <h4 className="text-sm font-bold text-apple-gray-700 mb-1">您的手機相簿</h4>
+                      <p className="text-xs text-apple-gray-400 max-w-[280px] leading-relaxed mb-6">
+                        由於瀏覽器安全隱私限制，網頁無法直接讀取您的手機相簿。請點擊上方「從系統上傳」按鈕，即可選取您手機中的照片，同步到此處選取傳送！
+                      </p>
+                      <button
+                        onClick={() => !isCompressing && fileInputRef.current?.click()}
+                        disabled={isCompressing}
+                        className="flex items-center gap-2 bg-apple-blue text-white px-5 py-2.5 rounded-full text-xs font-bold hover:bg-apple-blue/90 active:scale-95 transition-all shadow-apple-sm disabled:opacity-50"
+                      >
+                        <Plus size={16} /> 上傳本機相片
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2">
+                      {localUploadedMedia.map((item, idx) => {
+                        const selectIndex = tempSelectedMedia.findIndex(m => m.url === item.url);
+                        const isSelected = selectIndex !== -1;
+                        return (
+                          <div 
+                            key={`custom-${idx}`}
+                            onClick={() => toggleMediaSelection(item)}
+                            className="aspect-square w-full relative rounded-2xl overflow-hidden border border-apple-blue/20 bg-apple-gray-50 cursor-pointer active:scale-95 transition-all flex items-center justify-center"
+                          >
+                            {item.type === 'image' ? (
+                              <img src={item.url} className="w-full h-full object-cover aspect-square" />
+                            ) : (
+                              <div className="w-full h-full relative aspect-square">
+                                <video src={item.url} className="w-full h-full object-cover aspect-square" muted />
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/10">
+                                  <Play size={20} className="text-white fill-white opacity-80" />
+                                </div>
+                              </div>
+                            )}
+                            <div className={`absolute top-2 right-2 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-black transition-all ${
+                              isSelected 
+                              ? 'bg-apple-blue border-white text-white scale-110 shadow-apple-sm animate-scale-up' 
+                              : 'bg-black/20 border-white/50 text-transparent'
+                            }`}>
+                              {isSelected ? selectIndex + 1 : ''}
+                            </div>
+                            <div className="absolute bottom-1.5 left-2 bg-apple-blue/70 backdrop-blur-xs text-[10px] text-white px-1.5 py-0.5 rounded-md font-bold">
+                              本機上傳
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                ) : (
+                  <div className="grid grid-cols-3 gap-2">
+                    {PRESET_ALBUM_MEDIA.map((item, idx) => {
+                      const selectIndex = tempSelectedMedia.findIndex(m => m.url === item.url);
+                      const isSelected = selectIndex !== -1;
+                      return (
+                        <div 
+                          key={idx}
+                          onClick={() => toggleMediaSelection(item)}
+                          className="aspect-square w-full relative rounded-2xl overflow-hidden border border-apple-gray-100 bg-apple-gray-50 cursor-pointer group active:scale-95 transition-all flex items-center justify-center"
+                        >
+                          {item.type === 'image' ? (
+                            <img src={item.url} className="w-full h-full object-cover aspect-square transition-transform group-hover:scale-105 duration-300" referrerPolicy="no-referrer" />
+                          ) : (
+                            <div className="w-full h-full relative aspect-square">
+                              <video src={item.url} className="w-full h-full object-cover aspect-square" muted />
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/10">
+                                <Play size={20} className="text-white fill-white opacity-80" />
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Grid Item selection index badge */}
+                          <div className={`absolute top-2 right-2 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-black transition-all ${
+                            isSelected 
+                            ? 'bg-apple-blue border-white text-white scale-110 shadow-apple-sm animate-scale-up' 
+                            : 'bg-black/20 border-white/50 text-transparent'
+                          }`}>
+                            {isSelected ? selectIndex + 1 : ''}
+                          </div>
+
+                          {/* Item label */}
+                          <div className="absolute bottom-1.5 left-2 bg-black/40 backdrop-blur-xs text-[10px] text-white px-1.5 py-0.5 rounded-md font-medium">
+                            {item.title}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Confirm Actions Bar */}
+              <div className="p-6 border-t border-apple-gray-100 bg-white flex gap-4 relative z-10">
+                <button 
+                  onClick={() => setShowMediaPicker(false)}
+                  disabled={isCompressing}
+                  className="flex-1 py-3 bg-white border border-apple-gray-100 rounded-xl text-sm font-semibold text-apple-gray-500 hover:bg-apple-gray-50 transition-colors disabled:opacity-50"
+                >
+                  取消
+                </button>
+                <button 
+                  onClick={confirmMediaSelection}
+                  disabled={isCompressing}
+                  className="flex-1 py-3 bg-apple-gray-600 text-white rounded-xl text-sm font-black hover:bg-apple-gray-900 active:scale-98 transition-all disabled:bg-apple-gray-300 disabled:cursor-not-allowed"
+                >
+                  {isCompressing ? '處理中...' : `確認選擇 (${tempSelectedMedia.length})`}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Full screen lightbox for media */}
+      <AnimatePresence>
+        {fullScreenMedia && (
+          <div 
+            className="fixed inset-0 z-[120] bg-black flex items-center justify-center"
+            onClick={() => setFullScreenMedia(null)}
+          >
+            <button 
+              onClick={() => setFullScreenMedia(null)}
+              className="absolute top-12 right-6 p-2 rounded-full bg-white/10 text-white/80 hover:text-white"
+            >
+              <X size={24} />
+            </button>
+            <div className="max-w-full max-h-[85vh] p-4 flex items-center justify-center" onClick={e => e.stopPropagation()}>
+              {fullScreenMedia.includes('mixkit.co') || fullScreenMedia.startsWith('data:video/') ? (
+                <video src={fullScreenMedia} controls autoPlay className="max-w-full max-h-full rounded-2xl shadow-apple-lg" />
+              ) : (
+                <img src={fullScreenMedia} className="max-w-full max-h-full object-contain rounded-2xl shadow-apple-lg" referrerPolicy="no-referrer" />
+              )}
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

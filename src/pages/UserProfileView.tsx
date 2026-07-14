@@ -6,9 +6,10 @@ interface UserProfileViewProps {
   onBack: () => void;
   onChatOpen: (roomId: string) => void;
   onTripClick: (tripId: string) => void;
+  onUserClick?: (uid: string) => void;
 }
 
-export const UserProfileView: React.FC<UserProfileViewProps> = ({ userId, onBack, onChatOpen, onTripClick }) => {
+export const UserProfileView: React.FC<UserProfileViewProps> = ({ userId, onBack, onChatOpen, onTripClick, onUserClick }) => {
   return (
     <ProfilePage 
       targetUserId={userId}
@@ -16,6 +17,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ userId, onBack
       onMyPostsClick={() => {}} 
       onTripClick={onTripClick}
       onChatClick={onChatOpen}
+      onUserClick={onUserClick}
     />
   );
 };

@@ -31,18 +31,26 @@ export const HomeView: React.FC<HomeViewProps> = ({ onAvatarClick, onTripClick, 
 
       // Fetch authors for search and privacy checks
       const authorIds = Array.from(new Set(data.map(t => t.authorId)));
-      const newProfiles = { ...profiles };
-      let changed = false;
-      for (const id of authorIds) {
-        if (!newProfiles[id]) {
-          const uSnap = await getDoc(doc(db, 'users', id));
-          if (uSnap.exists()) {
-            newProfiles[id] = uSnap.data() as UserProfile;
-            changed = true;
+      if (authorIds.length > 0) {
+        try {
+          const results = await Promise.all(authorIds.map(async (id) => {
+            const uSnap = await getDoc(doc(db, 'users', id));
+            if (uSnap.exists()) {
+              return { id, profile: uSnap.data() as UserProfile };
+            }
+            return null;
+          }));
+          const fetched: Record<string, UserProfile> = {};
+          results.forEach(r => {
+            if (r) fetched[r.id] = r.profile;
+          });
+          if (Object.keys(fetched).length > 0) {
+            setProfiles(prev => ({ ...prev, ...fetched }));
           }
+        } catch (error) {
+          console.error('Error fetching profiles: ', error);
         }
       }
-      if (changed) setProfiles(newProfiles);
     });
   }, []);
 
@@ -181,6 +189,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onAvatarClick, onTripClick, 
                     ...getActionConfig(gestureSettings.homeRight), 
                     onTrigger: () => handleAction(trip, gestureSettings.homeRight) 
                   }}
+                  onTap={() => onTripClick(trip.id)}
                 >
                   <TripCard 
                     trip={trip} 

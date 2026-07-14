@@ -12,8 +12,9 @@ export const getOrCreateChatRoom = async (currentUserId: string, otherUserId: st
   
   const snapshot = await getDocs(q);
   const existingRoom = snapshot.docs.find(doc => {
-    const participants = doc.data().participants as string[];
-    return participants.includes(otherUserId);
+    const data = doc.data();
+    const participants = data.participants as string[];
+    return data.type !== 'group' && participants.length === 2 && participants.includes(otherUserId);
   });
 
   if (existingRoom) {

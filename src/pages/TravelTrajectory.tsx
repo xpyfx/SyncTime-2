@@ -423,17 +423,25 @@ export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUser
       if (filteredUids.length === 0) return;
 
       try {
-        const newProfiles: Record<string, UserProfile> = { ...profileMap };
+        const fetchedProfiles: Record<string, UserProfile> = {};
         // Fetch in chunks of 10
         for (let i = 0; i < filteredUids.length; i += 10) {
           const chunk = filteredUids.slice(i, i + 10);
           const q = query(collection(db, 'users'), where('__name__', 'in', chunk));
           const snap = await getDocs(q);
+          const foundIds = new Set<string>();
           snap.forEach(docSnap => {
-            newProfiles[docSnap.id] = { uid: docSnap.id, ...docSnap.data() } as UserProfile;
+            fetchedProfiles[docSnap.id] = { uid: docSnap.id, ...docSnap.data() } as UserProfile;
+            foundIds.add(docSnap.id);
+          });
+          // Mark any chunk items not found as placeholder so we don't try to fetch them again
+          chunk.forEach(id => {
+            if (!foundIds.has(id)) {
+              fetchedProfiles[id] = { uid: id, displayName: '未知用戶' } as UserProfile;
+            }
           });
         }
-        setProfileMap(newProfiles);
+        setProfileMap(prev => ({ ...prev, ...fetchedProfiles }));
       } catch (err) {
         console.error('Error fetching profiles mapping: ', err);
       }
@@ -442,7 +450,7 @@ export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUser
     if (stays.length > 0) {
       fetchProfileMap();
     }
-  }, [stays, profileMap]);
+  }, [stays]);
 
   // Handle manual stay logging
   const handleCountrySearch = (val: string) => {

@@ -157,7 +157,7 @@ const AppContent = () => {
         )}
         {selectedUserId && (
           <motion.div 
-            key="user-profile" 
+            key={`user-profile-${selectedUserId}`} 
             initial={{ x: '100%' }} 
             animate={{ x: 0 }} 
             exit={{ x: '100%' }} 
@@ -169,6 +169,7 @@ const AppContent = () => {
               onBack={() => setSelectedUserId(null)} 
               onChatOpen={handleOpenChat}
               onTripClick={setSelectedTripId}
+              onUserClick={setSelectedUserId}
             />
           </motion.div>
         )}

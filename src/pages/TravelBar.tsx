@@ -29,16 +29,26 @@ export const TravelBarView: React.FC<{
 
       // Fetch authors
       const authorIds = Array.from(new Set(data.map(p => p.authorId)));
-      const newAuthors = { ...authors };
-      for (const id of authorIds) {
-        if (!newAuthors[id]) {
-          const uDoc = await getDoc(doc(db, 'users', id));
-          if (uDoc.exists()) {
-            newAuthors[id] = uDoc.data() as UserProfile;
+      if (authorIds.length > 0) {
+        try {
+          const results = await Promise.all(authorIds.map(async (id) => {
+            const uDoc = await getDoc(doc(db, 'users', id));
+            if (uDoc.exists()) {
+              return { id, profile: uDoc.data() as UserProfile };
+            }
+            return null;
+          }));
+          const fetched: Record<string, UserProfile> = {};
+          results.forEach(r => {
+            if (r) fetched[r.id] = r.profile;
+          });
+          if (Object.keys(fetched).length > 0) {
+            setAuthors(prev => ({ ...prev, ...fetched }));
           }
+        } catch (error) {
+          console.error('Error fetching authors: ', error);
         }
       }
-      setAuthors(newAuthors);
     });
   }, []);
 

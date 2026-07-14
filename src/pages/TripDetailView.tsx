@@ -21,7 +21,7 @@ import {
 } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, MoreVertical, Send, ShieldAlert, Trash2, Edit2, Calendar, MapPin, Users, Wallet, Plane, Info, Heart, MessageCircle, Plus, X, Ticket } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Send, ShieldAlert, Trash2, Edit2, Calendar, MapPin, Users, Wallet, Plane, Info, Heart, MessageCircle, Plus, X, Ticket, Star } from 'lucide-react';
 import { getOrCreateChatRoom } from '../lib/chatUtils';
 import { CreateTripView } from './CreateTrip';
 import { CommentReply } from '../types';
@@ -271,6 +271,103 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
   const [showItineraryEditor, setShowItineraryEditor] = useState(false);
   const [editingDayIndex, setEditingDayIndex] = useState<number | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<'overview' | 'itinerary'>('overview');
+
+  // Companion Evaluation States
+  const [showEvaluateUserId, setShowEvaluateUserId] = useState<string | null>(null);
+  const [evaluateProfile, setEvaluateProfile] = useState<UserProfile | null>(null);
+  const [evalMoneySpend, setEvalMoneySpend] = useState(50);
+  const [evalSleep, setEvalSleep] = useState(50);
+  const [evalJourney, setEvalJourney] = useState(50);
+  const [evalCleanliness, setEvalCleanliness] = useState(50);
+  const [evalPersonality, setEvalPersonality] = useState(50);
+  const [evalContent, setEvalContent] = useState('');
+  const [evalRating, setEvalRating] = useState(5);
+  const [evalSubmitting, setEvalSubmitting] = useState(false);
+  const [existingReviews, setExistingReviews] = useState<Record<string, { id: string; data: any }>>({});
+
+  useEffect(() => {
+    if (!user || !tripId) return;
+    const qReviews = query(
+      collection(db, 'userReviews'),
+      where('reviewerId', '==', user.uid)
+    );
+    return onSnapshot(qReviews, (snap) => {
+      const reviewedMap: Record<string, { id: string; data: any }> = {};
+      snap.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.targetUserId) {
+          reviewedMap[data.targetUserId] = { id: docSnap.id, data };
+        }
+      });
+      setExistingReviews(reviewedMap);
+    });
+  }, [user, tripId]);
+
+  const handleOpenEvaluation = (targetUser: UserProfile) => {
+    setEvaluateProfile(targetUser);
+    setShowEvaluateUserId(targetUser.uid);
+    const previous = existingReviews[targetUser.uid];
+    if (previous) {
+      setEvalMoneySpend(previous.data.moneySpend !== undefined ? (previous.data.moneySpend / 2) + 50 : 50);
+      setEvalSleep(previous.data.sleep !== undefined ? (previous.data.sleep / 2) + 50 : 50);
+      setEvalJourney(previous.data.journey !== undefined ? (previous.data.journey / 2) + 50 : 50);
+      setEvalCleanliness(previous.data.cleanliness !== undefined ? (previous.data.cleanliness / 2) + 50 : 50);
+      setEvalPersonality(previous.data.personality !== undefined ? (previous.data.personality / 2) + 50 : 50);
+      setEvalContent(previous.data.content || '');
+      setEvalRating(previous.data.rating || 5);
+    } else {
+      setEvalMoneySpend(50);
+      setEvalSleep(50);
+      setEvalJourney(50);
+      setEvalCleanliness(50);
+      setEvalPersonality(50);
+      setEvalContent('');
+      setEvalRating(5);
+    }
+  };
+
+  const handleSubmitEvaluation = async () => {
+    if (!user || !evaluateProfile) return;
+    if (!evalContent.trim()) {
+      alert('請填寫評價評語！');
+      return;
+    }
+    setEvalSubmitting(true);
+    try {
+      const payload = {
+        targetUserId: evaluateProfile.uid,
+        reviewerId: user.uid,
+        reviewerName: (profile?.displayName || user.displayName || '旅人').slice(0, 100),
+        reviewerAvatar: profile?.avatarUrl || user.photoURL || '',
+        rating: evalRating,
+        moneySpend: (evalMoneySpend - 50) * 2,
+        sleep: (evalSleep - 50) * 2,
+        journey: (evalJourney - 50) * 2,
+        cleanliness: (evalCleanliness - 50) * 2,
+        personality: (evalPersonality - 50) * 2,
+        content: evalContent.trim(),
+        tags: [],
+        createdAt: new Date().toISOString()
+      };
+
+      const previous = existingReviews[evaluateProfile.uid];
+      if (previous) {
+        await setDoc(doc(db, 'userReviews', previous.id), payload, { merge: true });
+        alert('修改評價成功！');
+      } else {
+        await addDoc(collection(db, 'userReviews'), payload);
+        alert('送出評論與旅伴特質分析成功！');
+      }
+
+      setShowEvaluateUserId(null);
+      setEvaluateProfile(null);
+    } catch (e: any) {
+      console.error(e);
+      alert('評價送出失敗，原因為：' + (e.message || '網路錯誤'));
+    } finally {
+      setEvalSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     return onSnapshot(doc(db, 'trips', tripId), async (s) => {
@@ -633,6 +730,17 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
   const isMember = user && trip ? trip.members?.includes(user.uid || '') : false;
   const isInactive = trip ? (trip.status === '已滿員' || trip.status === '已取消') : false;
 
+  const isTripFinished = (() => {
+    if (!trip?.endDate) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const endDocDate = new Date(trip.endDate.replace(/\//g, '-'));
+    endDocDate.setHours(0, 0, 0, 0);
+    return today > endDocDate;
+  })();
+
+  const isParticipant = user && trip ? (trip.authorId === user.uid || (trip.members || []).includes(user.uid)) : false;
+
   useEffect(() => {
     if (!trip || !tripId || !user) return;
     if (isAuthor || isMember) {
@@ -778,6 +886,52 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
     if (roomId) onChatOpen(roomId);
   };
 
+  const renderCustomTraitSlider = (
+    label: string, 
+    value: number, 
+    onChange: (val: number) => void, 
+    leftOption: string, 
+    rightOption: string
+  ) => {
+    const percent = Math.round(Math.abs(value - 50) * 2);
+    const isLeft = value < 50;
+    const isRight = value > 50;
+    const isCenter = value === 50;
+
+    return (
+      <div className="bg-white rounded-2xl p-4 border border-apple-gray-50 shadow-apple-xs space-y-3">
+        <div className="flex justify-between items-center bg-apple-gray-50/50 p-2 rounded-xl">
+          <span className="text-xs font-black text-apple-gray-900">{label}</span>
+          <span className="text-[10px] font-mono font-bold text-apple-blue bg-blue-50 px-2.5 py-1 rounded-md">
+            {isCenter ? '等同 (0%)' : `${isLeft ? leftOption : rightOption} ${percent}%`}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-4 justify-between text-xs my-2">
+          <span className={`transition-all duration-200 min-w-[50px] text-center ${isLeft ? 'font-black text-apple-gray-900 scale-105' : 'text-apple-gray-400 font-medium'}`}>
+            {leftOption}
+          </span>
+          
+          <div className="flex-1 px-2 relative py-4 flex items-center">
+            <input 
+              type="range" 
+              min="0" 
+              max="100" 
+              value={value} 
+              onChange={(e) => onChange(Number(e.target.value))}
+              className="w-full h-1.5 bg-apple-gray-100 rounded-lg appearance-none cursor-pointer accent-apple-blue focus:outline-none"
+            />
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-apple-gray-300 pointer-events-none" />
+          </div>
+
+          <span className={`transition-all duration-200 min-w-[50px] text-center ${isRight ? 'font-black text-apple-gray-900 scale-105' : 'text-apple-gray-400 font-medium'}`}>
+            {rightOption}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-white flex flex-col">
       <div className={`flex-1 overflow-y-auto pb-32 ${isInactive ? 'grayscale-[0.2]' : ''}`}>
@@ -914,6 +1068,25 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
               )}
             </div>
           </div>
+
+          {isTripFinished && isParticipant && memberProfiles.some(m => m.uid !== user?.uid) && (
+            <div className="bg-blue-50/70 border border-blue-100 p-4 rounded-[24px] mt-4 flex items-center justify-between shadow-apple-xs animate-fade-in">
+              <div className="space-y-1">
+                <span className="text-xs font-black text-apple-gray-900 block flex items-center gap-1.5">
+                  <Star size={13} className="text-yellow-500 fill-yellow-500 animate-pulse" /> 旅程已圓滿結束！
+                </span>
+                <span className="text-[10px] text-apple-gray-400 font-bold block">
+                  快來為同行的旅伴留下特質評語與分析吧
+                </span>
+              </div>
+              <button
+                onClick={() => setShowMemberManager(true)}
+                className="px-4 py-2 bg-apple-blue text-white rounded-xl text-[11px] font-bold hover:bg-opacity-90 active:scale-95 transition-all shadow-apple-sm shrink-0"
+              >
+                開始評價
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Details & Itinerary Tabs */}
@@ -1214,20 +1387,41 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
                           <div className="text-[10px] text-apple-gray-300">@{m.username}</div>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 items-center">
+                        {isTripFinished && isParticipant && m.uid !== user?.uid && (
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEvaluation(m);
+                            }}
+                            className={`text-xs font-bold px-3 py-1.5 rounded-xl shadow-apple-sm transition-all active:scale-95 border ${
+                              existingReviews[m.uid] 
+                                ? 'bg-emerald-50 text-emerald-600 border-emerald-200' 
+                                : 'bg-apple-blue text-white border-apple-blue'
+                            }`}
+                          >
+                            {existingReviews[m.uid] ? '重新評價' : '評價此旅伴'}
+                          </button>
+                        )}
                         {isAuthor && m.uid !== trip.authorId && (
                           <button 
-                            onClick={() => handleRemoveMember(m.uid)}
-                            className="text-red-500 text-xs font-bold px-3 py-1.5 bg-white rounded-lg shadow-apple-sm active:scale-95 transition-transform"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveMember(m.uid);
+                            }}
+                            className="text-red-500 text-xs font-bold px-3 py-1.5 bg-white border border-apple-gray-100 rounded-xl shadow-apple-sm active:scale-95 transition-transform"
                           >
                             移除
                           </button>
                         )}
                         {!isAuthor && m.uid === user?.uid && (
                           <button 
-                            onClick={handleExitTrip}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleExitTrip();
+                            }}
                             disabled={isProcessingExit}
-                            className={`text-xs font-bold px-3 py-1.5 rounded-lg shadow-apple-sm transition-all active:scale-95 ${isProcessingExit ? 'bg-apple-gray-50 text-apple-gray-300' : 'text-white bg-red-500'}`}
+                            className={`text-xs font-bold px-3 py-1.5 rounded-xl shadow-apple-sm transition-all active:scale-95 ${isProcessingExit ? 'bg-apple-gray-50 text-apple-gray-300' : 'text-white bg-red-500'}`}
                           >
                             {isProcessingExit ? '處理中...' : '退出旅程'}
                           </button>
@@ -1295,10 +1489,10 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
                   <div className="space-y-3">
                     <h3 className="text-xs font-bold text-apple-gray-300 uppercase tracking-wider">我的好友</h3>
                     <div className="space-y-2">
-                      {profile?.friends?.filter(fid => !trip.members?.includes(fid)).map(fid => (
+                      {Array.from(new Set(profile?.friends || [])).filter(fid => !trip.members?.includes(fid)).map(fid => (
                         <FriendItem key={fid} uid={fid} onAdd={handleAddMember} onAvatarClick={onAvatarClick} />
                       ))}
-                      {(!profile?.friends?.length || profile.friends.every(fid => trip.members?.includes(fid))) && (
+                      {(!profile?.friends?.length || Array.from(new Set(profile.friends)).every(fid => trip.members?.includes(fid))) && (
                         <div className="text-[10px] text-apple-gray-200 italic">無可加入的好友</div>
                       )}
                     </div>
@@ -1312,6 +1506,167 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
                   </button>
                 </div>
               )}
+            </div>
+          </motion.div>
+        )}
+
+        {showEvaluateUserId && evaluateProfile && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed inset-0 z-[300] bg-white overflow-y-auto pt-12 pb-10 px-6 max-w-2xl mx-auto flex flex-col"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-apple-gray-100 pb-4 sticky top-0 bg-white/90 backdrop-blur-md z-10">
+              <div className="flex items-center gap-2">
+                <Star size={20} className="text-yellow-500 fill-yellow-500 animate-bounce" />
+                <h2 className="text-lg font-black text-apple-gray-900">
+                  評價旅伴：{evaluateProfile.displayName}
+                </h2>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowEvaluateUserId(null);
+                  setEvaluateProfile(null);
+                }} 
+                className="text-apple-gray-500 font-bold hover:text-apple-gray-800 transition-colors"
+              >
+                關閉
+              </button>
+            </div>
+
+            {/* Content Form */}
+            <div className="flex-1 mt-6 space-y-6">
+              {/* User Identity Info */}
+              <div className="flex items-center gap-3 p-4 bg-apple-gray-50/70 rounded-2xl border border-apple-gray-100">
+                <div className="w-12 h-12 rounded-full overflow-hidden bg-white border border-apple-gray-200">
+                  {evaluateProfile.avatarUrl ? (
+                    <img src={evaluateProfile.avatarUrl} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-apple-gray-100 flex items-center justify-center font-bold text-apple-gray-400 text-sm">
+                      {evaluateProfile.displayName?.[0] || '?'}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-apple-gray-900">{evaluateProfile.displayName}</h3>
+                  <p className="text-[10px] text-apple-gray-400 font-bold">@{evaluateProfile.username}</p>
+                </div>
+              </div>
+
+              {/* Sliders Container */}
+              <div className="space-y-4">
+                <div className="text-xs font-black text-apple-gray-400 uppercase tracking-widest border-b border-apple-gray-55 pb-1 mb-2">
+                  旅伴特質分析 (拖動滑桿評價)
+                </div>
+
+                {/* Trait 1: Money Spend */}
+                {renderCustomTraitSlider(
+                  '花錢模式 (Money Spend)', 
+                  evalMoneySpend, 
+                  setEvalMoneySpend, 
+                  '節省型', 
+                  '高消費'
+                )}
+
+                {/* Trait 2: Sleep */}
+                {renderCustomTraitSlider(
+                  '睡覺模式 (Sleep)', 
+                  evalSleep, 
+                  setEvalSleep, 
+                  '打呼', 
+                  '不打呼'
+                )}
+
+                {/* Trait 3: Journey */}
+                {renderCustomTraitSlider(
+                  '行程規劃 (Journey Planning)', 
+                  evalJourney, 
+                  setEvalJourney, 
+                  '規劃', 
+                  '不規劃'
+                )}
+
+                {/* Trait 4: Cleanliness */}
+                {renderCustomTraitSlider(
+                  '整潔與生活習慣 (Cleanliness)', 
+                  evalCleanliness, 
+                  setEvalCleanliness, 
+                  '整潔', 
+                  '隨性'
+                )}
+
+                {/* Trait 5: Personality */}
+                {renderCustomTraitSlider(
+                  '人格特質 (Personality)', 
+                  evalPersonality, 
+                  setEvalPersonality, 
+                  '活潑', 
+                  '安靜'
+                )}
+              </div>
+
+              {/* Star Rating Select */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-black text-apple-gray-400 uppercase block">
+                  滿意度評價 (滿分 5 星)
+                </label>
+                <div className="flex gap-2 bg-apple-gray-50/50 p-4 rounded-2xl border border-apple-gray-50">
+                  {[1, 2, 3, 4, 5].map((starVal) => (
+                    <button
+                      key={starVal}
+                      type="button"
+                      onClick={() => setEvalRating(starVal)}
+                      className="focus:outline-none transition-transform hover:scale-110 active:scale-95"
+                    >
+                      <Star 
+                        size={28} 
+                        className={starVal <= evalRating ? "text-yellow-400 fill-yellow-400" : "text-apple-gray-200"}
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Written comment Box */}
+              <div className="space-y-2">
+                <label className="text-[11.5px] font-black text-apple-gray-400 block">
+                  撰寫評價評語 (Comment)
+                </label>
+                <textarea 
+                  value={evalContent}
+                  onChange={(e) => setEvalContent(e.target.value)}
+                  placeholder="與這位夥伴一起探險的體驗如何？請留下真實且尊重的想法..."
+                  className="w-full h-28 p-4 bg-[#fbfbfa] rounded-2xl border border-apple-gray-100 text-xs focus:outline-apple-blue resize-none leading-relaxed font-semibold focus:bg-white transition-colors"
+                  maxLength={500}
+                />
+                <span className="text-[10px] text-apple-gray-300 block text-right mt-1 font-bold">
+                  最長 500 字，目前：{evalContent.trim().length} 字
+                </span>
+              </div>
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="mt-8 border-t border-apple-gray-100 pt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEvaluateUserId(null);
+                  setEvaluateProfile(null);
+                }} 
+                className="flex-1 py-4 bg-apple-gray-50 hover:bg-apple-gray-100/75 text-apple-gray-600 rounded-2xl font-bold text-sm transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitEvaluation}
+                disabled={evalSubmitting}
+                className="flex-1 py-4 bg-apple-gray-900 text-white rounded-2xl font-bold text-sm hover:bg-apple-gray-800 transition-colors shadow-apple-sm disabled:opacity-50"
+              >
+                {evalSubmitting ? '送出中...' : (existingReviews[evaluateProfile.uid] ? '更新評價' : '送出評價')}
+              </button>
             </div>
           </motion.div>
         )}
