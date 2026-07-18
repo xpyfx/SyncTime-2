@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Search, UserPlus, Send, ArrowLeft, Users, Plane, Image as ImageIcon, Video, Plus, X, Lock, Play, Camera, ShieldCheck } from 'lucide-react';
+import { Search, UserPlus, Send, ArrowLeft, Users, Plane, Image as ImageIcon, Video, Plus, X, Lock, Play, Camera, ShieldCheck, Download } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where, doc, getDoc, getDocs, updateDoc, arrayUnion } from 'firebase/firestore';
 import { ChatRoom, Message, UserProfile } from '../types';
@@ -124,6 +124,316 @@ const compressImage = (base64Str: string, maxWidth = 800, maxHeight = 800, quali
   });
 };
 
+interface LongPressableImageProps {
+  media: { type: 'image' | 'video', url: string };
+  onClick: () => void;
+  onLongPress: () => void;
+  className?: string;
+  imgClassName?: string;
+}
+
+const LongPressableImage: React.FC<LongPressableImageProps> = ({
+  media,
+  onClick,
+  onLongPress,
+  className = '',
+  imgClassName = ''
+}) => {
+  const timerRef = useRef<any>(null);
+  const isLongPressRef = useRef(false);
+  const touchStartPosRef = useRef<{ x: number, y: number }>({ x: 0, y: 0 });
+
+  const startPress = (clientX: number, clientY: number) => {
+    isLongPressRef.current = false;
+    touchStartPosRef.current = { x: clientX, y: clientY };
+    
+    timerRef.current = setTimeout(() => {
+      isLongPressRef.current = true;
+      onLongPress();
+    }, 600); // 600ms long press threshold
+  };
+
+  const cancelPress = (clientX: number, clientY: number, checkDistance = false) => {
+    if (checkDistance) {
+      const dx = Math.abs(clientX - touchStartPosRef.current.x);
+      const dy = Math.abs(clientY - touchStartPosRef.current.y);
+      if (dx > 10 || dy > 10) {
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+      }
+    } else {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    startPress(e.clientX, e.clientY);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    cancelPress(e.clientX, e.clientY, true);
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (!isLongPressRef.current) {
+      onClick();
+    }
+    isLongPressRef.current = false;
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    startPress(touch.clientX, touch.clientY);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    cancelPress(touch.clientX, touch.clientY, true);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (!isLongPressRef.current) {
+      onClick();
+    }
+    isLongPressRef.current = false;
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  return (
+    <div
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={() => cancelPress(0, 0, false)}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      className={`${className} select-none`}
+    >
+      {media.type === 'image' ? (
+        <img 
+          src={media.url} 
+          className={imgClassName} 
+          referrerPolicy="no-referrer" 
+          draggable={false}
+          style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+        />
+      ) : (
+        <div className="relative w-full h-full">
+          <video 
+            src={media.url} 
+            className={imgClassName} 
+            controls={false} 
+            style={{ pointerEvents: 'none' }}
+          />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+            <span className="bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded-md font-bold">影片</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+interface LineImageGridProps {
+  mediaList: { type: 'image' | 'video', url: string }[];
+  isMe: boolean;
+  onMediaClick: (url: string) => void;
+  onMediaLongPress: (url: string) => void;
+}
+
+const LineImageGrid: React.FC<LineImageGridProps> = ({ mediaList, isMe, onMediaClick, onMediaLongPress }) => {
+  const N = mediaList.length;
+  if (N === 0) return null;
+
+  // Render different layouts depending on the count N to match LINE grid styling
+  if (N === 1) {
+    const media = mediaList[0];
+    return (
+      <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} w-full`}>
+        <LongPressableImage
+          media={media}
+          onClick={() => onMediaClick(media.url)}
+          onLongPress={() => onMediaLongPress(media.url)}
+          className="relative max-w-[240px] max-h-[320px] rounded-2xl overflow-hidden border border-black/5 bg-apple-gray-50 shadow-sm cursor-pointer hover:opacity-95 transition-opacity"
+          imgClassName="w-full h-auto max-h-[320px] object-contain rounded-2xl"
+        />
+      </div>
+    );
+  }
+
+  if (N === 2) {
+    return (
+      <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} w-full`}>
+        <div className="grid grid-cols-2 gap-1 w-[260px] h-[130px] rounded-2xl overflow-hidden border border-black/5 bg-apple-gray-50 shadow-sm">
+          {mediaList.map((media, idx) => (
+            <LongPressableImage
+              key={idx}
+              media={media}
+              onClick={() => onMediaClick(media.url)}
+              onLongPress={() => onMediaLongPress(media.url)}
+              className="relative w-full h-full cursor-pointer hover:opacity-95 transition-opacity"
+              imgClassName="w-full h-full object-cover"
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (N === 3) {
+    // 1 large on left, 2 stacked on right
+    return (
+      <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} w-full`}>
+        <div className="flex gap-1 w-[260px] h-[174px] rounded-2xl overflow-hidden border border-black/5 bg-apple-gray-50 shadow-sm">
+          {/* Left Column (1 image, large) */}
+          <div className="w-[172px] h-full">
+            <LongPressableImage
+              media={mediaList[0]}
+              onClick={() => onMediaClick(mediaList[0].url)}
+              onLongPress={() => onMediaLongPress(mediaList[0].url)}
+              className="relative w-full h-full cursor-pointer hover:opacity-95 transition-opacity"
+              imgClassName="w-full h-full object-cover"
+            />
+          </div>
+          {/* Right Column (2 images, stacked) */}
+          <div className="flex-1 flex flex-col gap-1 h-full">
+            <div className="flex-1 h-0 min-h-0">
+              <LongPressableImage
+                media={mediaList[1]}
+                onClick={() => onMediaClick(mediaList[1].url)}
+                onLongPress={() => onMediaLongPress(mediaList[1].url)}
+                className="relative w-full h-full cursor-pointer hover:opacity-95 transition-opacity"
+                imgClassName="w-full h-full object-cover"
+              />
+            </div>
+            <div className="flex-1 h-0 min-h-0">
+              <LongPressableImage
+                media={mediaList[2]}
+                onClick={() => onMediaClick(mediaList[2].url)}
+                onLongPress={() => onMediaLongPress(mediaList[2].url)}
+                className="relative w-full h-full cursor-pointer hover:opacity-95 transition-opacity"
+                imgClassName="w-full h-full object-cover"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (N === 4) {
+    // 2x2 Grid
+    return (
+      <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} w-full`}>
+        <div className="grid grid-cols-2 gap-1 w-[260px] h-[260px] rounded-2xl overflow-hidden border border-black/5 bg-apple-gray-50 shadow-sm">
+          {mediaList.map((media, idx) => (
+            <LongPressableImage
+              key={idx}
+              media={media}
+              onClick={() => onMediaClick(media.url)}
+              onLongPress={() => onMediaLongPress(media.url)}
+              className="relative w-full h-full cursor-pointer hover:opacity-95 transition-opacity"
+              imgClassName="w-full h-full object-cover"
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (N === 5) {
+    // Top row: 2 images, Bottom row: 3 images
+    return (
+      <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} w-full`}>
+        <div className="flex flex-col gap-1 w-[260px] h-[260px] rounded-2xl overflow-hidden border border-black/5 bg-apple-gray-50 shadow-sm">
+          {/* Top Row: 2 images */}
+          <div className="flex gap-1 h-[130px]">
+            {mediaList.slice(0, 2).map((media, idx) => (
+              <div key={idx} className="flex-1 h-full min-w-0">
+                <LongPressableImage
+                  media={media}
+                  onClick={() => onMediaClick(media.url)}
+                  onLongPress={() => onMediaLongPress(media.url)}
+                  className="relative w-full h-full cursor-pointer hover:opacity-95 transition-opacity"
+                  imgClassName="w-full h-full object-cover"
+                />
+              </div>
+            ))}
+          </div>
+          {/* Bottom Row: 3 images */}
+          <div className="flex gap-1 h-[126px]">
+            {mediaList.slice(2, 5).map((media, idx) => (
+              <div key={idx} className="flex-1 h-full min-w-0">
+                <LongPressableImage
+                  media={media}
+                  onClick={() => onMediaClick(media.url)}
+                  onLongPress={() => onMediaLongPress(media.url)}
+                  className="relative w-full h-full cursor-pointer hover:opacity-95 transition-opacity"
+                  imgClassName="w-full h-full object-cover"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // N >= 6, show 3x3 layout (up to 9 displayed)
+  const maxDisplay = 9;
+  const itemsToDisplay = mediaList.slice(0, maxDisplay);
+  const remainingCount = N - maxDisplay;
+
+  return (
+    <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} w-full`}>
+      <div className="grid grid-cols-3 gap-1 w-[260px] h-[260px] rounded-2xl overflow-hidden border border-black/5 bg-apple-gray-50 shadow-sm">
+        {itemsToDisplay.map((media, idx) => {
+          const isLastAndHasMore = idx === maxDisplay - 1 && remainingCount > 0;
+          return (
+            <div key={idx} className="relative w-full h-full min-h-0 min-w-0">
+              <LongPressableImage
+                media={media}
+                onClick={() => onMediaClick(media.url)}
+                onLongPress={() => onMediaLongPress(media.url)}
+                className="relative w-full h-full cursor-pointer hover:opacity-95 transition-opacity"
+                imgClassName="w-full h-full object-cover"
+              />
+              {isLastAndHasMore && (
+                <div 
+                  onClick={() => onMediaClick(media.url)}
+                  className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-lg font-bold cursor-pointer"
+                >
+                  +{remainingCount}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (tripId: string) => void }> = ({ roomId, onBack, onBackToTrip }) => {
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -147,6 +457,8 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
     return (localStorage.getItem('album_permission_granted') as any) || 'undetermined';
   });
   const [fullScreenMedia, setFullScreenMedia] = useState<string | null>(null);
+  const [longPressedMediaUrl, setLongPressedMediaUrl] = useState<string | null>(null);
+  const [showSaveSuccessToast, setShowSaveSuccessToast] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
@@ -183,6 +495,46 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
   }, [roomId, user]);
 
   const otherUser = room?.type !== 'group' ? (Object.values(participantProfiles) as UserProfile[]).find(p => p.uid !== user?.uid) : null;
+
+  const downloadMedia = async (url: string) => {
+    try {
+      if (url.startsWith('data:')) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `media_${Date.now()}.jpg`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setShowSaveSuccessToast(true);
+        setTimeout(() => setShowSaveSuccessToast(false), 2000);
+        return;
+      }
+
+      const res = await fetch(url, { referrerPolicy: 'no-referrer' });
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `media_${Date.now()}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+      setShowSaveSuccessToast(true);
+      setTimeout(() => setShowSaveSuccessToast(false), 2000);
+    } catch (e) {
+      // Fallback: trigger download link or open in new tab
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.download = `media_${Date.now()}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setShowSaveSuccessToast(true);
+      setTimeout(() => setShowSaveSuccessToast(false), 2000);
+    }
+  };
 
   const sendMsg = async () => {
     if ((!text.trim() && draftMedia.length === 0) || !user || isSending) return;
@@ -408,37 +760,25 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                   )}
                 </div>
               )}
-              <div className="flex flex-col max-w-[75%]">
+              <div className="flex flex-col max-w-[75%] space-y-1.5">
                 {!isMe && showAvatar && room?.type === 'group' && (
-                  <span className="text-[10px] text-apple-gray-400 ml-1 mb-1">{sender?.displayName}</span>
+                  <span className="text-[10px] text-apple-gray-400 ml-1 mb-0.5">{sender?.displayName}</span>
                 )}
-                <div className={`px-4 py-2 rounded-2xl text-sm ${isMe ? 'bg-apple-gray-600 text-white rounded-tr-none' : 'bg-apple-gray-50 text-apple-gray-600 rounded-tl-none'} space-y-2`}>
-                  {m.text && <div className="break-words whitespace-pre-wrap">{m.text}</div>}
-                  
-                  {/* Media attachment block within bubble */}
-                  {m.mediaList && m.mediaList.length > 0 && (
-                    <div className={`grid gap-1.5 mt-1 ${m.mediaList.length === 1 ? 'grid-cols-1' : m.mediaList.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                      {m.mediaList.map((media, idx) => (
-                        <div 
-                          key={idx} 
-                          onClick={() => setFullScreenMedia(media.url)}
-                          className="relative rounded-xl overflow-hidden border border-black/5 bg-black/5 cursor-pointer hover:opacity-90 transition-opacity aspect-square w-24 h-24"
-                        >
-                          {media.type === 'image' ? (
-                            <img src={media.url} className="w-full h-full object-cover rounded-xl" referrerPolicy="no-referrer" />
-                          ) : (
-                            <div className="relative w-full h-full">
-                              <video src={media.url} className="w-full h-full object-cover rounded-xl" controls={false} />
-                              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                                <span className="bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded-md font-bold">影片</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                
+                {m.text && (
+                  <div className={`px-4 py-2 rounded-2xl text-sm ${isMe ? 'bg-apple-gray-600 text-white rounded-tr-none' : 'bg-apple-gray-50 text-apple-gray-600 rounded-tl-none'} shadow-sm`}>
+                    <div className="break-words whitespace-pre-wrap">{m.text}</div>
+                  </div>
+                )}
+                
+                {m.mediaList && m.mediaList.length > 0 && (
+                  <LineImageGrid 
+                    mediaList={m.mediaList} 
+                    isMe={isMe} 
+                    onMediaClick={(url) => setFullScreenMedia(url)} 
+                    onMediaLongPress={(url) => setLongPressedMediaUrl(url)} 
+                  />
+                )}
               </div>
             </div>
           );
@@ -741,6 +1081,19 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
             className="fixed inset-0 z-[120] bg-black flex items-center justify-center"
             onClick={() => setFullScreenMedia(null)}
           >
+            {/* Download Button */}
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                downloadMedia(fullScreenMedia);
+              }}
+              className="absolute top-12 right-20 p-2.5 rounded-full bg-white/10 text-white/80 hover:text-white hover:bg-white/20 active:scale-95 transition-all flex items-center gap-1.5 text-xs font-semibold"
+            >
+              <Download size={20} />
+              <span>儲存</span>
+            </button>
+
+            {/* Close Button */}
             <button 
               onClick={() => setFullScreenMedia(null)}
               className="absolute top-12 right-6 p-2 rounded-full bg-white/10 text-white/80 hover:text-white"
@@ -755,6 +1108,62 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
               )}
             </div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Long Press Action Sheet Modal */}
+      <AnimatePresence>
+        {longPressedMediaUrl && (
+          <div 
+            className="fixed inset-0 z-[130] bg-black/40 flex items-end justify-center sm:items-center p-4 transition-opacity"
+            onClick={() => setLongPressedMediaUrl(null)}
+          >
+            <motion.div 
+              initial={{ y: 100, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 100, opacity: 0 }}
+              className="w-full max-w-sm bg-white rounded-2xl overflow-hidden shadow-apple-lg border border-apple-gray-100"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="p-4 border-b border-apple-gray-50 text-center">
+                <span className="text-xs font-bold text-apple-gray-300 uppercase tracking-widest block mb-1">照片與影片選項</span>
+                <span className="text-[11px] text-apple-gray-400">您可以將此媒體儲存至本機裝置</span>
+              </div>
+              <div className="flex flex-col">
+                <button 
+                  onClick={() => {
+                    downloadMedia(longPressedMediaUrl);
+                    setLongPressedMediaUrl(null);
+                  }}
+                  className="w-full py-4 text-center text-sm font-semibold text-apple-gray-600 hover:bg-apple-gray-50 active:bg-apple-gray-100 border-b border-apple-gray-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Download size={18} className="text-apple-blue" />
+                  <span>儲存至本地裝置</span>
+                </button>
+                <button 
+                  onClick={() => setLongPressedMediaUrl(null)}
+                  className="w-full py-4 text-center text-sm font-bold text-red-500 hover:bg-apple-gray-50 active:bg-apple-gray-100 transition-colors"
+                >
+                  取消
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Save Success Toast */}
+      <AnimatePresence>
+        {showSaveSuccessToast && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.9 }}
+            className="fixed top-24 left-1/2 -translate-x-1/2 z-[200] bg-black/85 backdrop-blur-md text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-apple-lg flex items-center gap-2"
+          >
+            <div className="w-4 h-4 rounded-full bg-apple-blue flex items-center justify-center text-[10px] text-white">✓</div>
+            <span>媒體已成功儲存！</span>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
