@@ -162,7 +162,7 @@ export const NotificationsPage: React.FC<{
             <div 
               key={n.id} 
               onClick={() => n.tripId && onTripClick(n.tripId)}
-              className={`flex items-start gap-3 p-4 rounded-2xl transition-all active:scale-[0.98] ${n.status === 'pending' ? 'bg-apple-blue/5 border border-apple-blue/10 shadow-apple-sm' : 'bg-white border border-apple-gray-100 shadow-apple-xs'}`}
+              className={`flex items-start gap-3 p-4 rounded-2xl transition-all active:scale-[0.98] ${n.status === 'pending' ? 'bg-[#E6F5FF] border border-[#CCE8FF] shadow-apple-sm' : 'bg-white border border-apple-gray-100 shadow-apple-xs'}`}
             >
               <div 
                 className="w-10 h-10 rounded-full bg-apple-gray-100 overflow-hidden shadow-sm flex-shrink-0 cursor-pointer"

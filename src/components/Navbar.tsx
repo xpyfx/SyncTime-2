@@ -26,10 +26,10 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
               onClick={() => setActiveTab(tab.id)}
               className="flex flex-col items-center justify-center w-full py-1 relative"
             >
-              <div className={`transition-colors duration-200 ${isActive ? 'text-apple-blue' : 'text-apple-gray-300'}`}>
-                <tab.icon size={24} strokeWidth={isActive ? 2.5 : 2} fill={isActive && tab.id === 'home' ? 'currentColor' : 'none'} />
+              <div className={`p-1.5 px-4 rounded-full transition-all duration-200 ${isActive ? 'bg-[#E6F5FF] text-[#2A2B2A]' : 'text-[#757875]'}`}>
+                <tab.icon size={20} strokeWidth={isActive ? 2.5 : 2} fill={isActive && tab.id === 'home' ? 'currentColor' : 'none'} />
               </div>
-              <span className={`text-[10px] mt-1.5 transition-colors duration-200 ${isActive ? 'text-apple-blue font-bold' : 'text-apple-gray-300 font-medium'}`}>
+              <span className={`text-[10px] mt-1 transition-colors duration-200 ${isActive ? 'text-[#2A2B2A] font-bold' : 'text-[#757875] font-medium'}`}>
                 {tab.label}
               </span>
             </button>

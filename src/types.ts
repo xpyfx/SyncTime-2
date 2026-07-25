@@ -151,6 +151,23 @@ export interface ChatRoom {
   avatarUrl?: string;
 }
 
+export interface PollOption {
+  id: string;
+  text: string;
+  voterIds: string[];
+}
+
+export interface PollData {
+  id: string;
+  question: string;
+  options: PollOption[];
+  allowMultiple: boolean;
+  isAnonymous: boolean;
+  deadline?: string;
+  creatorId: string;
+  createdAt: string;
+}
+
 export interface Message {
   id: string;
   senderId: string;
@@ -158,6 +175,7 @@ export interface Message {
   sharedPostId?: string;
   createdAt: string;
   mediaList?: { type: 'image' | 'video', url: string }[];
+  poll?: PollData;
 }
 
 export interface Stay {

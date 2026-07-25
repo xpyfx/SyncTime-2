@@ -64,13 +64,13 @@ export const UserPostsView: React.FC<UserPostsViewProps> = ({ userId, onBack, on
         <div className="flex bg-apple-gray-50 rounded-2xl p-1 mb-8 sticky top-28 z-10 shadow-sm">
           <button 
             onClick={() => setActiveTab('trips')}
-            className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${activeTab === 'trips' ? 'bg-white shadow text-apple-blue' : 'text-apple-gray-300'}`}
+            className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${activeTab === 'trips' ? 'bg-[#E6F5FF] text-[#2A2B2A] shadow-sm' : 'text-apple-gray-300'}`}
           >
             徵旅伴 ({filteredTrips.length})
           </button>
           <button 
             onClick={() => setActiveTab('bar')}
-            className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${activeTab === 'bar' ? 'bg-white shadow text-apple-blue' : 'text-apple-gray-300'}`}
+            className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${activeTab === 'bar' ? 'bg-[#E6F5FF] text-[#2A2B2A] shadow-sm' : 'text-apple-gray-300'}`}
           >
             旅吧 ({barPosts.length})
           </button>

@@ -198,6 +198,13 @@ service cloud.firestore {
           request.auth.uid in get(/databases/$(database)/documents/chatRooms/$(roomId)).data.participants ||
           canAccessGroupChat(get(/databases/$(database)/documents/chatRooms/$(roomId)).data)
         ) && request.resource.data.senderId == request.auth.uid;
+        allow update: if isSignedIn() && (
+          request.auth.uid in get(/databases/$(database)/documents/chatRooms/$(roomId)).data.participants ||
+          canAccessGroupChat(get(/databases/$(database)/documents/chatRooms/$(roomId)).data)
+        ) && (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['poll']) ||
+          resource.data.senderId == request.auth.uid
+        );
       }
     }
 

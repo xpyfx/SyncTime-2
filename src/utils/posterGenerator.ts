@@ -690,14 +690,14 @@ export async function generatePortablePassportPDF(
     // ==========================================
     const bioImg = addPageFromCanvas((canvas, ctx) => {
       // Vintage cream paper color
-      ctx.fillStyle = '#FAF9F5';
+      ctx.fillStyle = '#fff0e6';
       ctx.fillRect(0, 0, 800, 1130);
 
       // Borders
-      ctx.strokeStyle = '#4A4238';
+      ctx.strokeStyle = '#f5d0bd';
       ctx.lineWidth = 2;
       ctx.strokeRect(30, 30, 740, 1070);
-      ctx.strokeStyle = '#8C8070';
+      ctx.strokeStyle = '#cc9673';
       ctx.lineWidth = 0.5;
       ctx.strokeRect(36, 36, 728, 1058);
 
@@ -705,12 +705,12 @@ export async function generatePortablePassportPDF(
       ctx.fillStyle = '#1D1D1D';
       ctx.font = 'black 22px "Space Grotesk", sans-serif';
       ctx.fillText('BIOMETRIC TRAVELLER REGISTRY', 80, 90);
-      ctx.fillStyle = '#6E6252';
+      ctx.fillStyle = '#cc9673';
       ctx.font = 'italic 11px Georgia, serif';
       ctx.fillText('Certified Identifications and Global Logbook Summary', 80, 110);
 
       // Biometrics layout dividing line
-      ctx.strokeStyle = '#4A4238';
+      ctx.strokeStyle = '#f3ded0';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(80, 130);
@@ -718,16 +718,16 @@ export async function generatePortablePassportPDF(
       ctx.stroke();
 
       // Portrait photo box on the left
-      ctx.fillStyle = '#EAE4D9';
+      ctx.fillStyle = '#fce5d8';
       ctx.fillRect(80, 160, 160, 210);
-      ctx.strokeStyle = '#8C8070';
+      ctx.strokeStyle = '#cc9673';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(80, 160, 160, 210);
 
       // User Silhouette SVG representation
       ctx.save();
       ctx.translate(160, 245);
-      ctx.strokeStyle = '#6E6252';
+      ctx.strokeStyle = '#cc9673';
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(0, -25, 25, 0, Math.PI * 2); // head
@@ -737,7 +737,7 @@ export async function generatePortablePassportPDF(
       ctx.stroke();
       ctx.restore();
 
-      ctx.fillStyle = '#6E6252';
+      ctx.fillStyle = '#cc9673';
       ctx.font = 'bold 8px monospace';
       ctx.textAlign = 'center';
       ctx.fillText('APPROVED TRAVELLER PHOTO', 160, 355);
@@ -759,7 +759,7 @@ export async function generatePortablePassportPDF(
       // Right fields table
       ctx.textAlign = 'left';
       const drawFieldRow = (label: string, value: string, sy: number) => {
-        ctx.fillStyle = '#8C8070';
+        ctx.fillStyle = '#cc9673';
         ctx.font = 'bold 9px monospace';
         ctx.fillText(label, 270, sy);
 

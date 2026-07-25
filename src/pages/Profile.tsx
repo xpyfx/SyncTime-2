@@ -373,14 +373,14 @@ export const ProfilePage: React.FC<{
       {/* Top Bar - Identity */}
       <div className={`flex justify-between items-center ${isExpanded ? 'mb-8' : 'mb-2.5'}`}>
         <div className="flex items-center gap-2">
-          <span className={`${isExpanded ? 'text-[22px]' : 'text-[11px]'} font-black tracking-[0.25em] text-[#a08b5e] uppercase`}>Passport</span>
-          <div className={`${isExpanded ? 'w-[2px] h-6' : 'w-[1px] h-3'} bg-[#dcd7c5]`} />
-          <span className={`${isExpanded ? 'text-[14px]' : 'text-[8px]'} font-bold text-[#a08b5e] opacity-80 uppercase tracking-widest`}>Synctime Network</span>
+          <span className={`${isExpanded ? 'text-[22px]' : 'text-[11px]'} font-black tracking-[0.25em] text-[#cc9673] uppercase`}>Passport</span>
+          <div className={`${isExpanded ? 'w-[2px] h-6' : 'w-[1px] h-3'} bg-[#f0d0bd]`} />
+          <span className={`${isExpanded ? 'text-[14px]' : 'text-[8px]'} font-bold text-[#cc9673] opacity-80 uppercase tracking-widest`}>Synctime Network</span>
         </div>
         {!isExpanded && (
           <div className="flex gap-1.5">
-            <div className="w-5 h-4 rounded-sm border border-[#a08b5e]/30 bg-[#a08b5e]/5" />
-            <div className="w-2 h-2 rounded-full bg-[#a08b5e] opacity-10" />
+            <div className="w-5 h-4 rounded-sm border border-[#cc9673]/30 bg-[#cc9673]/5" />
+            <div className="w-2 h-2 rounded-full bg-[#cc9673] opacity-20" />
           </div>
         )}
         {isExpanded && (
@@ -389,7 +389,7 @@ export const ProfilePage: React.FC<{
               e.stopPropagation();
               setIsPassportExpanded(false);
             }}
-            className="text-[#a08b5e] cursor-pointer -rotate-90 p-2"
+            className="text-[#cc9673] cursor-pointer -rotate-90 p-2"
           >
             <X size={32} />
           </button>
@@ -399,11 +399,11 @@ export const ProfilePage: React.FC<{
       <div className={`flex ${isExpanded ? 'gap-12' : 'gap-4'} flex-1 min-h-0`}>
         {/* Profile Photo - Left Side */}
         <div className={`${isExpanded ? 'w-[200px]' : 'w-[100px]'} shrink-0 flex flex-col justify-center`}>
-          <div className={`aspect-[3/4] w-full bg-[#f0ede0] ${isExpanded ? 'rounded-2xl shadow-lg' : 'rounded-lg shadow-sm'} overflow-hidden border border-[#dcd7c5] relative`}>
+          <div className={`aspect-[3/4] w-full bg-[#fce5d8] ${isExpanded ? 'rounded-2xl shadow-lg' : 'rounded-lg shadow-sm'} overflow-hidden border border-[#f0d0bd] relative`}>
             {profile?.avatarUrl ? (
               <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover grayscale-[0.05] contrast-[1.05]" referrerPolicy="no-referrer" />
             ) : (
-              <div className={`w-full h-full flex items-center justify-center ${isExpanded ? 'text-8xl' : 'text-4xl'} text-[#d0ccb0] font-bold`}>
+              <div className={`w-full h-full flex items-center justify-center ${isExpanded ? 'text-8xl' : 'text-4xl'} text-[#cc9673] font-bold`}>
                 {profile?.displayName?.[0]}
               </div>
             )}
@@ -414,24 +414,24 @@ export const ProfilePage: React.FC<{
         {/* Passport Information - Right Side */}
         <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
           {/* Row 1: Age / Code / Passport ID */}
-          <div className={`flex border-b border-[#eeebe0] ${isExpanded ? 'gap-6 pb-3 mb-3' : 'gap-4 pb-1.5 mb-1.5'}`}>
+          <div className={`flex border-b border-[#f3ded0] ${isExpanded ? 'gap-6 pb-3 mb-3' : 'gap-4 pb-1.5 mb-1.5'}`}>
             <div className={isExpanded ? 'w-14' : 'w-8'}>
-              <label className={`${isExpanded ? 'text-[9px]' : 'text-[6px]'} font-bold text-apple-gray-400 uppercase tracking-tighter block`}>年齡 Age</label>
-              <p className={`${isExpanded ? 'text-xl' : 'text-[11px]'} font-black text-[#3d392f] leading-none mt-1`}>{calculateAge(profile?.birthday || '')}</p>
+              <label className={`${isExpanded ? 'text-[9px]' : 'text-[6px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>年齡 Age</label>
+              <p className={`${isExpanded ? 'text-xl' : 'text-[11px]'} font-black text-[#2d2a23] leading-none mt-1`}>{calculateAge(profile?.birthday || '')}</p>
             </div>
             <div className={isExpanded ? 'w-16' : 'w-10'}>
-              <label className={`${isExpanded ? 'text-[9px]' : 'text-[6px]'} font-bold text-apple-gray-400 uppercase tracking-tighter block`}>代碼 Code</label>
-              <p className={`${isExpanded ? 'text-xl' : 'text-[11px]'} font-black text-[#3d392f] leading-none mt-1`}>{getCountryISO3(profile?.nationality || '')}</p>
+              <label className={`${isExpanded ? 'text-[9px]' : 'text-[6px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>代碼 Code</label>
+              <p className={`${isExpanded ? 'text-xl' : 'text-[11px]'} font-black text-[#2d2a23] leading-none mt-1`}>{getCountryISO3(profile?.nationality || '')}</p>
             </div>
             <div className="min-w-0 flex-1">
-              <label className={`${isExpanded ? 'text-[9px]' : 'text-[6px]'} font-bold text-apple-gray-400 uppercase tracking-tighter block`}>護照ID</label>
-              <p className={`${isExpanded ? 'text-xl' : 'text-[11px]'} font-black text-[#3d392f] leading-none mt-1 truncate uppercase`}>{profile?.username}</p>
+              <label className={`${isExpanded ? 'text-[9px]' : 'text-[6px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>護照ID</label>
+              <p className={`${isExpanded ? 'text-xl' : 'text-[11px]'} font-black text-[#2d2a23] leading-none mt-1 truncate uppercase`}>{profile?.username}</p>
             </div>
           </div>
 
           {/* Row 2: Name */}
           <div className={isExpanded ? 'py-3' : 'py-1'}>
-            <label className={`${isExpanded ? 'text-[9px]' : 'text-[6px]'} font-bold text-apple-gray-400 uppercase tracking-tighter block`}>姓名 Name</label>
+            <label className={`${isExpanded ? 'text-[9px]' : 'text-[6px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>姓名 Name</label>
             <p className={`${isExpanded ? 'text-3xl' : 'text-[19px]'} font-black text-[#2d2a23] leading-none truncate tracking-tight py-1`}>{profile?.displayName}</p>
           </div>
 
@@ -439,51 +439,51 @@ export const ProfilePage: React.FC<{
           <div className={isExpanded ? 'space-y-4' : 'space-y-3'}>
             <div className="grid grid-cols-3 gap-2">
               <div className="min-w-0">
-                <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-apple-gray-400 uppercase tracking-tighter block`}>國籍 NAT.</label>
-                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#5a5446] leading-none uppercase truncate mt-0.5`}>{profile?.nationality || 'Global'}</p>
+                <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>國籍 NAT.</label>
+                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#2d2a23] leading-none uppercase truncate mt-0.5`}>{profile?.nationality || 'Global'}</p>
               </div>
               <div className="min-w-0">
-                <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-apple-gray-400 uppercase tracking-tighter block`}>性別 SEX</label>
-                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#5a5446] leading-none uppercase mt-0.5`}>{profile?.gender || 'O'}</p>
+                <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>性別 SEX</label>
+                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#2d2a23] leading-none uppercase mt-0.5`}>{profile?.gender || 'O'}</p>
               </div>
               <div className="min-w-0">
-                <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-apple-gray-400 uppercase tracking-tighter block`}>出生 BIRTH</label>
-                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#5a5446] leading-none uppercase mt-0.5`}>{formatDatePassport(profile?.birthday || '')}</p>
+                <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>出生 BIRTH</label>
+                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#2d2a23] leading-none uppercase mt-0.5`}>{formatDatePassport(profile?.birthday || '')}</p>
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
               <div className="min-w-0">
-                <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-apple-gray-400 uppercase tracking-tighter block`}>發照 ISSUE</label>
-                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#5a5446] leading-none uppercase truncate mt-0.5`}>{formatDatePassport(profile?.createdAt || '')}</p>
+                <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>發照 ISSUE</label>
+                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#2d2a23] leading-none uppercase truncate mt-0.5`}>{formatDatePassport(profile?.createdAt || '')}</p>
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-0.5">
-                  <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-apple-gray-400 uppercase tracking-tighter block`}>已旅國 VISIT.</label>
+                  <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>已旅國 VISIT.</label>
                   {!isExpanded && (
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
                         setShowFootprintInfo(true);
                       }}
-                      className="text-apple-gray-300 hover:text-apple-gray-500 transition-colors"
+                      className="text-[#cc9673]/60 hover:text-[#cc9673] transition-colors"
                     >
                       <Info size={5} />
                     </button>
                   )}
                 </div>
-                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#5a5446] leading-none uppercase mt-0.5`}>{profile?.visitedCities || 0}</p>
+                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#2d2a23] leading-none uppercase mt-0.5`}>{profile?.visitedCities || 0}</p>
               </div>
               <div className="min-w-0">
-                <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-apple-gray-400 uppercase tracking-tighter block`}>居住地 RES.</label>
-                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#5a5446] leading-none uppercase truncate mt-0.5`}>{profile?.residence || '---'}</p>
+                <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>居住地 RES.</label>
+                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#2d2a23] leading-none uppercase truncate mt-0.5`}>{profile?.residence || '---'}</p>
               </div>
             </div>
           </div>
 
           <div className={`mt-auto ${isExpanded ? 'pt-4 pb-1' : 'pt-2 pb-0.5'}`}>
-            <label className={`${isExpanded ? 'text-[8px]' : 'text-[5px]'} font-bold text-apple-gray-400 uppercase tracking-tighter block mb-0.5`}>發照機構 AUTHORITY</label>
-            <p className={`${isExpanded ? 'text-[9px]' : 'text-[7.5px]'} font-bold text-[#8e7d55] opacity-80 italic leading-none truncate`}>
+            <label className={`${isExpanded ? 'text-[8px]' : 'text-[5px]'} font-bold text-[#cc9673] uppercase tracking-tighter block mb-0.5`}>發照機構 AUTHORITY</label>
+            <p className={`${isExpanded ? 'text-[9px]' : 'text-[7.5px]'} font-bold text-[#cc9673] opacity-90 italic leading-none truncate`}>
               Synctime Professional Certification Organization
             </p>
           </div>
@@ -491,11 +491,11 @@ export const ProfilePage: React.FC<{
       </div>
 
       {/* MRZ Area */}
-      <div className={`${isExpanded ? 'mt-4 pt-3' : 'mt-1.5 pt-2'} border-t border-[#eeebe0] opacity-40`}>
+      <div className={`${isExpanded ? 'mt-4 pt-3' : 'mt-1.5 pt-2'} border-t border-[#f3ded0] opacity-60`}>
         {profile && generateMRZ(profile).map((line, idx) => (
           <div key={idx} className={`grid grid-cols-[repeat(45,1fr)] w-full ${isExpanded ? 'mb-1' : 'mb-0.5'}`}>
             {line.split('').map((char, charIdx) => (
-              <span key={charIdx} className={`font-mono ${isExpanded ? 'text-[11px]' : 'text-[8.5px]'} text-center leading-none text-[#3d392f] uppercase`}>
+              <span key={charIdx} className={`font-mono ${isExpanded ? 'text-[11px]' : 'text-[8.5px]'} text-center leading-none text-[#cc9673] uppercase font-bold`}>
                 {char}
               </span>
             ))}
@@ -1861,11 +1861,11 @@ export const ProfilePage: React.FC<{
         <motion.div 
           onClick={() => setIsPassportExpanded(true)}
           layoutId={`passport-card-${effectiveUserId}`}
-          className="w-full aspect-[1.36/1] bg-[#fdfcf7] rounded-[24px] shadow-2xl border border-[#e5e0d0] overflow-hidden relative flex flex-col cursor-pointer"
+          className="w-full aspect-[1.36/1] bg-[#fff0e6] rounded-[24px] shadow-2xl border border-[#f5d9c7] overflow-hidden relative flex flex-col cursor-pointer"
         >
           {/* Passport Texture Overlay */}
           <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 0.5px, transparent 0.5px)', backgroundSize: '10px 10px' }} />
-          <div className="absolute inset-0 bg-gradient-to-tr from-[#f4f1e1]/50 to-transparent pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-tr from-[#ffe6d5]/50 to-transparent pointer-events-none" />
           
           {renderPassportContent(false)}
           
@@ -1876,7 +1876,7 @@ export const ProfilePage: React.FC<{
                 e.stopPropagation();
                 setShowEditPassport(true);
               }} 
-              className="absolute right-3.5 top-3.5 p-2 rounded-full bg-white/40 shadow-sm border border-white/50 text-[#8e7d55] backdrop-blur-xl active:scale-90 transition-transform"
+              className="absolute right-3.5 top-3.5 p-2 rounded-full bg-white/40 shadow-sm border border-white/50 text-[#cc9673] backdrop-blur-xl active:scale-90 transition-transform"
             >
               <Edit2 size={14} />
             </button>
@@ -1902,9 +1902,9 @@ export const ProfilePage: React.FC<{
             <button 
               type="button"
               onClick={() => setShowTravelTrajectory(true)}
-              className="w-full h-11 bg-[#ece9db]/40 border border-[#d6cfb8]/70 text-[#8e7d55] rounded-2xl font-black text-xs flex items-center justify-center gap-2 shadow-apple-sm active:scale-95 transition-all hover:bg-[#e5e0cc] hover:text-[#746644]"
+              className="w-full h-11 bg-[#ffe6d5]/50 border border-[#f5d0bd]/80 text-[#cc9673] rounded-2xl font-black text-xs flex items-center justify-center gap-2 shadow-apple-sm active:scale-95 transition-all hover:bg-[#ffd9c2] hover:text-[#b88260]"
             >
-              <Globe size={14} className="text-[#8e7d55]" />
+              <Globe size={14} className="text-[#cc9673]" />
               <span>{isOwnProfile ? "開啟我的旅遊軌跡" : "查看旅遊軌跡"}</span>
             </button>
           </div>
@@ -1950,7 +1950,7 @@ export const ProfilePage: React.FC<{
                   animate={{ rotate: 90, scale: 1 }}
                   exit={{ rotate: 0, scale: 0.5 }}
                   transition={{ type: 'spring', damping: 25, stiffness: 180 }}
-                  className="bg-[#fdfcf7] rounded-[48px] shadow-[0_0_100px_rgba(0,0,0,0.8)] border border-[#e5e0d0] overflow-hidden flex flex-col relative"
+                  className="bg-[#fff0e6] rounded-[48px] shadow-[0_0_100px_rgba(0,0,0,0.8)] border border-[#f5d9c7] overflow-hidden flex flex-col relative"
                   style={{ 
                     // Calculate dimensions to fit landscape card in portrait screen after 90deg rotation.
                     // The element's HEIGHT becomes visual WIDTH.
@@ -1964,7 +1964,7 @@ export const ProfilePage: React.FC<{
                 >
                   {/* Passport Texture Overlay */}
                   <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 0.5px, transparent 0.5px)', backgroundSize: '10px 10px' }} />
-                  <div className="absolute inset-0 bg-gradient-to-tr from-[#f4f1e1]/50 to-transparent pointer-events-none" />
+                  <div className="absolute inset-0 bg-gradient-to-tr from-[#ffe6d5]/50 to-transparent pointer-events-none" />
                   
                   {renderPassportContent(true)}
                 </motion.div>

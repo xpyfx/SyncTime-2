@@ -1,33 +1,65 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   
-  --color-apple-blue: #0066cc;
-  --color-apple-gray-50: #f5f5f7;
-  --color-apple-gray-100: #ebebeb;
-  --color-apple-gray-200: #d2d2d7;
-  --color-apple-gray-300: #86868b;
-  --color-apple-gray-400: #6e6e73;
-  --color-apple-gray-500: #424245;
-  --color-apple-gray-600: #1d1d1f;
-  --color-apple-gray-700: #1a1a1c;
-  --color-apple-gray-800: #151517;
-  --color-apple-gray-900: #0e0e0f;
+  /* Primary Dark / Text color from user image */
+  --color-apple-blue: #2A2B2A;
+  --color-brand-black: #2A2B2A;
+  
+  /* Highlight Light Blue from user image */
+  --color-highlight-blue: #E6F5FF;
+  --color-blue-50: #E6F5FF;
+  --color-blue-100: #CCE8FF;
+  --color-blue-500: #2A2B2A;
+  --color-blue-600: #2A2B2A;
+  
+  /* Background Canvas White & Neutrals derived from #2A2B2A & #E6F5FF */
+  --color-apple-gray-50: #FFFFFF;
+  --color-apple-gray-100: #E6F5FF;
+  --color-apple-gray-200: #CCE8FF;
+  --color-apple-gray-300: #757875;
+  --color-apple-gray-400: #4B4E4B;
+  --color-apple-gray-500: #363836;
+  --color-apple-gray-600: #2A2B2A;
+  --color-apple-gray-700: #202120;
+  --color-apple-gray-800: #181818;
+  --color-apple-gray-900: #101010;
 
-  --shadow-apple-sm: 0 4px 12px rgba(0, 0, 0, 0.05);
-  --shadow-apple-md: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-apple-sm: 0 4px 12px rgba(42, 43, 42, 0.05);
+  --shadow-apple-md: 0 8px 24px rgba(42, 43, 42, 0.1);
 }
 
 body {
-  @apply font-sans bg-apple-gray-50 text-apple-gray-600 antialiased;
+  @apply font-sans bg-white text-[#2A2B2A] antialiased;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: #FFFFFF;
+  color: #2A2B2A;
 }
 
 #root {
-  @apply bg-apple-gray-50 min-h-screen;
+  @apply bg-white min-h-screen text-[#2A2B2A];
+  background-color: #FFFFFF;
+  color: #2A2B2A;
+}
+
+/* Custom Highlight & Accent Utility Classes */
+.bg-highlight {
+  background-color: #E6F5FF;
+}
+
+.text-dark-main {
+  color: #2A2B2A;
+}
+
+.bg-dark-main {
+  background-color: #2A2B2A;
+}
+
+.border-highlight {
+  border-color: #CCE8FF;
 }
 
 /* Scrollbar hide for mobile feel */
@@ -39,15 +71,15 @@ body {
   scrollbar-width: none;
 }
 
-/* Leaflet Map Tile Rendering Fixes (Resolves 1px gaps/grid seams on high-DPI/Retina screens) */
+/* Leaflet Map Tile Rendering Fixes */
 .leaflet-tile {
   outline: 1px solid transparent;
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
 
-/* Smoother transitions on Leaflet container background adjustments */
 .leaflet-container {
   transition: background-color 0.3s ease;
 }
+
 

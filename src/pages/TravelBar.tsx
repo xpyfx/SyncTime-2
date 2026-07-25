@@ -156,20 +156,18 @@ export const TravelBarView: React.FC<{
         </div>
         
         {/* Tabs */}
-        <div className="flex gap-6">
+        <div className="flex gap-2 bg-apple-gray-100/50 p-1 rounded-2xl w-fit mb-2">
           <button 
             onClick={() => setActiveTab('recommended')}
-            className={`pb-2 text-sm font-bold transition-all relative ${activeTab === 'recommended' ? 'text-apple-gray-900' : 'text-apple-gray-300'}`}
+            className={`px-4 py-1.5 text-xs font-bold transition-all rounded-xl relative ${activeTab === 'recommended' ? 'bg-[#E6F5FF] text-[#2A2B2A] shadow-apple-sm' : 'text-apple-gray-300'}`}
           >
             推薦
-            {activeTab === 'recommended' && <motion.div layoutId="activeBarTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-apple-blue rounded-full" />}
           </button>
           <button 
             onClick={() => setActiveTab('friends')}
-            className={`pb-2 text-sm font-bold transition-all relative ${activeTab === 'friends' ? 'text-apple-gray-900' : 'text-apple-gray-300'}`}
+            className={`px-4 py-1.5 text-xs font-bold transition-all rounded-xl relative ${activeTab === 'friends' ? 'bg-[#E6F5FF] text-[#2A2B2A] shadow-apple-sm' : 'text-apple-gray-300'}`}
           >
             好友
-            {activeTab === 'friends' && <motion.div layoutId="activeBarTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-apple-blue rounded-full" />}
           </button>
         </div>
       </div>
