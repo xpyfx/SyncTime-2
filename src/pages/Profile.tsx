@@ -1861,7 +1861,7 @@ export const ProfilePage: React.FC<{
         <motion.div 
           onClick={() => setIsPassportExpanded(true)}
           layoutId={`passport-card-${effectiveUserId}`}
-          className="w-full aspect-[1.36/1] bg-[#fff0e6] rounded-[24px] shadow-2xl border border-[#f5d9c7] overflow-hidden relative flex flex-col cursor-pointer"
+          className="w-full aspect-[1.36/1] bg-[#FFF9F5] rounded-[24px] shadow-2xl border border-[#f5d9c7] overflow-hidden relative flex flex-col cursor-pointer"
         >
           {/* Passport Texture Overlay */}
           <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 0.5px, transparent 0.5px)', backgroundSize: '10px 10px' }} />
@@ -1950,7 +1950,7 @@ export const ProfilePage: React.FC<{
                   animate={{ rotate: 90, scale: 1 }}
                   exit={{ rotate: 0, scale: 0.5 }}
                   transition={{ type: 'spring', damping: 25, stiffness: 180 }}
-                  className="bg-[#fff0e6] rounded-[48px] shadow-[0_0_100px_rgba(0,0,0,0.8)] border border-[#f5d9c7] overflow-hidden flex flex-col relative"
+                  className="bg-[#FFF9F5] rounded-[48px] shadow-[0_0_100px_rgba(0,0,0,0.8)] border border-[#f5d9c7] overflow-hidden flex flex-col relative"
                   style={{ 
                     // Calculate dimensions to fit landscape card in portrait screen after 90deg rotation.
                     // The element's HEIGHT becomes visual WIDTH.
