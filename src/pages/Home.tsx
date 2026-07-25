@@ -122,26 +122,31 @@ export const HomeView: React.FC<HomeViewProps> = ({ onAvatarClick, onTripClick, 
   });
 
   return (
-    <div className="flex flex-col min-h-screen bg-apple-gray-50">
+    <div 
+      className="flex flex-col min-h-screen text-apple-gray-900 relative"
+      style={{
+        background: 'linear-gradient(180deg, #8AD2FF 0%, #B8E4FF 220px, #E6F5FF 480px, #FFFFFF 800px)'
+      }}
+    >
       {/* Header / Search */}
-      <div className="sticky top-0 bg-apple-gray-50/80 backdrop-blur-xl z-10 px-5 pt-12 pb-2">
+      <div className="sticky top-0 bg-[#8AD2FF]/30 backdrop-blur-md z-10 px-5 pt-12 pb-2 transition-all">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold tracking-tight">為您推薦</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-apple-gray-900">為您推薦</h1>
           <button 
             onClick={onAddClick}
-            className="w-10 h-10 bg-apple-gray-600 rounded-full flex items-center justify-center text-white shadow-apple-sm active:scale-95 transition-transform"
+            className="w-10 h-10 bg-white/90 hover:bg-white text-apple-gray-800 rounded-full flex items-center justify-center shadow-2xs active:scale-95 transition-all"
           >
             <Plus size={20} />
           </button>
         </div>
         <div className="relative mb-4">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-apple-gray-300 opacity-60" size={16} strokeWidth={2.5} />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-apple-gray-400" size={16} strokeWidth={2.5} />
           <input
             type="text"
             placeholder="搜尋目的地或旅伴"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-11 bg-white border border-apple-gray-100 rounded-xl pl-11 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-apple-gray-200 transition-all placeholder:text-apple-gray-300"
+            className="w-full h-11 bg-white/90 backdrop-blur-sm border border-white/80 rounded-xl pl-11 pr-4 text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#8AD2FF] transition-all placeholder:text-apple-gray-400 shadow-2xs"
           />
         </div>
       </div>
