@@ -122,14 +122,17 @@ export const HomeView: React.FC<HomeViewProps> = ({ onAvatarClick, onTripClick, 
   });
 
   return (
-    <div 
-      className="flex flex-col min-h-screen text-apple-gray-900 relative"
-      style={{
-        background: 'linear-gradient(180deg, #8AD2FF 0%, #B8E4FF 220px, #E6F5FF 480px, #FFFFFF 800px)'
-      }}
-    >
+    <div className="flex flex-col min-h-screen text-apple-gray-900 relative isolate">
+      {/* Fixed Gradient Background */}
+      <div 
+        className="fixed inset-0 max-w-md mx-auto pointer-events-none -z-10"
+        style={{
+          background: 'linear-gradient(180deg, #8AD2FF 0%, #B8E4FF 220px, #E6F5FF 480px, #FFFFFF 800px)'
+        }}
+      />
+
       {/* Header / Search */}
-      <div className="sticky top-0 bg-[#8AD2FF]/30 backdrop-blur-md z-10 px-5 pt-12 pb-2 transition-all">
+      <div className="sticky top-0 bg-[#8AD2FF]/20 backdrop-blur-md z-10 px-5 pt-12 pb-2 transition-all">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold tracking-tight text-apple-gray-900">為您推薦</h1>
           <button 

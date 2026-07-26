@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ThumbsUp, Bookmark, MessageCircle, Send, MoreHorizontal, Trash2, Edit2, ShieldAlert } from 'lucide-react';
+import { ThumbsUp, Bookmark, MessageCircle, Send, MoreHorizontal, Trash2, Edit2, ShieldAlert, ArrowUp } from 'lucide-react';
 import { BarPost, UserProfile } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { getOrCreateChatRoom } from '../lib/chatUtils';
@@ -364,19 +364,27 @@ export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatCl
                 className="overflow-hidden space-y-4 pt-4 mt-2 border-t border-apple-gray-50"
               >
                 {/* Comment Input */}
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
                   <input 
                     value={newComment}
                     onChange={e => setNewComment(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handlePostComment();
+                      }
+                    }}
                     placeholder="發表留言..."
-                    className="flex-1 h-9 bg-apple-gray-50 rounded-xl px-4 text-xs focus:outline-none ring-1 ring-inset ring-apple-gray-100"
+                    className="flex-1 h-10 bg-apple-gray-50 rounded-full px-4 text-xs focus:outline-none ring-1 ring-inset ring-apple-gray-100"
                   />
                   <button 
+                    type="button"
                     onClick={handlePostComment}
                     disabled={!newComment.trim() || isPostingComment}
-                    className="bg-apple-blue text-white px-4 py-1.5 rounded-xl text-xs font-bold disabled:bg-apple-gray-100"
+                    className="w-10 h-10 rounded-full bg-[#0081d1] text-white flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all shadow-xs flex-shrink-0 cursor-pointer"
+                    title="發送留言"
                   >
-                    發送
+                    <ArrowUp size={20} strokeWidth={2.5} />
                   </button>
                 </div>
 

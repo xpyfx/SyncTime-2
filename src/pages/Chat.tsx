@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Search, UserPlus, Send, ArrowLeft, Users, Plane, Image as ImageIcon, Video, Plus, X, Lock, Play, Camera, ShieldCheck, Download, ChevronLeft, ChevronRight, ArrowUp, FileText, MapPin, Calendar, Wallet, BarChart2, Dices, Sparkles, Navigation, DollarSign, Vote, CheckCircle2, Trash2, Clock, Check } from 'lucide-react';
+import { Search, UserPlus, Send, ArrowLeft, Users, Plane, Image as ImageIcon, Video, Plus, X, Lock, Play, Camera, ShieldCheck, Download, ChevronLeft, ChevronRight, ArrowUp, FileText, MapPin, Calendar, Wallet, BarChart2, Dices, Sparkles, Navigation, DollarSign, Vote, CheckCircle2, Trash2, Clock, Check, MessageCircle, CreditCard, Tag, Calculator } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where, doc, getDoc, getDocs, updateDoc, arrayUnion } from 'firebase/firestore';
-import { ChatRoom, Message, UserProfile, PollData, PollOption } from '../types';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where, doc, getDoc, getDocs, updateDoc, arrayUnion, limit } from 'firebase/firestore';
+import { ChatRoom, Message, UserProfile, PollData, PollOption, LuckyDrawData, ExpenseData, SettlementData, SettlementItem, SettlementExpenseDetail, SettlementPayerTotal, Trip, ItineraryCardData, ItineraryCardDay, ItineraryCardActivity } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -765,8 +765,770 @@ const PollCard: React.FC<PollCardProps> = ({
   );
 };
 
+interface LuckyDrawCardProps {
+  draw: LuckyDrawData;
+  msgTime: string;
+  isMe: boolean;
+}
+
+const LuckyDrawCard: React.FC<LuckyDrawCardProps> = ({
+  draw,
+  msgTime,
+}) => {
+  return (
+    <div className="w-[280px] sm:w-[320px] bg-[#F5F3FF] rounded-[16px] p-4 border border-[#8B5CF6]/30 shadow-apple-xs font-sans flex flex-col relative overflow-hidden text-left">
+      {/* Top Header Badge */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5 text-[#8B5CF6] font-bold text-xs bg-white/90 px-2.5 py-1 rounded-full border border-[#8B5CF6]/20 shadow-2xs">
+          <Dices size={15} />
+          <span>團隊幸運抽籤</span>
+        </div>
+        <span className="text-[11px] font-bold text-[#7C3AED] bg-[#8B5CF6]/10 px-2 py-0.5 rounded-full border border-[#8B5CF6]/20">
+          {draw.winnerCount} 位幸運兒
+        </span>
+      </div>
+
+      {/* Topic */}
+      <div className="my-1">
+        <div className="text-[10px] font-bold text-apple-gray-400 mb-0.5 uppercase tracking-wider">抽籤主題</div>
+        <div className="font-extrabold text-base text-apple-gray-900 leading-snug break-words">
+          {draw.topic}
+        </div>
+      </div>
+
+      {/* Results / Winners Box */}
+      <div className="bg-white/90 rounded-xl p-3 border border-[#8B5CF6]/20 my-2 shadow-2xs">
+        <div className="text-[11px] font-extrabold text-[#8B5CF6] flex items-center gap-1 mb-2">
+          <Sparkles size={14} />
+          <span>🎉 抽籤結果</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {draw.winners && draw.winners.length > 0 ? (
+            draw.winners.map((winner, idx) => (
+              <span 
+                key={idx}
+                className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#7C3AED] text-white font-black text-xs shadow-xs"
+              >
+                <span>👑</span>
+                <span>{winner}</span>
+              </span>
+            ))
+          ) : (
+            <span className="text-xs text-apple-gray-400">無中獎者</span>
+          )}
+        </div>
+      </div>
+
+      {/* Footer / Time */}
+      <div className="flex items-center justify-between text-[10px] text-apple-gray-400 mt-0.5 pt-1.5 border-t border-[#8B5CF6]/15">
+        <span className="font-medium text-[#8B5CF6]/80 flex items-center gap-1">
+          <ShieldCheck size={12} /> 公正公開隨機產出
+        </span>
+        {msgTime && <span className="font-medium">{msgTime}</span>}
+      </div>
+    </div>
+  );
+};
+
+const DEFAULT_EXPENSE_CATEGORIES = [
+  '飲食',
+  '飲料',
+  '購物',
+  '化妝品',
+  '保養品',
+  '醫療',
+  '交通',
+  '門票',
+];
+
+const CURRENCY_RATES: { code: string; name: string; symbol: string; rate: number }[] = [
+  { code: 'TWD', name: '新台幣', symbol: 'NT$', rate: 1.0 },
+  { code: 'JPY', name: '日圓', symbol: '¥', rate: 0.215 },
+  { code: 'USD', name: '美元', symbol: '$', rate: 32.5 },
+  { code: 'EUR', name: '歐元', symbol: '€', rate: 35.2 },
+  { code: 'KRW', name: '韓元', symbol: '₩', rate: 0.024 },
+  { code: 'HKD', name: '港幣', symbol: 'HK$', rate: 4.15 },
+  { code: 'GBP', name: '英鎊', symbol: '£', rate: 42.0 },
+  { code: 'AUD', name: '澳幣', symbol: 'A$', rate: 21.2 },
+  { code: 'CAD', name: '加幣', symbol: 'C$', rate: 23.8 },
+  { code: 'SGD', name: '新加坡幣', symbol: 'S$', rate: 24.2 },
+  { code: 'THB', name: '泰銖', symbol: '฿', rate: 0.90 },
+  { code: 'CNY', name: '人民幣', symbol: '¥', rate: 4.50 },
+  { code: 'VND', name: '越南盾', symbol: '₫', rate: 0.0013 },
+  { code: 'MYR', name: '馬來西亞令吉', symbol: 'RM', rate: 7.30 },
+  { code: 'PHP', name: '菲律賓披索', symbol: '₱', rate: 0.57 },
+];
+
+interface ExpenseCardProps {
+  expense: ExpenseData;
+  msgTime: string;
+  isMe: boolean;
+}
+
+const ExpenseCard: React.FC<ExpenseCardProps> = ({ expense, msgTime }) => {
+  const isSplit = expense.mode === '分帳';
+  const splitCount = expense.splitWithNames?.length || 1;
+  const perPersonAmount = Math.round(expense.amountTwd / splitCount);
+
+  return (
+    <div className="w-[280px] sm:w-[320px] bg-[#FFFBEB] rounded-[16px] p-4 border border-[#F59E0B]/30 shadow-apple-xs font-sans flex flex-col relative overflow-hidden text-left">
+      {/* Top Header Badge */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5 text-[#D97706] font-bold text-xs bg-white/90 px-2.5 py-1 rounded-full border border-[#F59E0B]/20 shadow-2xs">
+          <Wallet size={15} />
+          <span>{isSplit ? '⚖️ 團體分帳' : '💰 個人記帳'}</span>
+        </div>
+        <span className="text-[11px] font-bold text-[#B45309] bg-[#F59E0B]/10 px-2.5 py-0.5 rounded-full border border-[#F59E0B]/20">
+          💳 {expense.paymentMethod || '現金'}
+        </span>
+      </div>
+
+      {/* Title / Description */}
+      <div className="my-1">
+        <div className="text-[10px] font-bold text-apple-gray-400 mb-0.5 uppercase tracking-wider">消費項目</div>
+        <div className="font-extrabold text-base text-apple-gray-900 leading-snug break-words">
+          {expense.title}
+        </div>
+      </div>
+
+      {/* Main Amount Box */}
+      <div className="bg-white/90 rounded-xl p-3 border border-[#F59E0B]/20 my-2 shadow-2xs flex flex-col justify-center">
+        <div className="text-[10px] font-bold text-apple-gray-400 mb-0.5">金額 (原始/台幣換算)</div>
+        <div className="flex items-baseline gap-1.5 flex-wrap">
+          <span className="text-xl font-black text-[#D97706]">
+            {expense.currency === 'TWD' 
+              ? `$ ${expense.amount.toLocaleString()} TWD`
+              : `${expense.currency} ${expense.amount.toLocaleString()}`}
+          </span>
+          {expense.currency !== 'TWD' && (
+            <span className="text-xs font-bold text-apple-gray-500">
+              (約 NT$ {expense.amountTwd.toLocaleString()})
+            </span>
+          )}
+        </div>
+
+        {/* If Split mode, display per-person breakdown */}
+        {isSplit && (
+          <div className="mt-2 pt-2 border-t border-apple-gray-100 flex items-center justify-between text-xs font-bold text-[#B45309]">
+            <span className="flex items-center gap-1 text-[11px]">
+              <Users size={13} />
+              <span>共 {splitCount} 人分帳</span>
+            </span>
+            <span className="bg-[#FEF3C7] px-2 py-0.5 rounded-md border border-[#F59E0B]/20 text-xs">
+              每人 NT$ {perPersonAmount.toLocaleString()}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Detail info grid */}
+      <div className="grid grid-cols-2 gap-2 text-xs mb-1">
+        <div className="bg-white/60 p-2 rounded-lg border border-[#F59E0B]/15">
+          <span className="text-[10px] font-semibold text-apple-gray-400 block">日期</span>
+          <span className="font-bold text-apple-gray-800">{expense.date || '今日'}</span>
+        </div>
+        <div className="bg-white/60 p-2 rounded-lg border border-[#F59E0B]/15">
+          <span className="text-[10px] font-semibold text-apple-gray-400 block">誰付款</span>
+          <span className="font-bold text-apple-gray-800 truncate block">{expense.payerName}</span>
+        </div>
+        <div className="bg-white/60 p-2 rounded-lg border border-[#F59E0B]/15 col-span-2 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-semibold text-apple-gray-400 block">類別</span>
+            <span className="font-bold text-apple-gray-800">{expense.category}</span>
+          </div>
+          <span className="text-[10px] text-[#D97706] font-bold bg-[#F59E0B]/10 px-2 py-0.5 rounded-md">
+            {expense.paymentMethod}
+          </span>
+        </div>
+      </div>
+
+      {/* Split members chips if split */}
+      {isSplit && expense.splitWithNames && expense.splitWithNames.length > 0 && (
+        <div className="mt-1 bg-white/60 p-2 rounded-lg border border-[#F59E0B]/15">
+          <span className="text-[10px] font-semibold text-apple-gray-400 block mb-1">分帳成員</span>
+          <div className="flex flex-wrap gap-1">
+            {expense.splitWithNames.map((name, i) => (
+              <span key={i} className="text-[10px] font-bold bg-[#FEF3C7] text-[#B45309] px-2 py-0.5 rounded-md border border-[#F59E0B]/20">
+                {name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Footer / Time */}
+      <div className="flex items-center justify-between text-[10px] text-apple-gray-400 mt-2 pt-1.5 border-t border-[#F59E0B]/20">
+        <span className="font-medium text-[#D97706]/80 flex items-center gap-1">
+          <CheckCircle2 size={12} /> 已紀錄至旅程帳本
+        </span>
+        {msgTime && <span className="font-medium">{msgTime}</span>}
+      </div>
+    </div>
+  );
+};
+
+interface SettlementCardProps {
+  settlement: SettlementData;
+  msgTime: string;
+  isMe: boolean;
+}
+
+const SettlementCard: React.FC<SettlementCardProps> = ({ settlement, msgTime }) => {
+  const dateStr = settlement.dateStr || new Date(settlement.createdAt).toLocaleDateString();
+  const mainCurr = settlement.mainCurrency || 'TWD';
+
+  const handleDownloadPdf = () => {
+    const printWin = window.open('', '_blank');
+    if (!printWin) return;
+
+    const itemsHtml = (settlement.details && settlement.details.length > 0) ? settlement.details.map((item, idx) => `
+      <tr>
+        <td style="padding: 4px 0; border-bottom: 1px dashed #ccc;">${idx + 1}. ${item.title}</td>
+        <td style="padding: 4px 0; text-align: center; border-bottom: 1px dashed #ccc;">${item.payerName}付</td>
+        <td style="padding: 4px 0; text-align: right; border-bottom: 1px dashed #ccc;">${item.amount.toLocaleString()} ${item.currency !== 'TWD' ? item.currency : ''}</td>
+      </tr>
+    `).join('') : `
+      <tr>
+        <td colspan="3" style="padding: 8px 0; text-align: center; color: #666;">共 ${settlement.totalExpensesCount} 筆分帳紀錄</td>
+      </tr>
+    `;
+
+    const payerTotalsHtml = (settlement.payerTotals || []).map(p => `
+      <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+        <span>${p.payerName} 共付金額</span>
+        <span>${p.totalAmount.toLocaleString()} ${p.currency !== 'TWD' ? p.currency : ''}</span>
+      </div>
+    `).join('');
+
+    const settlementsHtml = settlement.settlements.map(s => `
+      <div style="font-size: 14px; font-weight: bold; margin: 6px 0; text-align: center; color: #111;">
+        ${s.fromUserName} 最後要付給 ${s.toUserName}
+        <div style="font-size: 20px; font-weight: 900; margin-top: 2px;">
+          ${s.currency === 'JPY' ? '¥' : s.currency === 'USD' ? '$' : s.currency === 'EUR' ? '€' : s.currency === 'CNY' ? '¥' : 'NT$'} ${s.amount.toLocaleString()} ${s.currency !== 'TWD' ? `(${s.currency})` : ''}
+        </div>
+        ${s.currency !== 'TWD' ? `<div style="font-size: 12px; font-weight: normal; color: #555;">(約 NT$ ${s.amountTwd.toLocaleString()})</div>` : ''}
+      </div>
+    `).join('');
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>費用明細 - 發票單據</title>
+          <style>
+            @page { size: auto; margin: 10mm; }
+            body { font-family: 'Courier New', Courier, STSong, 'Songti TC', serif; background: #e5e5e5; display: flex; justify-content: center; padding: 20px; color: #222; }
+            .receipt-box { background: #faf8f5; width: 340px; padding: 24px 20px; border: 1px solid #dcd7ce; box-shadow: 0 8px 20px rgba(0,0,0,0.12); font-size: 13px; line-height: 1.6; }
+            .title { text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 4px; margin-bottom: 8px; font-family: serif; }
+            .dash { border-bottom: 1px dashed #666; margin: 10px 0; }
+            .meta { text-align: left; font-size: 12px; }
+            .table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+            .table th { text-align: left; border-bottom: 1px dashed #666; padding-bottom: 4px; font-size: 12px; font-weight: bold; }
+            .table th.right { text-align: right; }
+            .table th.center { text-align: center; }
+            .totals { font-size: 13px; font-weight: bold; margin: 10px 0; }
+            .conclusion-box { background: #f0fdf4; border: 1px dashed #10b981; padding: 12px; text-align: center; margin: 12px 0; border-radius: 4px; }
+            .thanks { text-align: center; font-size: 18px; font-weight: bold; letter-spacing: 2px; margin-top: 16px; }
+            @media print {
+              body { background: none; padding: 0; }
+              .receipt-box { box-shadow: none; border: none; width: 100%; max-width: 360px; margin: 0 auto; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="receipt-box">
+            <div class="title">費用明細</div>
+            <div class="dash"></div>
+            <div class="meta">
+              <div>日期：${dateStr}</div>
+              <div>結帳方式：平分帳單 (${settlement.payerTotals?.[0]?.payerName || '成員'}付表示多方墊付款項)</div>
+            </div>
+            <div class="dash"></div>
+
+            <table class="table">
+              <thead>
+                <tr>
+                  <th style="width: 50%;">項目</th>
+                  <th class="center" style="width: 25%;">付款人</th>
+                  <th class="right" style="width: 25%;">金額 (${mainCurr})</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsHtml}
+              </tbody>
+            </table>
+
+            <div class="dash"></div>
+
+            <div class="totals">
+              ${payerTotalsHtml}
+              <div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 14px; border-top: 1px dashed #aaa; padding-top: 4px;">
+                <span>總支出</span>
+                <span>${(settlement.totalMainCurrencyAmount || settlement.totalAmountTwd).toLocaleString()} ${mainCurr}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span>每人應負擔</span>
+                <span>${(settlement.perPersonShareMain || settlement.perPersonShareTwd || 0).toLocaleString()} ${mainCurr}</span>
+              </div>
+            </div>
+
+            <div class="dash"></div>
+
+            <div class="conclusion-box">
+              <div style="font-size: 12px; font-weight: bold; color: #047857; margin-bottom: 4px;">結算結果 (自動多方抵銷)</div>
+              ${settlementsHtml}
+            </div>
+
+            <div class="dash"></div>
+
+            ${mainCurr !== 'TWD' ? `
+              <div style="font-size: 11px; color: #555;">
+                <div>匯率參考：按央行匯率換算</div>
+                <div>換算總額：NT$ ${settlement.totalAmountTwd.toLocaleString()}</div>
+              </div>
+              <div class="dash"></div>
+            ` : ''}
+
+            <div class="thanks">謝謝 ！</div>
+          </div>
+          <script>
+            setTimeout(() => { window.print(); }, 400);
+          </script>
+        </body>
+      </html>
+    `);
+    printWin.document.close();
+  };
+
+  return (
+    <div className="w-[290px] sm:w-[320px] bg-[#FAF8F5] text-[#222222] rounded-[12px] p-4 sm:p-5 border border-[#E2DFD8] shadow-md font-serif flex flex-col relative text-left">
+      {/* Top Action Header */}
+      <div className="flex items-center justify-between mb-3 pb-2 border-b border-dashed border-[#B8B3A8]">
+        <span className="font-sans text-[11px] font-extrabold text-[#78716C] tracking-wide flex items-center gap-1">
+          <Calculator size={14} className="text-[#059669]" />
+          <span>結算單據 (發票樣式)</span>
+        </span>
+        <button
+          onClick={handleDownloadPdf}
+          className="px-2.5 py-1 rounded-lg bg-[#222222] hover:bg-[#000000] text-white font-sans font-bold text-[11px] shadow-2xs flex items-center gap-1 transition-all cursor-pointer"
+          title="匯出 PDF 或列印紙本發票"
+        >
+          <Download size={13} />
+          <span>匯出 PDF</span>
+        </button>
+      </div>
+
+      {/* Title */}
+      <div className="text-center text-xl font-bold tracking-[4px] my-1 font-serif text-[#111111]">
+        費用明細
+      </div>
+
+      {/* Dashed line */}
+      <div className="border-b border-dashed border-[#888888] my-2" />
+
+      {/* Meta */}
+      <div className="text-[12px] leading-relaxed font-mono text-[#333333]">
+        <div>日期：{dateStr}</div>
+        <div>結帳方式：平分帳單 ({settlement.payerTotals?.[0]?.payerName || '成員'}付表示先付)</div>
+      </div>
+
+      {/* Dashed line */}
+      <div className="border-b border-dashed border-[#888888] my-2" />
+
+      {/* Table Header */}
+      <div className="grid grid-cols-12 text-[12px] font-bold pb-1 border-b border-dashed border-[#888888] font-mono text-[#111111]">
+        <span className="col-span-6">項目</span>
+        <span className="col-span-3 text-center">付款人</span>
+        <span className="col-span-3 text-right">金額 ({mainCurr})</span>
+      </div>
+
+      {/* Items List */}
+      {settlement.details && settlement.details.length > 0 ? (
+        <div className="py-1 max-h-48 overflow-y-auto no-scrollbar font-mono text-[12px] space-y-1">
+          {settlement.details.map((item, idx) => (
+            <div key={idx} className="grid grid-cols-12 py-0.5 border-b border-dashed border-[#E5E0D8]">
+              <span className="col-span-6 truncate font-medium">{idx + 1}. {item.title}</span>
+              <span className="col-span-3 text-center text-[#555555] font-semibold">{item.payerName}付</span>
+              <span className="col-span-3 text-right font-bold">{item.amount.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="py-2 text-center text-xs text-[#777777] font-mono">
+          共 {settlement.totalExpensesCount} 筆團體分帳
+        </div>
+      )}
+
+      {/* Dashed line */}
+      <div className="border-b border-dashed border-[#888888] my-2" />
+
+      {/* Totals & Share */}
+      <div className="font-mono text-[12px] space-y-1 text-[#222222]">
+        {settlement.payerTotals?.map((p, idx) => (
+          <div key={idx} className="flex justify-between">
+            <span>{p.payerName} 共付金額</span>
+            <span className="font-bold">{p.totalAmount.toLocaleString()} {p.currency !== 'TWD' ? p.currency : ''}</span>
+          </div>
+        ))}
+
+        <div className="flex justify-between pt-1 border-t border-dashed border-[#B8B3A8] font-bold text-[13px]">
+          <span>總支出</span>
+          <span>{(settlement.totalMainCurrencyAmount || settlement.totalAmountTwd).toLocaleString()} {mainCurr}</span>
+        </div>
+
+        <div className="flex justify-between font-bold text-[12px]">
+          <span>每人應負擔</span>
+          <span>{(settlement.perPersonShareMain || settlement.perPersonShareTwd || 0).toLocaleString()} {mainCurr}</span>
+        </div>
+      </div>
+
+      {/* Dashed line */}
+      <div className="border-b border-dashed border-[#888888] my-2" />
+
+      {/* Conclusion Highlight Box */}
+      <div className="bg-[#F0FDF4] border border-dashed border-[#10B981] rounded-lg p-2.5 my-1 text-center font-mono">
+        <div className="text-[11px] font-bold text-[#047857] mb-1">
+          結論：
+        </div>
+        {settlement.settlements && settlement.settlements.length > 0 ? (
+          settlement.settlements.map((s, idx) => (
+            <div key={idx} className="my-1">
+              <div className="text-[12px] font-bold text-[#111827]">
+                {s.fromUserName} 最後要付給 {s.toUserName}
+              </div>
+              <div className="text-[18px] font-black text-[#059669]">
+                {s.currency === 'JPY' ? '¥' : s.currency === 'USD' ? '$' : s.currency === 'EUR' ? '€' : s.currency === 'CNY' ? '¥' : 'NT$'} {s.amount.toLocaleString()} {s.currency !== 'TWD' ? `(${s.currency})` : ''}
+              </div>
+              {s.currency !== 'TWD' && s.amountTwd > 0 && (
+                <div className="text-[10px] text-[#059669]/80 font-medium">
+                  (約 NT$ {s.amountTwd.toLocaleString()})
+                </div>
+              )}
+            </div>
+          ))
+        ) : (
+          <div className="text-xs font-bold text-[#059669]">🎉 帳目完全平衡，免互相轉帳</div>
+        )}
+      </div>
+
+      {/* Exchange Rate Reference if applicable */}
+      {mainCurr !== 'TWD' && (
+        <>
+          <div className="border-b border-dashed border-[#888888] my-2" />
+          <div className="text-[10px] font-mono text-[#555555] space-y-0.5">
+            <div>匯率參考：按中央銀行最新匯率計算</div>
+            <div>換算總額：NT$ {settlement.totalAmountTwd.toLocaleString()}</div>
+          </div>
+        </>
+      )}
+
+      {/* Dashed line */}
+      <div className="border-b border-dashed border-[#888888] my-2" />
+
+      {/* Bottom Thanks */}
+      <div className="text-center font-serif text-base font-bold tracking-[2px] mt-1 text-[#111111]">
+        謝謝 ！
+      </div>
+
+      {/* Footer Timestamp */}
+      <div className="flex justify-between items-center text-[9px] font-mono text-[#888888] mt-2 pt-1 border-t border-dashed border-[#DDD7CD]">
+        <span>自動生成發票憑證</span>
+        <span>{msgTime}</span>
+      </div>
+    </div>
+  );
+};
+
+interface ItineraryCardProps {
+  itineraryCard: ItineraryCardData;
+  msgTime: string;
+  isMe: boolean;
+  onViewTrip?: (tripId: string) => void;
+}
+
+const ItineraryCard: React.FC<ItineraryCardProps> = ({ itineraryCard, msgTime, onViewTrip }) => {
+  const [selectedDayTab, setSelectedDayTab] = useState<number | 'all'>('all');
+
+  const handleDownloadPdf = () => {
+    const printWin = window.open('', '_blank');
+    if (!printWin) return;
+
+    const daysHtml = (itineraryCard.days || []).map((day) => `
+      <div style="margin-bottom: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin-bottom: 12px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="background: #1e3a8a; color: #ffffff; font-weight: 800; font-size: 13px; padding: 4px 12px; border-radius: 20px;">Day ${day.dayNumber}</span>
+            <span style="font-weight: 700; font-size: 14px; color: #1e293b;">${day.date ? day.date.replace(/-/g, '/') : ''}</span>
+          </div>
+          <span style="font-size: 12px; color: #64748b; font-weight: 600;">${(day.activities || []).length} 個行程景點</span>
+        </div>
+
+        <div style="position: relative; padding-left: 24px; border-left: 2px solid #cbd5e1; margin-left: 12px; display: flex; flex-direction: column; gap: 12px;">
+          ${(day.activities || []).map((act) => `
+            <div style="position: relative; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 14px;">
+              <div style="position: absolute; left: -31px; top: 12px; width: 12px; height: 12px; border-radius: 50%; background: #3b82f6; border: 2px solid #ffffff; box-shadow: 0 0 0 2px #3b82f6;"></div>
+              
+              <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
+                <div style="font-weight: 800; font-size: 14px; color: #0f172a; flex: 1;">
+                  ${act.time ? `<span style="display: inline-block; background: #e0f2fe; color: #0369a1; font-size: 11px; padding: 2px 6px; border-radius: 4px; font-family: monospace; margin-right: 6px;">${act.time}</span>` : ''}
+                  ${act.title}
+                </div>
+                <span style="font-size: 14px; color: #3b82f6;">☑</span>
+              </div>
+
+              ${act.location ? `
+                <div style="font-size: 12px; color: #475569; margin-top: 4px; display: flex; align-items: center; gap: 4px;">
+                  <span>📍</span> <strong>地點：</strong> ${act.location}
+                </div>
+              ` : ''}
+
+              ${act.notes ? `
+                <div style="font-size: 12px; color: #64748b; margin-top: 4px; background: #ffffff; padding: 6px 10px; border-radius: 6px; border: 1px dashed #cbd5e1;">
+                  <span>💡 備註：</span> ${act.notes}
+                </div>
+              ` : ''}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${itineraryCard.title} - 行程規劃表</title>
+          <style>
+            @media print {
+              body { margin: 0; padding: 12mm; background: #fff; }
+              .no-print { display: none !important; }
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+              color: #0f172a;
+              background-color: #f8fafc;
+              padding: 24px;
+              max-width: 800px;
+              margin: 0 auto;
+            }
+            .header-card {
+              background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+              color: #ffffff;
+              padding: 24px;
+              border-radius: 16px;
+              margin-bottom: 24px;
+              box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            }
+          </style>
+        </head>
+        <body>
+          <div class="no-print" style="margin-bottom: 16px; text-align: right;">
+            <button onclick="window.print()" style="background: #0f172a; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer;">
+              🖨️ 列印 / 另存為 PDF
+            </button>
+          </div>
+
+          <div class="header-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; opacity: 0.9;">
+              <span>🗓️ DAILY PLANNER & ITINERARY</span>
+              <span><sup>${new Date().toLocaleDateString()}</sup></span>
+            </div>
+            <h1 style="margin: 8px 0 4px 0; font-size: 24px; font-weight: 800;">${itineraryCard.title}</h1>
+            <div style="font-size: 13px; opacity: 0.95; display: flex; gap: 12px; margin-top: 8px;">
+              ${itineraryCard.country ? `<span>📍 ${itineraryCard.country} ${itineraryCard.cities?.join('、') || ''}</span>` : ''}
+              ${itineraryCard.startDate ? `<span>📅 ${itineraryCard.startDate.replace(/-/g, '/')} ~ ${itineraryCard.endDate?.replace(/-/g, '/')}</span>` : ''}
+            </div>
+          </div>
+
+          <div>
+            ${daysHtml}
+          </div>
+
+          <div style="text-align: center; margin-top: 32px; padding-top: 16px; border-top: 1px border-dashed #cbd5e1; font-size: 11px; color: #94a3b8;">
+            由團員行程規劃功能自動生成 • 祝您旅途愉快！
+          </div>
+
+          <script>
+            setTimeout(() => { window.print(); }, 400);
+          </script>
+        </body>
+      </html>
+    `);
+    printWin.document.close();
+  };
+
+  const daysToRender = itineraryCard.days ? (
+    selectedDayTab === 'all'
+      ? itineraryCard.days
+      : itineraryCard.days.filter(d => d.dayNumber === selectedDayTab)
+  ) : [];
+
+  return (
+    <div className="w-[300px] sm:w-[340px] bg-[#FAF9F5] text-apple-gray-900 rounded-[22px] p-4 border border-[#E3E0D8] shadow-md font-sans flex flex-col relative text-left overflow-hidden">
+      {/* Top Header & Export PDF Button */}
+      <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-dashed border-[#CBD5E1]">
+        <div className="flex items-center gap-1.5 text-[#0F172A] font-extrabold text-xs">
+          <Calendar size={15} className="text-[#3B82F6]" />
+          <span>每日行程表 (Planner)</span>
+        </div>
+        <button
+          onClick={handleDownloadPdf}
+          className="px-2.5 py-1 rounded-lg bg-[#0F172A] hover:bg-[#1E293B] text-white font-bold text-[11px] shadow-2xs flex items-center gap-1 transition-all cursor-pointer active:scale-95"
+          title="匯出 PDF 或列印行程圖"
+        >
+          <Download size={13} />
+          <span>匯出 PDF</span>
+        </button>
+      </div>
+
+      {/* Trip Main Title & Badges */}
+      <div className="mb-2">
+        <h4 className="font-black text-base text-[#0F172A] leading-snug break-words">
+          {itineraryCard.title}
+        </h4>
+        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+          {(itineraryCard.country || (itineraryCard.cities && itineraryCard.cities.length > 0)) && (
+            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-[#1E3A8A] bg-[#EFF6FF] px-2 py-0.5 rounded-md border border-[#BFDBFE]">
+              <MapPin size={10} className="text-[#3B82F6]" />
+              {itineraryCard.country} {itineraryCard.cities?.join(' ')}
+            </span>
+          )}
+          {itineraryCard.startDate && (
+            <span className="text-[10px] font-bold text-[#334155] bg-white px-2 py-0.5 rounded-md border border-slate-200">
+              📅 {itineraryCard.startDate.replace(/-/g, '/')} ~ {itineraryCard.endDate?.replace(/-/g, '/')}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Day Selector Tabs if multiple days exist */}
+      {itineraryCard.days && itineraryCard.days.length > 1 && (
+        <div className="flex items-center gap-1 my-2 overflow-x-auto pb-1 no-scrollbar">
+          <button
+            type="button"
+            onClick={() => setSelectedDayTab('all')}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex-shrink-0 ${
+              selectedDayTab === 'all'
+                ? 'bg-[#0F172A] text-white shadow-2xs'
+                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            全部 ({itineraryCard.days.length} 天)
+          </button>
+          {itineraryCard.days.map((day) => (
+            <button
+              key={day.dayNumber}
+              type="button"
+              onClick={() => setSelectedDayTab(day.dayNumber)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex-shrink-0 ${
+                selectedDayTab === day.dayNumber
+                  ? 'bg-[#3B82F6] text-white shadow-2xs'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              Day {day.dayNumber}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Visual Timeline Schedule - Inspired by Reference Images */}
+      <div className="my-2 max-h-72 overflow-y-auto pr-1 no-scrollbar space-y-4">
+        {daysToRender.length > 0 ? (
+          daysToRender.map((day) => (
+            <div key={day.dayNumber} className="relative">
+              {/* Day Header Badge */}
+              <div className="flex items-center gap-2 mb-2 sticky top-0 bg-[#FAF9F5]/90 backdrop-blur-xs py-1 z-10">
+                <span className="text-[11px] font-black text-white bg-[#0F172A] px-2.5 py-0.5 rounded-full shadow-2xs">
+                  Day {day.dayNumber}
+                </span>
+                {day.date && (
+                  <span className="text-[10px] font-bold text-slate-500">
+                    {day.date.replace(/-/g, '/')}
+                  </span>
+                )}
+              </div>
+
+              {/* Timeline Container */}
+              <div className="relative pl-6 border-l-2 border-[#3B82F6]/30 ml-3 space-y-2.5 my-1">
+                {day.activities && day.activities.length > 0 ? (
+                  day.activities.map((act, actIdx) => (
+                    <div 
+                      key={actIdx} 
+                      className="relative bg-white rounded-xl p-3 border border-slate-200/80 shadow-2xs hover:shadow-xs transition-shadow"
+                    >
+                      {/* Left Circular Node Pin */}
+                      <div className="absolute -left-[31px] top-3.5 w-3 h-3 rounded-full bg-[#3B82F6] border-2 border-white shadow-xs" />
+
+                      {/* Top Row: Time & Title & Checkbox */}
+                      <div className="flex items-start justify-between gap-1.5">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {act.time && (
+                              <span className="text-[10px] font-mono font-bold text-[#0284C7] bg-[#E0F2FE] px-1.5 py-0.5 rounded-md">
+                                {act.time}
+                              </span>
+                            )}
+                            <span className="font-extrabold text-xs text-slate-900 break-words leading-tight">
+                              {act.title}
+                            </span>
+                          </div>
+                        </div>
+                        <CheckCircle2 size={15} className="text-[#3B82F6] flex-shrink-0 mt-0.5" />
+                      </div>
+
+                      {/* Location Badge */}
+                      {act.location && (
+                        <div className="flex items-center gap-1 text-[11px] font-bold text-slate-600 mt-1.5">
+                          <MapPin size={11} className="text-[#F43F5E] flex-shrink-0" />
+                          <span className="truncate">{act.location}</span>
+                        </div>
+                      )}
+
+                      {/* Notes Box */}
+                      {act.notes && (
+                        <div className="text-[11px] text-slate-500 leading-snug mt-1.5 bg-slate-50 p-2 rounded-lg border border-dashed border-slate-200">
+                          <span className="font-bold text-slate-700">💡 備註：</span>{act.notes}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-xs text-slate-400 italic py-1">尚無詳細行程</div>
+                )}
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="text-xs text-slate-400 italic text-center py-4">無行程資料</div>
+        )}
+      </div>
+
+      {/* Button to navigate to trip detail view if tripId is attached */}
+      {itineraryCard.tripId && onViewTrip && (
+        <button
+          type="button"
+          onClick={() => onViewTrip(itineraryCard.tripId!)}
+          className="w-full mt-1.5 py-2 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+        >
+          <Plane size={14} />
+          <span>前往旅遊詳情頁面查看或編輯</span>
+        </button>
+      )}
+
+      {/* Footer / Time */}
+      <div className="flex items-center justify-between text-[10px] text-slate-400 mt-2 pt-1.5 border-t border-dashed border-slate-200">
+        <span className="font-bold text-slate-600 flex items-center gap-1">
+          <CheckCircle2 size={12} className="text-[#3B82F6]" /> 自動列出旅程規劃
+        </span>
+        {msgTime && <span className="font-medium">{msgTime}</span>}
+      </div>
+    </div>
+  );
+};
+
 const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (tripId: string) => void }> = ({ roomId, onBack, onBackToTrip }) => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [room, setRoom] = useState<ChatRoom | null>(null);
@@ -806,11 +1568,520 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
   const [customLocationName, setCustomLocationName] = useState('');
   const [customLocationAddress, setCustomLocationAddress] = useState('');
 
-  const [itineraryTitle, setItineraryTitle] = useState('東京 5 日精華之旅');
-  const [itineraryDetail, setItineraryDetail] = useState('Day 2: 清水寺 ➔ 祇園散策 ➔ 鴨川日式晚餐');
+  const [currentTrip, setCurrentTrip] = useState<Trip | null>(null);
+  const [userTrips, setUserTrips] = useState<Trip[]>([]);
+  const [searchTripQuery, setSearchTripQuery] = useState('');
+  const [selectedDayNumbers, setSelectedDayNumbers] = useState<number[]>([]);
+  const [itineraryTitle, setItineraryTitle] = useState('東京精華之旅');
+  const [itineraryDetail, setItineraryDetail] = useState('');
 
+  const isGroupRoom = Boolean(room?.tripId);
+
+  // Fetch trip data associated with current chat room or user
+  useEffect(() => {
+    const fetchTripData = async () => {
+      if (!user?.uid) return;
+
+      if (room?.tripId) {
+        // Group chat room: strictly bound to room.tripId
+        try {
+          const snap = await getDoc(doc(db, 'trips', room.tripId));
+          if (snap.exists()) {
+            const t = { id: snap.id, ...snap.data() } as Trip;
+            setCurrentTrip(t);
+            setUserTrips([t]);
+            if (t.itinerary && t.itinerary.length > 0) {
+              setSelectedDayNumbers(t.itinerary.map(d => d.dayNumber));
+            }
+            const defaultTitle = `${t.country} ${t.cities?.join(' ')} ${t.itinerary?.length || 0}日行程`;
+            setItineraryTitle(defaultTitle);
+          }
+        } catch (e) {
+          console.error('Error fetching group trip:', e);
+        }
+      } else {
+        // Direct 1-on-1 chat room: fetch all trips where user is member or author
+        try {
+          const tripsMap = new Map<string, Trip>();
+
+          const qMembers = query(collection(db, 'trips'), where('members', 'array-contains', user.uid));
+          const snapMembers = await getDocs(qMembers);
+          snapMembers.docs.forEach(d => {
+            tripsMap.set(d.id, { id: d.id, ...d.data() } as Trip);
+          });
+
+          const qAuth = query(collection(db, 'trips'), where('authorId', '==', user.uid));
+          const snapAuth = await getDocs(qAuth);
+          snapAuth.docs.forEach(d => {
+            if (!tripsMap.has(d.id)) {
+              tripsMap.set(d.id, { id: d.id, ...d.data() } as Trip);
+            }
+          });
+
+          const allTrips = Array.from(tripsMap.values());
+          setUserTrips(allTrips);
+
+          if (allTrips.length > 0) {
+            const defaultTrip = currentTrip && allTrips.some(t => t.id === currentTrip.id)
+              ? currentTrip
+              : allTrips[0];
+            setCurrentTrip(defaultTrip);
+            if (defaultTrip.itinerary && defaultTrip.itinerary.length > 0) {
+              setSelectedDayNumbers(defaultTrip.itinerary.map(d => d.dayNumber));
+            }
+            const defaultTitle = `${defaultTrip.country} ${defaultTrip.cities?.join(' ')} ${defaultTrip.itinerary?.length || 0}日行程`;
+            setItineraryTitle(defaultTitle);
+          }
+        } catch (e) {
+          console.error('Error fetching user trips for direct chat:', e);
+        }
+      }
+    };
+
+    if (showItineraryModal) {
+      fetchTripData();
+    }
+  }, [showItineraryModal, room?.tripId, user?.uid]);
+
+  const filteredUserTrips = userTrips.filter(t => {
+    if (!searchTripQuery.trim()) return true;
+    const q = searchTripQuery.toLowerCase();
+    const country = t.country?.toLowerCase() || '';
+    const cities = t.cities?.join(' ').toLowerCase() || '';
+    const title = `${t.country} ${t.cities?.join(' ')}`.toLowerCase();
+    return country.includes(q) || cities.includes(q) || title.includes(q);
+  });
+
+  const handleSelectTrip = (trip: Trip) => {
+    setCurrentTrip(trip);
+    if (trip.itinerary && trip.itinerary.length > 0) {
+      setSelectedDayNumbers(trip.itinerary.map(d => d.dayNumber));
+    } else {
+      setSelectedDayNumbers([]);
+    }
+    const defaultTitle = `${trip.country} ${trip.cities?.join(' ')} ${trip.itinerary?.length || 0}日行程`;
+    setItineraryTitle(defaultTitle);
+  };
+
+  const handleSendTripItineraryCard = async () => {
+    const tripTitle = currentTrip
+      ? `${currentTrip.country} ${currentTrip.cities?.join(' ')} 行程`
+      : itineraryTitle.trim() || '旅程行程';
+
+    let finalDays: ItineraryCardDay[] = [];
+
+    if (currentTrip?.itinerary && currentTrip.itinerary.length > 0) {
+      const sorted = [...currentTrip.itinerary].sort((a, b) => a.dayNumber - b.dayNumber);
+      const filtered = sorted.filter(d => selectedDayNumbers.length === 0 || selectedDayNumbers.includes(d.dayNumber));
+      finalDays = filtered.map(d => ({
+        dayNumber: d.dayNumber,
+        date: d.date || '',
+        activities: (d.activities || []).map(a => ({
+          time: a.time || '',
+          title: a.title,
+          location: a.location || '',
+          notes: a.notes || ''
+        }))
+      }));
+    }
+
+    if (finalDays.length === 0 && itineraryDetail.trim()) {
+      finalDays = [
+        {
+          dayNumber: 1,
+          activities: [
+            {
+              title: itineraryDetail.trim()
+            }
+          ]
+        }
+      ];
+    }
+
+    if (finalDays.length === 0) {
+      alert('請勾選至少一個當日行程，或輸入行程重點摘要！');
+      return;
+    }
+
+    const cardData: ItineraryCardData = {
+      id: 'itinerary_' + Date.now(),
+      tripId: currentTrip?.id || room?.tripId || '',
+      title: tripTitle,
+      country: currentTrip?.country || '',
+      cities: currentTrip?.cities || [],
+      startDate: currentTrip?.startDate || '',
+      endDate: currentTrip?.endDate || '',
+      days: finalDays,
+      createdAt: new Date().toISOString(),
+      creatorId: user?.uid || ''
+    };
+
+    const summaryMsg = `🗓️ 團員分享了旅程行程卡：【${tripTitle}】(共 ${finalDays.length} 天行程安排)`;
+
+    try {
+      await addDoc(collection(db, 'chatRooms', roomId, 'messages'), {
+        senderId: user?.uid,
+        text: summaryMsg,
+        itineraryCard: cardData,
+        createdAt: new Date().toISOString()
+      });
+
+      await updateDoc(doc(db, 'chatRooms', roomId), {
+        lastMessage: `🗓️ 行程卡：${tripTitle}`,
+        lastUpdatedAt: serverTimestamp()
+      });
+
+      setShowItineraryModal(false);
+    } catch (e) {
+      console.error('Failed to send itinerary card:', e);
+      alert('發送行程卡失敗，請稍後再試');
+    }
+  };
+
+  // Expense Form States
+  const [expenseMode, setExpenseMode] = useState<'記帳' | '分帳'>('記帳');
+  const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [expensePayerId, setExpensePayerId] = useState('');
+  const [expensePaymentMethod, setExpensePaymentMethod] = useState<'現金' | '信用卡' | '記帳卡'>('現金');
+  const [expenseCategory, setExpenseCategory] = useState('飲食');
+  const [newCustomCategoryInput, setNewCustomCategoryInput] = useState('');
+  const [showAddCustomCat, setShowAddCustomCat] = useState(false);
   const [expenseTitle, setExpenseTitle] = useState('');
   const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseCurrency, setExpenseCurrency] = useState('TWD');
+  const [expenseAmountTwd, setExpenseAmountTwd] = useState('');
+  const [expenseSplitWith, setExpenseSplitWith] = useState<string[]>([]);
+  const [customRateInput, setCustomRateInput] = useState<string>('1.0');
+  const [isEditingRate, setIsEditingRate] = useState<boolean>(false);
+
+  // Category computation combining defaults and user-persisted categories
+  const allExpenseCategories = React.useMemo(() => {
+    const custom = profile?.customExpenseCategories || [];
+    const list = [...DEFAULT_EXPENSE_CATEGORIES];
+    custom.forEach(c => {
+      if (!list.includes(c)) list.push(c);
+    });
+    return list;
+  }, [profile?.customExpenseCategories]);
+
+  // Handle Amount, Currency & Custom Rate changes
+  const handleExpenseAmountChange = (val: string) => {
+    setExpenseAmount(val);
+    const num = parseFloat(val);
+    if (!isNaN(num)) {
+      const rate = parseFloat(customRateInput) || CURRENCY_RATES.find(c => c.code === expenseCurrency)?.rate || 1.0;
+      setExpenseAmountTwd(String(Math.round(num * rate)));
+    } else {
+      setExpenseAmountTwd('');
+    }
+  };
+
+  const handleExpenseCurrencyChange = (curr: string) => {
+    setExpenseCurrency(curr);
+    const defaultRateObj = CURRENCY_RATES.find(c => c.code === curr);
+    const defaultRate = defaultRateObj ? String(defaultRateObj.rate) : '1.0';
+    setCustomRateInput(defaultRate);
+
+    const num = parseFloat(expenseAmount);
+    if (!isNaN(num)) {
+      const rate = parseFloat(defaultRate) || 1.0;
+      setExpenseAmountTwd(String(Math.round(num * rate)));
+    }
+  };
+
+  const handleCustomRateInputChange = (rateVal: string) => {
+    setCustomRateInput(rateVal);
+    const rate = parseFloat(rateVal);
+    const num = parseFloat(expenseAmount);
+    if (!isNaN(num) && !isNaN(rate)) {
+      setExpenseAmountTwd(String(Math.round(num * rate)));
+    }
+  };
+
+  const handleAddCustomCategory = async () => {
+    const cat = newCustomCategoryInput.trim();
+    if (!cat) return;
+    setExpenseCategory(cat);
+    setNewCustomCategoryInput('');
+    setShowAddCustomCat(false);
+    if (user) {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          customExpenseCategories: arrayUnion(cat)
+        });
+      } catch (e) {
+        console.error('Failed to save custom category:', e);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (showExpenseModal) {
+      if (!expensePayerId && user) {
+        setExpensePayerId(user.uid);
+      }
+      if (room?.participants && expenseSplitWith.length === 0) {
+        setExpenseSplitWith(room.participants);
+      }
+    }
+  }, [showExpenseModal, room?.participants, user]);
+
+  const handleCreateAndSendExpense = async () => {
+    if (!expenseTitle.trim()) {
+      alert('請填寫消費內容說明');
+      return;
+    }
+    const rawAmt = parseFloat(expenseAmount);
+    if (isNaN(rawAmt) || rawAmt <= 0) {
+      alert('請輸入金額');
+      return;
+    }
+    const twdAmt = parseFloat(expenseAmountTwd) || Math.round(rawAmt * (CURRENCY_RATES.find(c => c.code === expenseCurrency)?.rate || 1.0));
+
+    // Determine Payer Name
+    const payerUid = expensePayerId || user?.uid || '';
+    const payerProf = participantProfiles[payerUid] || (payerUid === user?.uid ? profile : null);
+    const payerName = payerProf?.displayName || user?.displayName || '成員';
+
+    // Determine Split Names
+    const splitWithNames = expenseSplitWith.map(id => {
+      if (id === user?.uid) return profile?.displayName || '我';
+      return participantProfiles[id]?.displayName || '成員';
+    });
+
+    const expensePayload: ExpenseData = {
+      id: 'exp_' + Date.now(),
+      mode: expenseMode,
+      date: expenseDate || new Date().toISOString().split('T')[0],
+      payerId: payerUid,
+      payerName,
+      paymentMethod: expensePaymentMethod,
+      category: expenseCategory,
+      title: expenseTitle.trim(),
+      amount: rawAmt,
+      currency: expenseCurrency,
+      amountTwd: twdAmt,
+      splitWithUserIds: expenseMode === '分帳' ? expenseSplitWith : undefined,
+      splitWithNames: expenseMode === '分帳' ? splitWithNames : undefined,
+      createdAt: new Date().toISOString()
+    };
+
+    const summaryText = expenseMode === '分帳'
+      ? `⚖️ 團體分帳：${expenseTitle} $${rawAmt} ${expenseCurrency} (約 NT$ ${twdAmt}) - 由 ${payerName} 付款，共 ${splitWithNames.length} 人平分`
+      : `💰 個人記帳：${expenseTitle} $${rawAmt} ${expenseCurrency} (約 NT$ ${twdAmt}) - 由 ${payerName} 用 ${expensePaymentMethod} 付款`;
+
+    try {
+      await addDoc(collection(db, 'chatRooms', roomId, 'messages'), {
+        senderId: user?.uid,
+        text: summaryText,
+        expense: expensePayload,
+        createdAt: new Date().toISOString()
+      });
+
+      await updateDoc(doc(db, 'chatRooms', roomId), {
+        lastMessage: summaryText,
+        lastUpdatedAt: serverTimestamp()
+      });
+
+      // Reset
+      setExpenseTitle('');
+      setExpenseAmount('');
+      setExpenseAmountTwd('');
+      setShowExpenseModal(false);
+    } catch (e) {
+      console.error('Failed to send expense:', e);
+    }
+  };
+
+  const handleCalculateAndSendSettlement = async () => {
+    // Collect all expense messages with mode === '分帳'
+    const splitExpenses = messages.filter(m => m.expense && (m.expense.mode === '分帳' || (m.expense.splitWithUserIds && m.expense.splitWithUserIds.length > 0))).map(m => m.expense!);
+
+    if (splitExpenses.length === 0) {
+      alert('目前群組尚無團體分帳紀錄，請先新增團體分帳紀錄後再點擊結算！');
+      return;
+    }
+
+    // Determine primary non-TWD currency if applicable
+    const currencies: string[] = Array.from(new Set(splitExpenses.map(e => e.currency)));
+    let mainCurrency: string = 'TWD';
+    if (currencies.length === 1 && currencies[0] !== 'TWD') {
+      mainCurrency = currencies[0];
+    } else if (currencies.length > 1) {
+      mainCurrency = currencies.find(c => c !== 'TWD') || 'TWD';
+    }
+
+    const netTwdMap: Record<string, number> = {};
+    const netOrigMap: Record<string, number> = {};
+    let totalAmountTwd = 0;
+
+    // Collect details for receipt
+    const details: SettlementExpenseDetail[] = splitExpenses.map(exp => ({
+      title: exp.title,
+      payerName: exp.payerName || '成員',
+      amount: exp.amount,
+      currency: exp.currency,
+      amountTwd: exp.amountTwd
+    }));
+
+    // Calculate sum per payer
+    const payerTotalMap: Record<string, { totalAmount: number; currency: string; totalAmountTwd: number }> = {};
+
+    splitExpenses.forEach(exp => {
+      totalAmountTwd += exp.amountTwd || 0;
+
+      const payerName = exp.payerName || '成員';
+      if (!payerTotalMap[payerName]) {
+        payerTotalMap[payerName] = { totalAmount: 0, currency: exp.currency, totalAmountTwd: 0 };
+      }
+      payerTotalMap[payerName].totalAmount += exp.amount;
+      payerTotalMap[payerName].totalAmountTwd += exp.amountTwd;
+
+      const payerId = exp.payerId;
+      const splitUserIds = (exp.splitWithUserIds && exp.splitWithUserIds.length > 0)
+        ? exp.splitWithUserIds
+        : (room?.participants || [payerId]);
+      const N = splitUserIds.length;
+      if (N === 0) return;
+
+      const shareTwd = exp.amountTwd / N;
+      const shareOrig = exp.amount / N;
+
+      // Payer receives credit
+      netTwdMap[payerId] = (netTwdMap[payerId] || 0) + (exp.amountTwd - shareTwd);
+      netOrigMap[payerId] = (netOrigMap[payerId] || 0) + (exp.amount - shareOrig);
+
+      // Members owe share
+      splitUserIds.forEach(uid => {
+        if (uid !== payerId) {
+          netTwdMap[uid] = (netTwdMap[uid] || 0) - shareTwd;
+          netOrigMap[uid] = (netOrigMap[uid] || 0) - shareOrig;
+        }
+      });
+    });
+
+    const payerTotals: SettlementPayerTotal[] = Object.entries(payerTotalMap).map(([payerName, val]) => ({
+      payerName,
+      totalAmount: val.totalAmount,
+      currency: val.currency,
+      totalAmountTwd: val.totalAmountTwd
+    }));
+
+    let totalMainCurrencyAmount = 0;
+    if (mainCurrency !== 'TWD') {
+      totalMainCurrencyAmount = splitExpenses
+        .filter(e => e.currency === mainCurrency)
+        .reduce((sum, e) => sum + e.amount, 0);
+      if (totalMainCurrencyAmount === 0) {
+        totalMainCurrencyAmount = splitExpenses.reduce((sum, e) => sum + e.amount, 0);
+      }
+    } else {
+      totalMainCurrencyAmount = totalAmountTwd;
+    }
+
+    const allUserIds = Array.from(new Set([
+      ...(room?.participants || []),
+      ...Object.keys(netTwdMap)
+    ]));
+
+    const participantCount = Math.max(1, allUserIds.length || 1);
+    const perPersonShareTwd = Math.round(totalAmountTwd / participantCount);
+    const perPersonShareMain = Math.round((totalMainCurrencyAmount / participantCount) * 100) / 100;
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '/');
+
+    const creditors: { uid: string; amountTwd: number; amountOrig: number }[] = [];
+    const debtors: { uid: string; amountTwd: number; amountOrig: number }[] = [];
+
+    allUserIds.forEach(uid => {
+      const twdVal = Math.round(netTwdMap[uid] || 0);
+      const origVal = Math.round(netOrigMap[uid] || 0);
+
+      if (twdVal > 1) {
+        creditors.push({ uid, amountTwd: twdVal, amountOrig: origVal });
+      } else if (twdVal < -1) {
+        debtors.push({ uid, amountTwd: Math.abs(twdVal), amountOrig: Math.abs(origVal) });
+      }
+    });
+
+    const cList = creditors.map(c => ({ ...c }));
+    const dList = debtors.map(d => ({ ...d }));
+
+    const settlements: SettlementItem[] = [];
+
+    while (cList.length > 0 && dList.length > 0) {
+      cList.sort((a, b) => b.amountTwd - a.amountTwd);
+      dList.sort((a, b) => b.amountTwd - a.amountTwd);
+
+      const c = cList[0];
+      const d = dList[0];
+
+      const payTwd = Math.min(c.amountTwd, d.amountTwd);
+      const rate = c.amountTwd > 0 ? (c.amountOrig / c.amountTwd) : 1;
+      const payOrig = Math.round(payTwd * rate);
+
+      const fromProf = participantProfiles[d.uid] || (d.uid === user?.uid ? profile : null);
+      const toProf = participantProfiles[c.uid] || (c.uid === user?.uid ? profile : null);
+      const fromUserName = fromProf?.displayName || (d.uid === user?.uid ? '我' : d.uid.slice(0, 6));
+      const toUserName = toProf?.displayName || (c.uid === user?.uid ? '我' : c.uid.slice(0, 6));
+
+      settlements.push({
+        fromUserId: d.uid,
+        fromUserName,
+        toUserId: c.uid,
+        toUserName,
+        amount: mainCurrency === 'TWD' ? payTwd : payOrig,
+        currency: mainCurrency,
+        amountTwd: payTwd
+      });
+
+      c.amountTwd -= payTwd;
+      c.amountOrig -= payOrig;
+      d.amountTwd -= payTwd;
+      d.amountOrig -= payOrig;
+
+      if (c.amountTwd <= 1) cList.shift();
+      if (d.amountTwd <= 1) dList.shift();
+    }
+
+    const settlementPayload: SettlementData = {
+      id: 'settle_' + Date.now(),
+      totalExpensesCount: splitExpenses.length,
+      totalAmountTwd,
+      mainCurrency,
+      totalMainCurrencyAmount,
+      perPersonShareTwd,
+      perPersonShareMain,
+      details,
+      payerTotals,
+      settlements,
+      createdAt: new Date().toISOString(),
+      creatorId: user?.uid || '',
+      dateStr
+    };
+
+    const summaryText = settlements.length > 0
+      ? `🧾 旅程分帳最終結算完成！共 ${splitExpenses.length} 筆分帳，總額 NT$ ${totalAmountTwd.toLocaleString()}。請各成員參考結算明細進行轉帳。`
+      : `🧾 旅程分帳最終結算完成！所有成員帳目完全平衡，不需互轉費用。`;
+
+    try {
+      await addDoc(collection(db, 'chatRooms', roomId, 'messages'), {
+        senderId: user?.uid,
+        text: summaryText,
+        settlement: settlementPayload,
+        createdAt: new Date().toISOString()
+      });
+
+      await updateDoc(doc(db, 'chatRooms', roomId), {
+        lastMessage: summaryText,
+        lastUpdatedAt: serverTimestamp()
+      });
+
+      setShowExpenseModal(false);
+    } catch (e) {
+      console.error('Failed to send settlement card:', e);
+      alert('結算卡片發送失敗，請稍後再試');
+    }
+  };
 
   // Enhanced WhatsApp-style Poll States
   const [pollQuestion, setPollQuestion] = useState('');
@@ -951,9 +2222,44 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
   };
 
   const [drawTopic, setDrawTopic] = useState('今天由誰來買晚餐/飲料？');
-  const [drawCandidatesText, setDrawCandidatesText] = useState('方方老Baby, 小明, Phoebe, 阿傑');
-  const [drawResult, setDrawResult] = useState<string | null>(null);
+  const [drawWinnerCount, setDrawWinnerCount] = useState<number>(1);
+  const [selectedDrawMemberUids, setSelectedDrawMemberUids] = useState<string[]>([]);
+  const [drawWinnerResults, setDrawWinnerResults] = useState<string[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
+
+  // Group members list derived from chat room participants
+  const roomMembers = React.useMemo(() => {
+    if (room?.participants && room.participants.length > 0) {
+      return room.participants.map(pId => {
+        const prof = participantProfiles[pId];
+        return {
+          uid: pId,
+          displayName: prof?.displayName || (pId === user?.uid ? (user?.displayName || '我') : `成員 (${pId.slice(0, 4)})`),
+          avatarUrl: prof?.avatarUrl
+        };
+      });
+    }
+    const loaded = (Object.values(participantProfiles) as UserProfile[]);
+    if (loaded.length > 0) {
+      return loaded.map(p => ({
+        uid: p.uid,
+        displayName: p.displayName || `成員 (${p.uid.slice(0, 4)})`,
+        avatarUrl: p.avatarUrl
+      }));
+    }
+    return [
+      { uid: user?.uid || 'me', displayName: user?.displayName || '我', avatarUrl: user?.photoURL || '' },
+      { uid: 'm1', displayName: '小明', avatarUrl: '' },
+      { uid: 'm2', displayName: 'Phoebe', avatarUrl: '' },
+      { uid: 'm3', displayName: '阿傑', avatarUrl: '' }
+    ];
+  }, [room, participantProfiles, user]);
+
+  useEffect(() => {
+    if (showDrawModal && selectedDrawMemberUids.length === 0 && roomMembers.length > 0) {
+      setSelectedDrawMemberUids(roomMembers.map(m => m.uid));
+    }
+  }, [showDrawModal, roomMembers]);
 
   const sendCustomSystemCard = async (msgText: string) => {
     if (!msgText.trim()) return;
@@ -996,19 +2302,56 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
   };
 
   const handleRunDraw = () => {
-    const candidates = drawCandidatesText.split(/[,，\n]/).map(c => c.trim()).filter(Boolean);
-    if (candidates.length === 0) return;
+    const eligibleMembers = roomMembers.filter(m => selectedDrawMemberUids.includes(m.uid));
+    const pool = eligibleMembers.length > 0 ? eligibleMembers : roomMembers;
+    if (pool.length === 0) return;
+
+    const countToPick = Math.min(drawWinnerCount, pool.length);
     setIsDrawing(true);
-    let count = 0;
-    const interval = setInterval(() => {
-      const randomIdx = Math.floor(Math.random() * candidates.length);
-      setDrawResult(candidates[randomIdx]);
-      count++;
-      if (count >= 15) {
+    setDrawWinnerResults([]);
+
+    let step = 0;
+    const interval = setInterval(async () => {
+      const shuffled = [...pool].sort(() => Math.random() - 0.5);
+      const tempPick = shuffled.slice(0, countToPick).map(m => m.displayName);
+      setDrawWinnerResults(tempPick);
+      step++;
+      if (step >= 16) {
         clearInterval(interval);
+        const finalShuffled = [...pool].sort(() => Math.random() - 0.5);
+        const finalPick = finalShuffled.slice(0, countToPick).map(m => m.displayName);
+        setDrawWinnerResults(finalPick);
         setIsDrawing(false);
+
+        // Auto-send draw result as structured card to chat room immediately (anti-cheat)
+        if (user && roomId) {
+          const drawPayload: LuckyDrawData = {
+            id: 'draw_' + Date.now(),
+            topic: drawTopic || '隨機抽籤',
+            winnerCount: countToPick,
+            winners: finalPick,
+            createdAt: new Date().toISOString(),
+            creatorId: user.uid
+          };
+
+          try {
+            await addDoc(collection(db, 'chatRooms', roomId, 'messages'), {
+              senderId: user.uid,
+              text: `🎲 團隊幸運抽籤【${drawTopic || '隨機抽籤'}】\n🎉 幸運兒：${finalPick.join('、')}`,
+              draw: drawPayload,
+              createdAt: new Date().toISOString()
+            });
+
+            await updateDoc(doc(db, 'chatRooms', roomId), {
+              lastMessage: `🎲 抽籤【${drawTopic || '隨機抽籤'}】🎉 幸運兒：${finalPick.join('、')}`,
+              lastUpdatedAt: serverTimestamp()
+            });
+          } catch (e) {
+            console.error('Failed to auto send draw result:', e);
+          }
+        }
       }
-    }, 80);
+    }, 70);
   };
 
   const formatMsgTime = (time: any) => {
@@ -1366,6 +2709,31 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                       onVote={(optionId) => handleVotePollOption(m.id, m.poll!, optionId)}
                       onViewVotes={() => setViewingVotesPoll({ messageId: m.id, poll: m.poll! })}
                     />
+                  ) : m.draw ? (
+                    <LuckyDrawCard
+                      draw={m.draw}
+                      msgTime={msgTime}
+                      isMe={isMe}
+                    />
+                  ) : m.expense ? (
+                    <ExpenseCard
+                      expense={m.expense}
+                      msgTime={msgTime}
+                      isMe={isMe}
+                    />
+                  ) : m.settlement ? (
+                    <SettlementCard
+                      settlement={m.settlement}
+                      msgTime={msgTime}
+                      isMe={isMe}
+                    />
+                  ) : m.itineraryCard ? (
+                    <ItineraryCard
+                      itineraryCard={m.itineraryCard}
+                      msgTime={msgTime}
+                      isMe={isMe}
+                      onViewTrip={(tripId) => onBackToTrip?.(tripId)}
+                    />
                   ) : m.text ? (
                     <>
                       <div 
@@ -1593,6 +2961,9 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                   type="button"
                   onClick={() => {
                     setShowAttachmentSheet(false);
+                    setSelectedDrawMemberUids(roomMembers.map(m => m.uid));
+                    setDrawWinnerCount(1);
+                    setDrawWinnerResults([]);
                     setShowDrawModal(true);
                   }}
                   className="flex flex-col items-center gap-1.5 group"
@@ -1687,115 +3058,585 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
               initial={{ scale: 0.92, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.92, opacity: 0 }}
-              className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl border border-apple-gray-100 relative"
+              className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl border border-apple-gray-100 relative max-h-[88vh] flex flex-col"
             >
-              <div className="flex justify-between items-center mb-4">
+              <div className="flex justify-between items-center mb-3 pb-2 border-b border-apple-gray-100">
                 <div className="flex items-center gap-2 text-[#F43F5E]">
                   <Calendar size={22} className="stroke-[2.2]" />
-                  <h3 className="font-bold text-apple-gray-800 text-base">分享行程卡</h3>
+                  <h3 className="font-bold text-apple-gray-800 text-base">
+                    {isGroupRoom ? '發送群組旅程行程卡' : '發送個人旅程行程卡'}
+                  </h3>
                 </div>
                 <button onClick={() => setShowItineraryModal(false)} className="text-apple-gray-400 hover:text-apple-gray-600 p-1">
                   <X size={18} />
                 </button>
               </div>
 
-              <div className="space-y-3 mb-4">
-                <div>
-                  <label className="text-xs font-bold text-apple-gray-600 block mb-1">行程名稱</label>
-                  <input 
-                    value={itineraryTitle}
-                    onChange={e => setItineraryTitle(e.target.value)}
-                    placeholder="例: 東京 5 日精華之旅"
-                    className="w-full h-10 bg-apple-gray-50 rounded-xl px-3 text-xs focus:outline-none focus:bg-white border border-apple-gray-100"
-                  />
-                </div>
+              <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 no-scrollbar">
+                {/* Mode Indicator Badge */}
+                {isGroupRoom ? (
+                  <div className="bg-blue-50 border border-blue-200 p-2.5 rounded-2xl text-[11px] text-blue-800 font-bold flex items-center gap-1.5">
+                    <span className="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-md font-black">群組聊天室</span>
+                    <span>發送本群組對應之旅程行程表</span>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    <div className="bg-rose-50 border border-rose-200 p-2.5 rounded-2xl text-[11px] text-rose-800 font-bold flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="bg-[#F43F5E] text-white text-[10px] px-2 py-0.5 rounded-md font-black">1-on-1 私訊</span>
+                        <span>可搜尋並選取您參與的任一旅程發送</span>
+                      </div>
+                      <span className="text-[10px] text-rose-600 font-normal">共 {userTrips.length} 個旅程</span>
+                    </div>
 
+                    {/* Search Bar for 1-on-1 Chat */}
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                      <input 
+                        type="text"
+                        value={searchTripQuery}
+                        onChange={e => setSearchTripQuery(e.target.value)}
+                        placeholder="搜尋您的旅程 (國家、城市)..."
+                        className="w-full h-9 bg-slate-100 rounded-xl pl-8 pr-3 text-xs focus:outline-none focus:bg-white focus:ring-1 focus:ring-[#F43F5E] font-medium text-slate-800"
+                      />
+                    </div>
+
+                    {/* Trip Cards Horizontal List */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-600">1. 請選擇要發送的旅程：</label>
+                      {filteredUserTrips.length > 0 ? (
+                        <div className="flex gap-2 overflow-x-auto pb-1.5 pt-0.5 no-scrollbar">
+                          {filteredUserTrips.map((trip) => {
+                            const isSelected = currentTrip?.id === trip.id;
+                            return (
+                              <button
+                                key={trip.id}
+                                type="button"
+                                onClick={() => handleSelectTrip(trip)}
+                                className={`flex-shrink-0 text-left p-2.5 rounded-2xl border transition-all w-48 relative ${
+                                  isSelected
+                                    ? 'bg-[#FFF1F2] border-[#F43F5E] ring-1 ring-[#F43F5E] shadow-2xs'
+                                    : 'bg-slate-50 border-slate-200 hover:bg-slate-100 opacity-80'
+                                }`}
+                              >
+                                {isSelected && (
+                                  <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#F43F5E]" />
+                                )}
+                                <div className="font-black text-xs text-slate-900 truncate pr-3">
+                                  📍 {trip.country} {trip.cities?.join(' ')}
+                                </div>
+                                <div className="text-[10px] text-slate-500 font-medium mt-0.5">
+                                  📅 {trip.startDate?.replace(/-/g, '/')} ~ {trip.endDate?.replace(/-/g, '/')}
+                                </div>
+                                <div className="text-[10px] text-[#F43F5E] font-bold mt-1">
+                                  {trip.itinerary?.length || 0} 天日程
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-center text-xs text-slate-400">
+                          {searchTripQuery ? `找不到符合「${searchTripQuery}」的旅程` : '您目前尚無建立任何旅程'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Trip Info Header Banner if currentTrip exists */}
+                {currentTrip ? (
+                  <div className="bg-gradient-to-r from-[#FFF1F2] to-[#FFE4E6] p-3.5 rounded-2xl border border-[#F43F5E]/20">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-bold text-[#E11D48] bg-white px-2 py-0.5 rounded-md">
+                        📍 {currentTrip.country} {currentTrip.cities?.join('、')}
+                      </span>
+                      <span className="text-[11px] font-bold text-[#BE123C]">
+                        {currentTrip.startDate?.replace(/-/g, '/')} ~ {currentTrip.endDate?.replace(/-/g, '/')}
+                      </span>
+                    </div>
+                    <div className="font-black text-sm text-apple-gray-900 mt-1">
+                      已選取：{currentTrip.country} {currentTrip.cities?.join(' ')} 行程
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-amber-50 p-3 rounded-2xl border border-amber-200 text-xs text-amber-800">
+                    💡 尚未連結特定的旅遊行程，將產生自訂的行程卡片。
+                  </div>
+                )}
+
+                {/* Itinerary Days List from Selected Trip */}
                 <div>
-                  <label className="text-xs font-bold text-apple-gray-600 block mb-1">重點細節 / 當日安排</label>
-                  <textarea 
-                    value={itineraryDetail}
-                    onChange={e => setItineraryDetail(e.target.value)}
-                    placeholder="例: Day 2 清水寺 ➔ 祇園 ➔ 鴨川晚餐"
-                    rows={3}
-                    className="w-full bg-apple-gray-50 rounded-xl p-3 text-xs focus:outline-none focus:bg-white border border-apple-gray-100 resize-none"
-                  />
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-bold text-apple-gray-700 flex items-center gap-1">
+                      <span>2. 選擇欲勾選發送的日期行程</span>
+                      {currentTrip?.itinerary && (
+                        <span className="text-[10px] text-[#F43F5E] bg-[#FFF1F2] px-1.5 py-0.5 rounded-md font-bold">
+                          ({selectedDayNumbers.length} / {currentTrip.itinerary.length} 天)
+                        </span>
+                      )}
+                    </label>
+                    {currentTrip?.itinerary && currentTrip.itinerary.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (selectedDayNumbers.length === currentTrip.itinerary!.length) {
+                            setSelectedDayNumbers([]);
+                          } else {
+                            setSelectedDayNumbers(currentTrip.itinerary!.map(d => d.dayNumber));
+                          }
+                        }}
+                        className="text-[11px] text-[#F43F5E] font-bold hover:underline"
+                      >
+                        {selectedDayNumbers.length === currentTrip.itinerary.length ? '全取消' : '全選'}
+                      </button>
+                    )}
+                  </div>
+
+                  {currentTrip?.itinerary && currentTrip.itinerary.length > 0 ? (
+                    <div className="space-y-2 max-h-56 overflow-y-auto no-scrollbar p-1">
+                      {[...currentTrip.itinerary].sort((a, b) => a.dayNumber - b.dayNumber).map((day) => {
+                        const isChecked = selectedDayNumbers.includes(day.dayNumber);
+                        return (
+                          <div 
+                            key={day.id || day.dayNumber}
+                            onClick={() => {
+                              if (isChecked) {
+                                setSelectedDayNumbers(prev => prev.filter(n => n !== day.dayNumber));
+                              } else {
+                                setSelectedDayNumbers(prev => [...prev, day.dayNumber]);
+                              }
+                            }}
+                            className={`p-3 rounded-2xl border transition-all cursor-pointer ${
+                              isChecked 
+                                ? 'bg-[#FFF1F2] border-[#F43F5E]/40 shadow-2xs' 
+                                : 'bg-apple-gray-50 border-apple-gray-100 opacity-60'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-2">
+                                <input 
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {}}
+                                  className="w-4 h-4 rounded text-[#F43F5E] focus:ring-[#F43F5E]"
+                                />
+                                <span className="text-xs font-black text-[#BE123C] bg-white px-2 py-0.5 rounded-md border border-[#F43F5E]/20">
+                                  Day {day.dayNumber}
+                                </span>
+                                {day.date && <span className="text-[10px] text-apple-gray-400 font-bold">{day.date}</span>}
+                              </div>
+                              <span className="text-[10px] font-bold text-apple-gray-500">
+                                {day.activities?.length || 0} 個行程景點
+                              </span>
+                            </div>
+
+                            {/* Activities preview inside day */}
+                            <div className="pl-6 space-y-1 mt-1.5 border-l-2 border-[#F43F5E]/30">
+                              {day.activities && day.activities.length > 0 ? (
+                                day.activities.map((act, aIdx) => (
+                                  <div key={aIdx} className="text-[11px] font-bold text-apple-gray-700 flex items-center justify-between">
+                                    <span className="truncate">
+                                      {act.time ? `[${act.time}] ` : ''}{act.title}
+                                    </span>
+                                    {act.location && (
+                                      <span className="text-[9px] text-apple-gray-400 font-normal truncate max-w-[100px]">
+                                        📍 {act.location}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="text-[10px] text-apple-gray-400 italic">尚無明細</div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="bg-apple-gray-50 p-3 rounded-2xl border border-apple-gray-100 text-center space-y-2">
+                      <p className="text-xs text-apple-gray-500 font-bold">
+                        旅遊詳情頁面尚未建立每日詳細行程。
+                      </p>
+                      <p className="text-[11px] text-apple-gray-400">
+                        可在此手動填寫重點摘要，或前往旅遊詳情頁新增行程。
+                      </p>
+                      <div className="pt-2 text-left space-y-2">
+                        <input 
+                          value={itineraryTitle}
+                          onChange={e => setItineraryTitle(e.target.value)}
+                          placeholder="行程標題 (如: 東京 5 日遊)"
+                          className="w-full h-9 bg-white rounded-xl px-3 text-xs focus:outline-none border border-apple-gray-200 font-bold text-apple-gray-800"
+                        />
+                        <textarea 
+                          value={itineraryDetail}
+                          onChange={e => setItineraryDetail(e.target.value)}
+                          placeholder="行程內容 (如: Day 1: 抵達機場 Check-in ➔ 清水寺)"
+                          rows={2}
+                          className="w-full bg-white rounded-xl p-2.5 text-xs focus:outline-none border border-apple-gray-200 resize-none font-medium text-apple-gray-700"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  if (itineraryTitle.trim()) {
-                    sendCustomSystemCard(`🗓️ 行程分享：【${itineraryTitle}】\n${itineraryDetail}`);
-                    setShowItineraryModal(false);
-                  }
-                }}
-                className="w-full h-10 rounded-xl bg-[#F43F5E] text-white font-bold text-xs hover:bg-[#E11D48] transition-colors"
-              >
-                發送行程至聊天室
-              </button>
+              <div className="pt-3 border-t border-apple-gray-100 mt-2">
+                <button
+                  type="button"
+                  onClick={handleSendTripItineraryCard}
+                  className="w-full h-11 rounded-2xl bg-[#F43F5E] hover:bg-[#E11D48] text-white font-bold text-xs transition-all shadow-md flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                >
+                  <Calendar size={16} />
+                  <span>{isGroupRoom ? '生成行程卡片發送至群組' : '生成行程卡片發送給對方'}</span>
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* 5. 記帳 Modal */}
+      {/* 5. 記帳 / 分帳 Modal */}
       <AnimatePresence>
         {showExpenseModal && (
-          <div className="fixed inset-0 z-[115] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+          <div className="fixed inset-0 z-[115] flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4 bg-black/40 backdrop-blur-xs">
             <motion.div 
-              initial={{ scale: 0.92, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.92, opacity: 0 }}
-              className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl border border-apple-gray-100 relative"
+              initial={{ y: '100%', opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: '100%', opacity: 0 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              className="bg-white rounded-t-[32px] sm:rounded-3xl max-w-md w-full p-5 shadow-2xl border border-apple-gray-100 max-h-[92vh] overflow-y-auto no-scrollbar relative flex flex-col font-sans"
             >
-              <div className="flex justify-between items-center mb-4">
-                <div className="flex items-center gap-2 text-[#F59E0B]">
+              {/* Header */}
+              <div className="flex justify-between items-center mb-4 pb-3 border-b border-apple-gray-100">
+                <div className="flex items-center gap-2 text-[#D97706]">
                   <Wallet size={22} className="stroke-[2.2]" />
                   <h3 className="font-bold text-apple-gray-800 text-base">新增記帳紀錄</h3>
                 </div>
-                <button onClick={() => setShowExpenseModal(false)} className="text-apple-gray-400 hover:text-apple-gray-600 p-1">
-                  <X size={18} />
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCalculateAndSendSettlement}
+                    className="px-3 py-1.5 rounded-full bg-gradient-to-r from-[#10B981] to-[#059669] text-white font-extrabold text-xs shadow-xs hover:opacity-95 active:scale-95 flex items-center gap-1.5 transition-all cursor-pointer"
+                    title="一鍵計算這趟旅程的分帳結果並發送結算卡片"
+                  >
+                    <Calculator size={14} className="stroke-[2.5]" />
+                    <span>結算</span>
+                  </button>
+
+                  <button 
+                    type="button" 
+                    onClick={() => setShowExpenseModal(false)} 
+                    className="w-8 h-8 rounded-full bg-apple-gray-100 flex items-center justify-center text-apple-gray-500 hover:text-apple-gray-800 transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* 1. Mode Selector Pills: 記帳 vs 分帳 */}
+              <div className="mb-4 bg-apple-gray-100 p-1 rounded-2xl flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setExpenseMode('記帳')}
+                  className={`flex-1 py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all ${
+                    expenseMode === '記帳'
+                      ? 'bg-white text-[#D97706] shadow-2xs'
+                      : 'text-apple-gray-500 hover:text-apple-gray-800'
+                  }`}
+                >
+                  <Wallet size={15} />
+                  <span>個人記帳</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExpenseMode('分帳')}
+                  className={`flex-1 py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all ${
+                    expenseMode === '分帳'
+                      ? 'bg-[#F59E0B] text-white shadow-2xs'
+                      : 'text-apple-gray-500 hover:text-apple-gray-800'
+                  }`}
+                >
+                  <Users size={15} />
+                  <span>團體分帳</span>
                 </button>
               </div>
 
-              <div className="space-y-3 mb-5">
+              <div className="space-y-4 mb-5">
+                {/* 2. Date Picker & Payment Method */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-apple-gray-500 block mb-1">
+                      📅 日期 (Date)
+                    </label>
+                    <input 
+                      type="date"
+                      value={expenseDate}
+                      onChange={e => setExpenseDate(e.target.value)}
+                      className="w-full h-10 bg-apple-gray-50 rounded-xl px-3 text-xs font-bold text-apple-gray-800 focus:outline-none focus:bg-white border border-apple-gray-200"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-apple-gray-500 block mb-1">
+                      💳 付款方式 (Method)
+                    </label>
+                    <select
+                      value={expensePaymentMethod}
+                      onChange={e => setExpensePaymentMethod(e.target.value as any)}
+                      className="w-full h-10 bg-apple-gray-50 rounded-xl px-2.5 text-xs font-bold text-apple-gray-800 focus:outline-none focus:bg-white border border-apple-gray-200"
+                    >
+                      <option value="現金">💵 現金 (Cash)</option>
+                      <option value="信用卡">💳 信用卡 (Credit Card)</option>
+                      <option value="記帳卡">🏦 記帳卡 (Debit Card)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* 3. Who Paid (誰付款) */}
                 <div>
-                  <label className="text-xs font-bold text-apple-gray-600 block mb-1">消費項目</label>
+                  <label className="text-[11px] font-bold text-apple-gray-500 block mb-1">
+                    👤 誰先付款 (Payer)
+                  </label>
+                  <select
+                    value={expensePayerId}
+                    onChange={e => setExpensePayerId(e.target.value)}
+                    className="w-full h-10 bg-apple-gray-50 rounded-xl px-3 text-xs font-bold text-apple-gray-800 focus:outline-none focus:bg-white border border-apple-gray-200"
+                  >
+                    {room?.participants?.map(uid => {
+                      const prof = participantProfiles[uid] || (uid === user?.uid ? profile : null);
+                      return (
+                        <option key={uid} value={uid}>
+                          {prof?.displayName || (uid === user?.uid ? '我' : uid.slice(0, 6))}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* 4. Category Selector (記帳類別) + Custom Addition */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[11px] font-bold text-apple-gray-500">
+                      🏷️ 消費類別 (Category)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCustomCat(prev => !prev)}
+                      className="text-[11px] font-bold text-[#D97706] hover:underline flex items-center gap-0.5"
+                    >
+                      <Plus size={13} />
+                      <span>自訂類別 (跨旅程保存)</span>
+                    </button>
+                  </div>
+
+                  {/* Inline custom category input */}
+                  {showAddCustomCat && (
+                    <div className="flex items-center gap-2 mb-2 bg-[#FEF3C7] p-2 rounded-xl border border-[#F59E0B]/30">
+                      <input 
+                        value={newCustomCategoryInput}
+                        onChange={e => setNewCustomCategoryInput(e.target.value)}
+                        placeholder="輸入新類別名稱 (如: 紀念品)"
+                        className="flex-1 h-8 bg-white rounded-lg px-2.5 text-xs text-apple-gray-800 focus:outline-none border border-apple-gray-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCustomCategory}
+                        className="px-3 h-8 rounded-lg bg-[#D97706] text-white font-bold text-xs hover:bg-[#B45309]"
+                      >
+                        儲存
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Category Pills Grid */}
+                  <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-1 bg-apple-gray-50 rounded-2xl border border-apple-gray-100">
+                    {allExpenseCategories.map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setExpenseCategory(cat)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                          expenseCategory === cat
+                            ? 'bg-[#F59E0B] text-white shadow-2xs scale-102'
+                            : 'bg-white text-apple-gray-600 hover:bg-apple-gray-100 border border-apple-gray-200/80'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 5. Item Content / Description */}
+                <div>
+                  <label className="text-[11px] font-bold text-apple-gray-500 block mb-1">
+                  記帳內容 (Description)
+                  </label>
                   <input 
                     value={expenseTitle}
                     onChange={e => setExpenseTitle(e.target.value)}
-                    placeholder="例: 居酒屋晚餐分帳"
-                    className="w-full h-10 bg-apple-gray-50 rounded-xl px-3 text-xs focus:outline-none focus:bg-white border border-apple-gray-100"
+                    placeholder="例: 居酒屋晚餐、晴空塔門票、新幹線車票"
+                    className="w-full h-10 bg-apple-gray-50 rounded-xl px-3 text-xs font-medium text-apple-gray-800 focus:outline-none focus:bg-white border border-apple-gray-200"
                   />
                 </div>
 
-                <div>
-                  <label className="text-xs font-bold text-apple-gray-600 block mb-1">金額 ($ NTD)</label>
-                  <input 
-                    type="number"
-                    value={expenseAmount}
-                    onChange={e => setExpenseAmount(e.target.value)}
-                    placeholder="例: 1200"
-                    className="w-full h-10 bg-apple-gray-50 rounded-xl px-3 text-xs focus:outline-none focus:bg-white border border-apple-gray-100 font-bold text-apple-gray-800"
-                  />
+                {/* 6. If "分帳" is selected: 跟誰分 (Split with whom) */}
+                {expenseMode === '分帳' && (
+                  <div className="bg-[#FEF3C7]/60 rounded-2xl p-3 border border-[#F59E0B]/30">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-bold text-[#B45309] flex items-center gap-1">
+                        <Users size={14} />
+                        <span>跟誰分 (平分成員)</span>
+                      </span>
+                      <span className="text-[10px] text-apple-gray-500">
+                        已選 {expenseSplitWith.length} 人
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                      {room?.participants?.map(uid => {
+                        const prof = participantProfiles[uid] || (uid === user?.uid ? profile : null);
+                        const isChecked = expenseSplitWith.includes(uid);
+                        return (
+                          <label key={uid} className="flex items-center justify-between bg-white p-2 rounded-xl border border-apple-gray-100 cursor-pointer hover:bg-apple-gray-50">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-apple-gray-100 flex items-center justify-center text-[10px] font-bold text-apple-gray-600 overflow-hidden">
+                                {prof?.avatarUrl ? (
+                                  <img src={prof.avatarUrl} className="w-full h-full object-cover" />
+                                ) : (
+                                  prof?.displayName?.[0] || '?'
+                                )}
+                              </div>
+                              <span className="text-xs font-bold text-apple-gray-800">
+                                {prof?.displayName || (uid === user?.uid ? '我' : uid.slice(0, 6))}
+                              </span>
+                            </div>
+                            <input 
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setExpenseSplitWith(prev => [...prev, uid]);
+                                } else {
+                                  if (expenseSplitWith.length <= 1) return; // Keep at least one
+                                  setExpenseSplitWith(prev => prev.filter(id => id !== uid));
+                                }
+                              }}
+                              className="w-4 h-4 rounded text-[#F59E0B] focus:ring-[#F59E0B]"
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 7. Three Amount Boxes (金額、幣別、換算台幣) */}
+                <div className="bg-apple-gray-50 rounded-2xl p-3 border border-apple-gray-200/80 space-y-2">
+                  <div className="text-[11px] font-bold text-apple-gray-600 mb-1 flex items-center justify-between">
+                    <span>金額資訊</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingRate(prev => !prev)}
+                      className="text-[10px] text-[#D97706] font-bold hover:underline cursor-pointer flex items-center gap-0.5"
+                      title="點擊自訂匯率"
+                    >
+                      <span>按央行匯率換算 (點我進行修改)</span>
+                    </button>
+                  </div>
+
+                  {/* Inline custom rate editor */}
+                  {isEditingRate && (
+                    <div className="bg-[#FEF3C7] p-2.5 rounded-xl border border-[#F59E0B]/30 my-1 flex items-center justify-between text-xs animate-fadeIn">
+                      <span className="font-bold text-[#B45309]">自訂 {expenseCurrency} 匯率：</span>
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <span className="text-apple-gray-600 text-[11px]">1 {expenseCurrency} =</span>
+                        <input 
+                          type="number"
+                          step="0.0001"
+                          value={customRateInput}
+                          onChange={e => handleCustomRateInputChange(e.target.value)}
+                          placeholder="匯率"
+                          className="w-20 h-7 bg-white rounded-lg px-2 text-xs font-black text-[#D97706] border border-[#F59E0B]/40 focus:outline-none focus:ring-1 focus:ring-[#D97706]"
+                        />
+                        <span className="text-apple-gray-600 text-[11px]">TWD</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-3 gap-2">
+                    {/* Box 1: Amount */}
+                    <div className="col-span-1">
+                      <label className="text-[10px] font-bold text-apple-gray-400 block mb-0.5">金額 (Amount)</label>
+                      <input 
+                        type="number"
+                        value={expenseAmount}
+                        onChange={e => handleExpenseAmountChange(e.target.value)}
+                        placeholder="例: 10000"
+                        className="w-full h-10 bg-white rounded-xl px-2.5 text-xs font-extrabold text-apple-gray-900 focus:outline-none border border-apple-gray-200"
+                      />
+                    </div>
+
+                    {/* Box 2: Currency */}
+                    <div className="col-span-1">
+                      <label className="text-[10px] font-bold text-apple-gray-400 block mb-0.5">幣別 (Currency)</label>
+                      <select
+                        value={expenseCurrency}
+                        onChange={e => handleExpenseCurrencyChange(e.target.value)}
+                        className="w-full h-10 bg-white rounded-xl px-1.5 text-xs font-extrabold text-apple-gray-900 focus:outline-none border border-apple-gray-200"
+                      >
+                        {CURRENCY_RATES.map(c => (
+                          <option key={c.code} value={c.code}>
+                            {c.code} ({c.name})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Box 3: Converted to TWD */}
+                    <div className="col-span-1">
+                      <label className="text-[10px] font-bold text-apple-gray-400 block mb-0.5">換算台幣 (NTD)</label>
+                      <input 
+                        type="number"
+                        value={expenseAmountTwd}
+                        onChange={e => setExpenseAmountTwd(e.target.value)}
+                        placeholder="NT$"
+                        className="w-full h-10 bg-[#FFFBEB] rounded-xl px-2.5 text-xs font-black text-[#D97706] focus:outline-none border border-[#F59E0B]/30"
+                      />
+                    </div>
+                  </div>
+
+                  {expenseCurrency !== 'TWD' && (
+                    <div className="text-[10px] text-apple-gray-500 font-medium text-right pt-0.5 flex items-center justify-end gap-1">
+                      <span>
+                        {customRateInput && parseFloat(customRateInput) !== CURRENCY_RATES.find(c => c.code === expenseCurrency)?.rate
+                          ? `自訂匯率: 1 ${expenseCurrency} = ${customRateInput} TWD`
+                          : `參考匯率: 1 ${expenseCurrency} ≈ ${customRateInput || CURRENCY_RATES.find(c => c.code === expenseCurrency)?.rate} TWD`}
+                      </span>
+                      <button 
+                        type="button" 
+                        onClick={() => setIsEditingRate(prev => !prev)} 
+                        className="text-[#D97706] font-bold hover:underline cursor-pointer ml-1"
+                      >
+                        (點我修改)
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
+              {/* Submit Button */}
               <button
                 type="button"
-                onClick={() => {
-                  if (expenseTitle.trim() && expenseAmount) {
-                    sendCustomSystemCard(`💰 記帳紀錄：${expenseTitle} $${expenseAmount} (由 ${user?.displayName || '成員'} 先墊付)`);
-                    setExpenseTitle('');
-                    setExpenseAmount('');
-                    setShowExpenseModal(false);
-                  }
-                }}
+                onClick={handleCreateAndSendExpense}
                 disabled={!expenseTitle.trim() || !expenseAmount}
-                className="w-full h-10 rounded-xl bg-[#F59E0B] text-white font-bold text-xs hover:bg-[#D97706] disabled:opacity-50 transition-colors"
+                className="w-full h-11 rounded-2xl bg-[#F59E0B] text-white font-bold text-sm hover:bg-[#D97706] active:scale-98 disabled:opacity-40 transition-all shadow-xs flex items-center justify-center gap-2"
               >
-                新增並發送記帳
+                <Check size={18} />
+                <span>新增並發送記帳卡片</span>
               </button>
             </motion.div>
           </div>
@@ -2037,6 +3878,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
               exit={{ scale: 0.92, opacity: 0 }}
               className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl border border-apple-gray-100 relative"
             >
+              {/* Header */}
               <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-2 text-[#8B5CF6]">
                   <Dices size={22} className="stroke-[2.2]" />
@@ -2047,38 +3889,118 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                 </button>
               </div>
 
-              <div className="space-y-3 mb-4">
+              <div className="space-y-4 mb-4">
+                {/* 抽籤主題 */}
                 <div>
                   <label className="text-xs font-bold text-apple-gray-600 block mb-1">抽籤主題</label>
                   <input 
                     value={drawTopic}
                     onChange={e => setDrawTopic(e.target.value)}
-                    placeholder="例: 今天由誰來買晚餐？"
-                    className="w-full h-9 bg-apple-gray-50 rounded-xl px-3 text-xs focus:outline-none focus:bg-white border border-apple-gray-100"
+                    placeholder="例: 今天由誰來買晚餐/飲料？"
+                    className="w-full h-10 bg-apple-gray-50 rounded-xl px-3 text-xs focus:outline-none focus:bg-white border border-apple-gray-100 font-medium"
                   />
                 </div>
 
+                {/* 群成員對象選單 (只能是聊天室群成員) */}
                 <div>
-                  <label className="text-xs font-bold text-apple-gray-600 block mb-1">參與人員 / 名單 (逗號分隔)</label>
-                  <input 
-                    value={drawCandidatesText}
-                    onChange={e => setDrawCandidatesText(e.target.value)}
-                    placeholder="例: 方方老Baby, 小明, Phoebe"
-                    className="w-full h-9 bg-apple-gray-50 rounded-xl px-3 text-xs focus:outline-none focus:bg-white border border-apple-gray-100"
-                  />
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="text-xs font-bold text-apple-gray-600">
+                      參與抽籤對象 <span className="text-apple-gray-400 font-normal">(限群成員)</span>
+                    </label>
+                    <span className="text-[11px] font-bold text-[#8B5CF6]">
+                      共 {roomMembers.length} 人
+                    </span>
+                  </div>
+
+                  <div className="bg-apple-gray-50 rounded-2xl p-2.5 border border-apple-gray-100 flex flex-wrap gap-1.5 max-h-32 overflow-y-auto no-scrollbar">
+                    {roomMembers.map(member => {
+                      const isSelected = selectedDrawMemberUids.includes(member.uid);
+                      return (
+                        <button
+                          key={member.uid}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              if (selectedDrawMemberUids.length > 1) {
+                                const next = selectedDrawMemberUids.filter(id => id !== member.uid);
+                                setSelectedDrawMemberUids(next);
+                                if (drawWinnerCount > next.length) {
+                                  setDrawWinnerCount(next.length);
+                                }
+                              }
+                            } else {
+                              setSelectedDrawMemberUids(prev => [...prev, member.uid]);
+                            }
+                          }}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${
+                            isSelected 
+                              ? 'bg-[#8B5CF6] text-white shadow-2xs' 
+                              : 'bg-white text-apple-gray-500 border border-apple-gray-200'
+                          }`}
+                        >
+                          <CheckCircle2 size={13} className={isSelected ? 'text-white' : 'text-apple-gray-300'} />
+                          <span>{member.displayName}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 設定要抽幾個人 (上限為群組人數) */}
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="text-xs font-bold text-apple-gray-600">要抽幾個人</label>
+                    <span className="text-[11px] text-apple-gray-400">
+                      上限: {selectedDrawMemberUids.length} 人 (群組人數)
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between bg-apple-gray-50 rounded-xl p-2 border border-apple-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => setDrawWinnerCount(prev => Math.max(1, prev - 1))}
+                      disabled={drawWinnerCount <= 1}
+                      className="w-8 h-8 rounded-lg bg-white shadow-2xs flex items-center justify-center font-bold text-apple-gray-700 disabled:opacity-40 hover:bg-apple-gray-100 active:scale-95 transition-all"
+                    >
+                      -
+                    </button>
+
+                    <div className="flex items-baseline gap-1 font-extrabold text-apple-gray-800 text-sm">
+                      <span className="text-base text-[#8B5CF6]">{drawWinnerCount}</span>
+                      <span className="text-xs font-normal text-apple-gray-500">位幸運兒</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setDrawWinnerCount(prev => Math.min(selectedDrawMemberUids.length, prev + 1))}
+                      disabled={drawWinnerCount >= selectedDrawMemberUids.length}
+                      className="w-8 h-8 rounded-lg bg-white shadow-2xs flex items-center justify-center font-bold text-apple-gray-700 disabled:opacity-40 hover:bg-apple-gray-100 active:scale-95 transition-all"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
 
                 {/* Result Display Box */}
-                <div className="bg-[#F5F3FF] rounded-2xl p-4 border border-[#8B5CF6]/20 text-center flex flex-col items-center justify-center min-h-[80px]">
+                <div className="bg-[#F5F3FF] rounded-2xl p-4 border border-[#8B5CF6]/20 text-center flex flex-col items-center justify-center min-h-[96px] relative">
                   {isDrawing ? (
                     <div className="flex items-center gap-2 text-[#8B5CF6] font-extrabold text-lg animate-bounce">
                       <Sparkles size={20} />
-                      <span>{drawResult || '抽籤中...'}</span>
+                      <span>{drawWinnerResults.join('、') || '抽籤中...'}</span>
                     </div>
-                  ) : drawResult ? (
+                  ) : drawWinnerResults.length > 0 ? (
                     <div>
-                      <div className="text-[11px] text-[#8B5CF6] font-bold">🎉 抽籤結果</div>
-                      <div className="text-xl font-black text-apple-gray-800 mt-0.5">{drawResult}</div>
+                      <div className="text-[11px] text-[#8B5CF6] font-extrabold mb-0.5 flex items-center justify-center gap-1">
+                        <Sparkles size={12} />
+                        <span>🎉 抽籤結果 ({drawWinnerResults.length} 位)</span>
+                      </div>
+                      <div className="text-lg font-black text-apple-gray-800 break-words leading-snug mb-1">
+                        {drawWinnerResults.join('、')}
+                      </div>
+                      <div className="inline-flex items-center gap-1 text-[10px] text-[#0081d1] bg-[#E6F5FF] px-2.5 py-0.5 rounded-full font-bold border border-[#cce8ff]">
+                        <CheckCircle2 size={11} />
+                        <span>已自動發送至聊天室 (防作弊記錄)</span>
+                      </div>
                     </div>
                   ) : (
                     <div className="text-xs text-apple-gray-400">按下下方按鈕開始隨機抽籤</div>
@@ -2086,28 +4008,36 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                 </div>
               </div>
 
+              {/* Action Buttons */}
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={handleRunDraw}
-                  disabled={isDrawing}
-                  className="flex-1 h-10 rounded-xl bg-[#8B5CF6] text-white font-bold text-xs hover:bg-[#7C3AED] disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
+                  disabled={isDrawing || selectedDrawMemberUids.length === 0}
+                  className="flex-1 h-10 rounded-xl bg-[#8B5CF6] text-white font-bold text-xs hover:bg-[#7C3AED] disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 shadow-2xs active:scale-95"
                 >
                   <Dices size={16} />
-                  <span>{drawResult ? '重新抽籤' : '開始抽籤'}</span>
+                  <span>{drawWinnerResults.length > 0 ? '重新抽籤' : '開始抽籤'}</span>
                 </button>
 
-                {drawResult && (
+                {drawWinnerResults.length > 0 && !isDrawing ? (
                   <button
                     type="button"
                     onClick={() => {
-                      sendCustomSystemCard(`🎲 抽籤結果：【${drawTopic}】\n🎉 恭喜幸運兒：「${drawResult}」！`);
-                      setDrawResult(null);
+                      setDrawWinnerResults([]);
                       setShowDrawModal(false);
                     }}
-                    className="flex-1 h-10 rounded-xl bg-apple-gray-800 text-white font-bold text-xs hover:bg-black transition-colors"
+                    className="px-5 h-10 rounded-xl bg-apple-gray-100 text-apple-gray-800 font-bold text-xs hover:bg-apple-gray-200 transition-colors shadow-2xs active:scale-95"
                   >
-                    發送結果
+                    完成
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowDrawModal(false)}
+                    className="px-4 h-10 rounded-xl bg-apple-gray-100 text-apple-gray-600 font-bold text-xs hover:bg-apple-gray-200 transition-colors active:scale-95"
+                  >
+                    關閉
                   </button>
                 )}
               </div>
@@ -2427,6 +4357,10 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
   const { user, profile } = useAuth();
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(initialRoomId);
+  const [activeTab, setActiveTab] = useState<'friends' | 'chat' | 'group'>('chat');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+
   const [showSearch, setShowSearch] = useState(false);
   const [searchId, setSearchId] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -2454,6 +4388,86 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
     });
   }, [user]);
 
+  // Fetch all user profiles for friends list
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const s = await getDocs(collection(db, 'users'));
+        const list = s.docs
+          .map(doc => doc.data() as UserProfile)
+          .filter(u => u.uid !== user?.uid);
+        setAllUsers(list);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchUsers();
+  }, [user]);
+
+  // Derived Friends List
+  const friendsList = React.useMemo(() => {
+    let friends = allUsers;
+    if (profile?.friends && profile.friends.length > 0) {
+      const friendSet = new Set(profile.friends);
+      const matched = allUsers.filter(u => friendSet.has(u.uid));
+      if (matched.length > 0) friends = matched;
+    }
+    
+    if (!searchQuery.trim()) return friends;
+    const q = searchQuery.toLowerCase().trim();
+    return friends.filter(f => 
+      (f.displayName && f.displayName.toLowerCase().includes(q)) || 
+      (f.username && f.username.toLowerCase().includes(q)) ||
+      (f.bio && f.bio.toLowerCase().includes(q))
+    );
+  }, [allUsers, profile, searchQuery]);
+
+  // Derived 1-on-1 Chat Rooms
+  const directRooms = React.useMemo(() => {
+    const filtered = rooms.filter(r => r.type !== 'group');
+    if (!searchQuery.trim()) return filtered;
+    const q = searchQuery.toLowerCase().trim();
+    return filtered.filter(r => 
+      (r.name && r.name.toLowerCase().includes(q)) || 
+      (r.lastMessage && r.lastMessage.toLowerCase().includes(q))
+    );
+  }, [rooms, searchQuery]);
+
+  // Derived Group Chat Rooms
+  const groupRooms = React.useMemo(() => {
+    const filtered = rooms.filter(r => r.type === 'group');
+    if (!searchQuery.trim()) return filtered;
+    const q = searchQuery.toLowerCase().trim();
+    return filtered.filter(r => 
+      (r.name && r.name.toLowerCase().includes(q)) || 
+      (r.lastMessage && r.lastMessage.toLowerCase().includes(q))
+    );
+  }, [rooms, searchQuery]);
+
+  const handleOpenDirectChatWithFriend = async (friend: UserProfile) => {
+    if (!user) return;
+    const existingRoom = rooms.find(r => 
+      r.type !== 'group' && r.participants?.includes(friend.uid)
+    );
+
+    if (existingRoom) {
+      setSelectedRoomId(existingRoom.id);
+    } else {
+      try {
+        const docRef = await addDoc(collection(db, 'chatRooms'), {
+          name: friend.displayName || '個人對話',
+          type: 'direct',
+          participants: [user.uid, friend.uid],
+          lastMessage: '',
+          lastUpdatedAt: serverTimestamp()
+        });
+        setSelectedRoomId(docRef.id);
+      } catch (e) {
+        console.error('Failed to create direct room:', e);
+      }
+    }
+  };
+
   const handleSearch = async () => {
     if (!searchId.trim()) return;
     setIsSearching(true);
@@ -2476,7 +4490,6 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
   const handleAddFriendFromChat = async (targetId: string) => {
     if (!user) return;
     try {
-      // Check if already sent
       const q = query(collection(db, 'friendRequests'), 
         where('senderId', '==', user.uid), 
         where('receiverId', '==', targetId),
@@ -2517,10 +4530,10 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
               <div className="flex gap-2">
                 <input 
                   type="text" 
-                  placeholder="輸入用戶 ID"
+                  placeholder="輸入用戶 ID / Username"
                   value={searchId}
                   onChange={e => setSearchId(e.target.value)}
-                  className="flex-1 bg-apple-gray-50 rounded-xl px-4 text-sm focus:outline-none h-11"
+                  className="flex-1 bg-apple-gray-50 rounded-xl px-4 text-sm focus:outline-none h-11 border border-apple-gray-100"
                 />
                 <button 
                   onClick={handleSearch}
@@ -2561,23 +4574,171 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
         )}
       </AnimatePresence>
 
-      <div className="sticky top-0 bg-white/80 backdrop-blur-md z-10 px-4 pt-12 pb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">聊天室</h1>
-        <button onClick={() => setShowSearch(true)} className="text-apple-blue active:scale-90 transition-transform"><UserPlus size={24} strokeWidth={2.5} /></button>
-      </div>
-      <div className="p-4">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-apple-gray-300" size={16} />
-          <input type="text" placeholder="搜尋好友或聊天記錄" className="w-full h-10 bg-apple-gray-50 rounded-xl pl-11 pr-4 text-sm focus:outline-none" />
+      {/* Header and Capsule Pill Switcher */}
+      <div className="sticky top-0 bg-white/95 backdrop-blur-md z-10 px-4 pt-12 pb-3 border-b border-apple-gray-50">
+        <div className="flex items-center justify-between mb-3">
+          <h1 className="text-2xl font-black tracking-tight text-apple-gray-900">聊天室</h1>
+          <button 
+            onClick={() => setShowSearch(true)} 
+            className="text-apple-blue p-2 rounded-full hover:bg-apple-blue/5 active:scale-90 transition-transform"
+            title="新增好友"
+          >
+            <UserPlus size={22} strokeWidth={2.5} />
+          </button>
+        </div>
+
+        {/* Capsule Pill Switcher matching Image 1 styling */}
+        <div className="flex justify-center my-1">
+          <div className="bg-[#EEF7FF] p-1 rounded-full flex items-center justify-between gap-1 border border-[#DCEEFE] shadow-2xs w-full max-w-xs">
+            <button
+              type="button"
+              onClick={() => { setActiveTab('friends'); setSearchQuery(''); }}
+              className={`flex-1 py-1.5 rounded-full text-xs font-bold transition-all duration-200 text-center select-none ${
+                activeTab === 'friends'
+                  ? 'bg-white text-apple-gray-900 shadow-xs border border-white'
+                  : 'text-apple-gray-500 hover:text-apple-gray-800'
+              }`}
+            >
+              好友
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setActiveTab('chat'); setSearchQuery(''); }}
+              className={`flex-1 py-1.5 rounded-full text-xs font-bold transition-all duration-200 text-center select-none ${
+                activeTab === 'chat'
+                  ? 'bg-white text-apple-gray-900 shadow-xs border border-white'
+                  : 'text-apple-gray-500 hover:text-apple-gray-800'
+              }`}
+            >
+              聊天
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setActiveTab('group'); setSearchQuery(''); }}
+              className={`flex-1 py-1.5 rounded-full text-xs font-bold transition-all duration-200 text-center select-none ${
+                activeTab === 'group'
+                  ? 'bg-white text-apple-gray-900 shadow-xs border border-white'
+                  : 'text-apple-gray-500 hover:text-apple-gray-800'
+              }`}
+            >
+              群組
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Top Search Input Bar */}
+      <div className="p-4 bg-white border-b border-apple-gray-50">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-apple-gray-300" size={16} />
+          <input 
+            type="text" 
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder={
+              activeTab === 'friends' ? '搜尋好友名稱或 @username' :
+              activeTab === 'chat' ? '搜尋好友或聊天記錄' :
+              '搜尋旅友群組記錄'
+            } 
+            className="w-full h-10 bg-apple-gray-50 rounded-xl pl-11 pr-9 text-sm focus:outline-none focus:bg-white border border-apple-gray-100/60 font-medium placeholder:text-apple-gray-300 transition-colors" 
+          />
+          {searchQuery && (
+            <button 
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-apple-gray-300 hover:text-apple-gray-500"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tab Content List */}
       <div className="flex-1 pb-24">
-        {rooms.length > 0 ? (
-          rooms.map(room => (
-            <ChatRoomItem key={room.id} room={room} onClick={() => setSelectedRoomId(room.id)} />
-          ))
-        ) : (
-          <div className="py-20 text-center text-apple-gray-300 font-light">尚無聊天記錄</div>
+        {activeTab === 'friends' && (
+          <div className="divide-y divide-apple-gray-50">
+            {friendsList.length > 0 ? (
+              friendsList.map(friend => (
+                <div 
+                  key={friend.uid}
+                  onClick={() => handleOpenDirectChatWithFriend(friend)}
+                  className="flex items-center justify-between p-4 hover:bg-apple-gray-50 active:bg-apple-gray-100 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAvatarClick(friend.uid);
+                      }}
+                      className="w-12 h-12 rounded-full bg-apple-gray-100 overflow-hidden flex-shrink-0 border border-apple-gray-100 hover:opacity-90 transition-opacity"
+                    >
+                      {friend.avatarUrl ? (
+                        <img src={friend.avatarUrl} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center font-bold text-apple-gray-400 text-base">
+                          {friend.displayName?.[0] || '?'}
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-bold text-sm text-apple-gray-900 truncate">
+                        {friend.displayName || '未知用戶'}
+                      </div>
+                      <div className="text-xs text-apple-gray-400 truncate mt-0.5 font-normal">
+                        @{friend.username || 'user'} {friend.bio ? `• ${friend.bio}` : ''}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenDirectChatWithFriend(friend);
+                    }}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#E6F5FF] text-[#0081d1] hover:bg-[#D4EDFF] rounded-full text-xs font-bold active:scale-95 transition-all flex-shrink-0 ml-2 shadow-2xs"
+                  >
+                    <MessageCircle size={14} />
+                    <span>對話</span>
+                  </button>
+                </div>
+              ))
+            ) : (
+              <div className="py-20 text-center text-apple-gray-300 font-light text-sm">
+                {searchQuery ? '找不到符合條件的好友' : '尚無好友資料'}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'chat' && (
+          <div>
+            {directRooms.length > 0 ? (
+              directRooms.map(room => (
+                <ChatRoomItem key={room.id} room={room} onClick={() => setSelectedRoomId(room.id)} />
+              ))
+            ) : (
+              <div className="py-20 text-center text-apple-gray-300 font-light text-sm">
+                {searchQuery ? '找不到符合條件的對話' : '尚無個人對話記錄'}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'group' && (
+          <div>
+            {groupRooms.length > 0 ? (
+              groupRooms.map(room => (
+                <ChatRoomItem key={room.id} room={room} onClick={() => setSelectedRoomId(room.id)} />
+              ))
+            ) : (
+              <div className="py-20 text-center text-apple-gray-300 font-light text-sm">
+                {searchQuery ? '找不到符合條件的群組記錄' : '尚無群組對話記錄'}
+              </div>
+            )}
+          </div>
         )}
       </div>
 

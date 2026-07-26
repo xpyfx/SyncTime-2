@@ -24,6 +24,7 @@ export interface UserProfile {
   hiddenItems?: string[]; // IDs of hidden trips or bar posts
   isTrajectoryPublic?: boolean; // Whether user's travel trajectory is visible to others
   bio?: string; // Self introduction
+  customExpenseCategories?: string[]; // User-defined expense categories persisted across trips
 }
 
 export interface UserReview {
@@ -168,6 +169,99 @@ export interface PollData {
   createdAt: string;
 }
 
+export interface LuckyDrawData {
+  id: string;
+  topic: string;
+  winnerCount: number;
+  winners: string[];
+  createdAt: string;
+  creatorId: string;
+}
+
+export interface ExpenseData {
+  id: string;
+  mode: '記帳' | '分帳';
+  date: string; // YYYY-MM-DD
+  payerId: string;
+  payerName: string;
+  paymentMethod: '現金' | '信用卡' | '記帳卡' | string;
+  category: string;
+  title: string;
+  amount: number;
+  currency: string;
+  amountTwd: number;
+  splitWithUserIds?: string[];
+  splitWithNames?: string[];
+  createdAt: string;
+}
+
+export interface SettlementExpenseDetail {
+  title: string;
+  payerName: string;
+  amount: number;
+  currency: string;
+  amountTwd: number;
+}
+
+export interface SettlementPayerTotal {
+  payerName: string;
+  totalAmount: number;
+  currency: string;
+  totalAmountTwd: number;
+}
+
+export interface SettlementItem {
+  fromUserId: string;
+  fromUserName: string;
+  toUserId: string;
+  toUserName: string;
+  amount: number;
+  currency: string;
+  amountTwd: number;
+}
+
+export interface SettlementData {
+  id: string;
+  totalExpensesCount: number;
+  totalAmountTwd: number;
+  mainCurrency?: string;
+  totalMainCurrencyAmount?: number;
+  perPersonShareTwd?: number;
+  perPersonShareMain?: number;
+  details?: SettlementExpenseDetail[];
+  payerTotals?: SettlementPayerTotal[];
+  settlements: SettlementItem[];
+  createdAt: string;
+  creatorId: string;
+  dateStr?: string;
+}
+
+export interface ItineraryCardActivity {
+  time?: string;
+  title: string;
+  location?: string;
+  notes?: string;
+}
+
+export interface ItineraryCardDay {
+  dayNumber: number;
+  date?: string;
+  activities: ItineraryCardActivity[];
+}
+
+export interface ItineraryCardData {
+  id: string;
+  tripId?: string;
+  title: string;
+  country?: string;
+  cities?: string[];
+  startDate?: string;
+  endDate?: string;
+  days: ItineraryCardDay[];
+  createdAt: string;
+  creatorId: string;
+}
+
 export interface Message {
   id: string;
   senderId: string;
@@ -176,6 +270,10 @@ export interface Message {
   createdAt: string;
   mediaList?: { type: 'image' | 'video', url: string }[];
   poll?: PollData;
+  draw?: LuckyDrawData;
+  expense?: ExpenseData;
+  settlement?: SettlementData;
+  itineraryCard?: ItineraryCardData;
 }
 
 export interface Stay {
