@@ -13,10 +13,12 @@ const Label = ({ children, required = false }: { children: React.ReactNode, requ
   </label>
 );
 
-const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
+const Input = ({ className = '', hasError = false, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { hasError?: boolean }) => (
   <input 
     {...props} 
-    className="w-full h-12 bg-apple-gray-50 rounded-xl px-4 text-sm focus:outline-none focus:ring-1 focus:ring-apple-gray-200"
+    className={`w-full h-12 bg-apple-gray-50 rounded-xl px-4 text-sm focus:outline-none focus:ring-1 ${
+      hasError ? 'ring-2 ring-red-400 border border-red-400 bg-red-50/20' : 'focus:ring-apple-gray-200'
+    } ${className}`}
   />
 );
 
@@ -25,13 +27,15 @@ const AutocompleteInput = ({
   onChange, 
   placeholder, 
   suggestions, 
-  icon: Icon 
+  icon: Icon,
+  hasError = false
 }: { 
   value: string, 
   onChange: (val: string) => void, 
   placeholder?: string, 
   suggestions: string[],
-  icon?: any
+  icon?: any,
+  hasError?: boolean
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [filtered, setFiltered] = useState<string[]>([]);
@@ -68,6 +72,7 @@ const AutocompleteInput = ({
           value={value} 
           onChange={e => onChange(e.target.value)} 
           placeholder={placeholder}
+          hasError={hasError}
           onFocus={() => {
             if (filtered.length > 0) setIsOpen(true);
           }}
@@ -128,6 +133,7 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
   const [budgetLevel, setBudgetLevel] = useState<BudgetLevel>('低價');
   const [isFriendsOnly, setIsFriendsOnly] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (editingTrip) {
@@ -160,6 +166,9 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
     const newCities = [...cities];
     newCities[index] = val;
     setCities(newCities);
+    if (fieldErrors.city) {
+      setFieldErrors(prev => ({ ...prev, city: false }));
+    }
   };
   const removeCity = (index: number) => {
     if (cities.length > 1) {
@@ -179,18 +188,69 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
 
   const handleSubmit = async () => {
     if (isSubmitting) return;
-    if (!country || cities.some(c => !c) || !startDate || !endDate || !user) {
-      alert('請填寫必填欄位');
+
+    if (!user) {
+      alert('請先登入帳號再發佈貼文');
       return;
     }
 
+    const trimmedCountry = country.trim();
+    const validCities = cities.map(c => c.trim()).filter(Boolean);
+    const errors: Record<string, boolean> = {};
+    const missingFields: string[] = [];
+
+    if (!trimmedCountry) {
+      errors.country = true;
+      missingFields.push('預計前往國家');
+    }
+    if (validCities.length === 0) {
+      errors.city = true;
+      missingFields.push('預計前往城市');
+    }
+    if (!startDate) {
+      errors.startDate = true;
+      missingFields.push('預計旅遊開始日期');
+    }
+    if (!endDate) {
+      errors.endDate = true;
+      missingFields.push('預計旅遊結束日期');
+    }
+
+    if (missingFields.length > 0) {
+      setFieldErrors(errors);
+      alert(`請填寫以下必填欄位：\n• ${missingFields.join('\n• ')}`);
+      return;
+    }
+
+    if (new Date(startDate) > new Date(endDate)) {
+      setFieldErrors({ startDate: true, endDate: true });
+      alert('預計旅遊結束日期不能早於開始日期！');
+      return;
+    }
+
+    if (totalPeople < 1) {
+      alert('旅遊總人數至少需為 1 人');
+      return;
+    }
+
+    if (recruitingCount < 1) {
+      alert('預計徵旅伴人數至少需為 1 人');
+      return;
+    }
+
+    if (recruitingCount > totalPeople) {
+      alert('預計徵旅伴人數不能大於旅遊總人數');
+      return;
+    }
+
+    setFieldErrors({});
     setIsSubmitting(true);
     const path = editingTrip ? `trips/${editingTrip.id}` : 'trips';
     try {
       const tripData = {
         authorId: user.uid,
-        country,
-        cities: cities.filter(c => c),
+        country: trimmedCountry,
+        cities: validCities,
         startDate,
         endDate,
         isAdjustable,
@@ -202,7 +262,7 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
         arrivalMethod,
         transportInfo,
         accommodationStatus,
-        accommodations: accommodationStatus === '已定' ? accommodations.filter(a => a.address || a.note) : [],
+        accommodations: accommodationStatus === '已定' ? accommodations.filter(a => a.address || a.note || a.hotelName) : [],
         notes,
         budgetLevel,
         isFriendsOnly,
@@ -272,10 +332,19 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
             <Label required>預計前往國家（想避免翻譯問題者請填寫英文）</Label>
             <AutocompleteInput 
               value={country} 
-              onChange={setCountry} 
+              onChange={val => {
+                setCountry(val);
+                if (fieldErrors.country) setFieldErrors(prev => ({ ...prev, country: false }));
+              }} 
               placeholder="例如：義大利"
               suggestions={COUNTRIES}
+              hasError={fieldErrors.country}
             />
+            {fieldErrors.country && (
+              <p className="text-xs text-red-500 font-bold mt-1.5 flex items-center gap-1">
+                ⚠️ 請填寫預計前往國家
+              </p>
+            )}
           </div>
           <div>
             <Label required>預計前往城市</Label>
@@ -288,6 +357,7 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
                       onChange={val => updateCity(index, val)} 
                       placeholder={`第 ${index + 1} 個城市`}
                       suggestions={country ? getCitiesByCountry(country) : []}
+                      hasError={fieldErrors.city && cities.filter(c => c.trim()).length === 0}
                     />
                   </div>
                   {cities.length > 1 && (
@@ -297,6 +367,11 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
                   )}
                 </div>
               ))}
+              {fieldErrors.city && (
+                <p className="text-xs text-red-500 font-bold mt-1 flex items-center gap-1">
+                  ⚠️ 請填寫至少一個預計前往城市
+                </p>
+              )}
               <button 
                 onClick={addCity}
                 className="flex items-center gap-1 text-sm text-apple-gray-400 font-medium py-2 hover:text-apple-gray-600 transition-colors"
@@ -311,26 +386,52 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
         <section className="space-y-4">
           <Label required>預計旅遊日期</Label>
           <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3 bg-apple-gray-50 rounded-xl px-4 h-12">
-              <Calendar size={18} className="text-apple-gray-300" />
-              <input 
-                type="date" 
-                value={startDate} 
-                onChange={e => setStartDate(e.target.value)} 
-                className="flex-1 bg-transparent text-sm focus:outline-none"
-              />
+            <div>
+              <div className={`flex items-center gap-3 rounded-xl px-4 h-12 ${
+                fieldErrors.startDate ? 'bg-red-50/30 border border-red-400 ring-2 ring-red-400' : 'bg-apple-gray-50'
+              }`}>
+                <Calendar size={18} className={fieldErrors.startDate ? "text-red-400" : "text-apple-gray-300"} />
+                <input 
+                  type="date" 
+                  value={startDate} 
+                  onChange={e => {
+                    setStartDate(e.target.value);
+                    if (fieldErrors.startDate) setFieldErrors(prev => ({ ...prev, startDate: false }));
+                  }} 
+                  className="flex-1 bg-transparent text-sm focus:outline-none"
+                />
+              </div>
+              {fieldErrors.startDate && (
+                <p className="text-xs text-red-500 font-bold mt-1 flex items-center gap-1">
+                  ⚠️ 請選擇預計旅遊開始日期
+                </p>
+              )}
             </div>
+
             <div className="flex items-center justify-center">
               <span className="text-apple-gray-300 text-sm font-medium">至</span>
             </div>
-            <div className="flex items-center gap-3 bg-apple-gray-50 rounded-xl px-4 h-12">
-              <Calendar size={18} className="text-apple-gray-300" />
-              <input 
-                type="date" 
-                value={endDate} 
-                onChange={e => setEndDate(e.target.value)} 
-                className="flex-1 bg-transparent text-sm focus:outline-none"
-              />
+
+            <div>
+              <div className={`flex items-center gap-3 rounded-xl px-4 h-12 ${
+                fieldErrors.endDate ? 'bg-red-50/30 border border-red-400 ring-2 ring-red-400' : 'bg-apple-gray-50'
+              }`}>
+                <Calendar size={18} className={fieldErrors.endDate ? "text-red-400" : "text-apple-gray-300"} />
+                <input 
+                  type="date" 
+                  value={endDate} 
+                  onChange={e => {
+                    setEndDate(e.target.value);
+                    if (fieldErrors.endDate) setFieldErrors(prev => ({ ...prev, endDate: false }));
+                  }} 
+                  className="flex-1 bg-transparent text-sm focus:outline-none"
+                />
+              </div>
+              {fieldErrors.endDate && (
+                <p className="text-xs text-red-500 font-bold mt-1 flex items-center gap-1">
+                  ⚠️ 請選擇預計旅遊結束日期
+                </p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 pt-2">
