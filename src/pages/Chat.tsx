@@ -1,10 +1,82 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Search, UserPlus, Send, ArrowLeft, Users, Plane, Image as ImageIcon, Video, Plus, X, Lock, Play, Camera, ShieldCheck, Download, ChevronLeft, ChevronRight, ArrowUp, FileText, MapPin, Calendar, Wallet, BarChart2, Dices, Sparkles, Navigation, DollarSign, Vote, CheckCircle2, Trash2, Clock, Check, MessageCircle, CreditCard, Tag, Calculator } from 'lucide-react';
+import { Search, UserPlus, Send, ArrowLeft, Users, Plane, Image as ImageIcon, Video, Plus, X, Lock, Play, Camera, ShieldCheck, Download, ChevronLeft, ChevronRight, ArrowUp, FileText, MapPin, Calendar, Wallet, BarChart2, Dices, Sparkles, Navigation, DollarSign, Vote, CheckCircle2, Trash2, Clock, Check, MessageCircle, CreditCard, Tag, Calculator, Folder, Link as LinkIcon, ExternalLink, FileDown, Eye, Menu } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where, doc, getDoc, getDocs, updateDoc, arrayUnion, limit } from 'firebase/firestore';
-import { ChatRoom, Message, UserProfile, PollData, PollOption, LuckyDrawData, ExpenseData, SettlementData, SettlementItem, SettlementExpenseDetail, SettlementPayerTotal, Trip, ItineraryCardData, ItineraryCardDay, ItineraryCardActivity } from '../types';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where, doc, getDoc, getDocs, updateDoc, arrayUnion, limit, deleteDoc } from 'firebase/firestore';
+import { ChatRoom, Message, UserProfile, PollData, PollOption, LuckyDrawData, ExpenseData, SettlementData, SettlementItem, SettlementExpenseDetail, SettlementPayerTotal, Trip, ItineraryCardData, ItineraryCardDay, ItineraryCardActivity, LocationData } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
+
+export interface TripDeletionInfo {
+  isGroupTripEnded: boolean;
+  isCountdownActive: boolean;
+  isExpired: boolean;
+  countdownStart: Date;
+  deletionTime: Date;
+  remainingMs: number;
+  formattedCountdown: string;
+}
+
+export function getTripDeletionInfo(endDateStr: string | undefined): TripDeletionInfo | null {
+  if (!endDateStr) return null;
+
+  const cleanStr = endDateStr.replace(/\//g, '-').trim();
+  const parts = cleanStr.split('-');
+  if (parts.length < 3) return null;
+
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  const day = parseInt(parts[2], 10);
+
+  if (isNaN(year) || isNaN(month) || isNaN(day)) return null;
+
+  // Day after trip end date at 00:00:00 (旅程結束的隔一天凌晨12點)
+  const countdownStart = new Date(year, month, day + 1, 0, 0, 0, 0);
+
+  // 14 days after countdownStart
+  const deletionTime = new Date(countdownStart.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+  const now = new Date();
+  const nowMs = now.getTime();
+
+  const isCountdownActive = nowMs >= countdownStart.getTime();
+  const isExpired = nowMs >= deletionTime.getTime();
+
+  const remainingMs = Math.max(0, deletionTime.getTime() - nowMs);
+
+  const totalSec = Math.floor(remainingMs / 1000);
+  const days = Math.floor(totalSec / (24 * 3600));
+  const hours = Math.floor((totalSec % (24 * 3600)) / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const formattedCountdown = `${days}天 ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+
+  return {
+    isGroupTripEnded: isCountdownActive,
+    isCountdownActive,
+    isExpired,
+    countdownStart,
+    deletionTime,
+    remainingMs,
+    formattedCountdown
+  };
+}
+
+export const deleteChatRoomAndMessages = async (roomId: string, tripId?: string) => {
+  try {
+    const msgsSnap = await getDocs(collection(db, 'chatRooms', roomId, 'messages'));
+    for (const d of msgsSnap.docs) {
+      await deleteDoc(d.ref).catch(() => {});
+    }
+    await deleteDoc(doc(db, 'chatRooms', roomId)).catch(() => {});
+    if (tripId) {
+      await updateDoc(doc(db, 'trips', tripId), { chatRoomId: '' }).catch(() => {});
+    }
+  } catch (err) {
+    console.error('Failed to delete chat room:', err);
+  }
+};
 
 interface ChatRoomItemProps {
   room: ChatRoom;
@@ -14,14 +86,52 @@ interface ChatRoomItemProps {
 const ChatRoomItem: React.FC<ChatRoomItemProps> = ({ room, onClick }) => {
   const { user } = useAuth();
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
+  const [deletionInfo, setDeletionInfo] = useState<TripDeletionInfo | null>(null);
   const isGroup = room.type === 'group';
   const otherId = room.participants.find(id => id !== user?.uid);
 
   useEffect(() => {
     if (!isGroup && otherId) {
       getDoc(doc(db, 'users', otherId)).then(s => s.exists() && setOtherUser(s.data() as UserProfile));
+    } else if (isGroup && room.tripId) {
+      getDoc(doc(db, 'trips', room.tripId)).then(s => {
+        if (s.exists()) {
+          const t = s.data() as Trip;
+          if (t.endDate) {
+            const info = getTripDeletionInfo(t.endDate);
+            setDeletionInfo(info);
+            if (info && info.isExpired) {
+              deleteChatRoomAndMessages(room.id, room.tripId);
+            }
+          }
+        }
+      }).catch(console.error);
     }
-  }, [otherId, isGroup]);
+  }, [otherId, isGroup, room.tripId, room.id]);
+
+  useEffect(() => {
+    if (!isGroup || !deletionInfo?.isCountdownActive) return;
+    const timer = setInterval(() => {
+      if (deletionInfo?.deletionTime) {
+        const remainingMs = Math.max(0, deletionInfo.deletionTime.getTime() - Date.now());
+        if (remainingMs <= 0) {
+          deleteChatRoomAndMessages(room.id, room.tripId);
+        } else {
+          const totalSec = Math.floor(remainingMs / 1000);
+          const days = Math.floor(totalSec / (24 * 3600));
+          const hours = Math.floor((totalSec % (24 * 3600)) / 3600);
+          const minutes = Math.floor((totalSec % 3600) / 60);
+          const seconds = totalSec % 60;
+          const pad = (n: number) => n.toString().padStart(2, '0');
+          setDeletionInfo(prev => prev ? {
+            ...prev,
+            formattedCountdown: `${days}天 ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+          } : null);
+        }
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isGroup, deletionInfo?.isCountdownActive, room.id, room.tripId]);
 
   const formatTime = (time: any) => {
     if (!time) return '';
@@ -50,10 +160,18 @@ const ChatRoomItem: React.FC<ChatRoomItemProps> = ({ room, onClick }) => {
       </div>
       <div className="flex-1 min-w-0 flex flex-col justify-center">
         <div className="flex justify-between items-baseline mb-1">
-          <h3 className="font-semibold text-sm truncate">
-            {isGroup ? room.name : (otherUser?.displayName || '載入中...')}
-          </h3>
-          <span className="text-[10px] text-apple-gray-300">
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            <h3 className="font-semibold text-sm truncate">
+              {isGroup ? room.name : (otherUser?.displayName || '載入中...')}
+            </h3>
+            {isGroup && deletionInfo?.isCountdownActive && !deletionInfo?.isExpired && (
+              <span className="text-[10px] font-extrabold text-red-600 bg-red-50 border border-red-200/80 px-1.5 py-0.5 rounded-md flex items-center gap-1 animate-pulse flex-shrink-0">
+                <Clock size={10} className="stroke-[2.5]" />
+                <span>倒數 {deletionInfo.formattedCountdown}</span>
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] text-apple-gray-300 ml-2 flex-shrink-0">
             {formatTime(room.lastUpdatedAt)}
           </span>
         </div>
@@ -249,6 +367,116 @@ const LongPressableImage: React.FC<LongPressableImageProps> = ({
             <span className="bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded-md font-bold">影片</span>
           </div>
         </div>
+      )}
+    </div>
+  );
+};
+
+interface PdfFileCardProps {
+  name: string;
+  size?: string;
+  url?: string;
+  isMe: boolean;
+  msgTime?: string;
+}
+
+const PdfFileCard: React.FC<PdfFileCardProps> = ({ name, size, url, isMe, msgTime }) => {
+  const handleOpenPdf = () => {
+    if (url) {
+      if (url.startsWith('data:')) {
+        const newWin = window.open();
+        if (newWin) {
+          newWin.document.write(`
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>${name}</title>
+                <style>body,html{margin:0;padding:0;height:100%;overflow:hidden;background:#525659;}</style>
+              </head>
+              <body>
+                <embed width="100%" height="100%" src="${url}" type="application/pdf" />
+              </body>
+            </html>
+          `);
+        } else {
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = name;
+          a.click();
+        }
+      } else {
+        window.open(url, '_blank');
+      }
+    } else {
+      alert(`開啟 PDF 檔案：「${name}」`);
+    }
+  };
+
+  const handleDownloadPdf = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (url) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+    } else {
+      alert(`下載 PDF 檔案：「${name}」`);
+    }
+  };
+
+  return (
+    <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[280px] sm:max-w-xs my-1`}>
+      <div 
+        onClick={handleOpenPdf}
+        className={`p-3.5 rounded-2xl border transition-all cursor-pointer shadow-2xs group w-full ${
+          isMe 
+            ? 'bg-[#EBF8FF] hover:bg-[#E0F2FE] border-[#BAE6FD]' 
+            : 'bg-white hover:bg-apple-gray-50 border-apple-gray-100'
+        }`}
+      >
+        {/* Top File Meta */}
+        <div className="flex items-center gap-3">
+          {/* Red PDF Icon Badge */}
+          <div className="w-11 h-11 rounded-xl bg-red-500/10 text-red-500 border border-red-500/20 flex flex-col items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+            <FileText size={20} className="stroke-[2.2]" />
+            <span className="text-[8px] font-black tracking-widest uppercase -mt-0.5 text-red-600">PDF</span>
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="font-bold text-xs text-apple-gray-900 group-hover:text-red-600 transition-colors truncate leading-snug">
+              {name}
+            </div>
+            <div className="text-[10px] text-apple-gray-400 font-medium mt-0.5 flex items-center gap-1.5">
+              <span className="px-1.5 py-0.2 rounded-md bg-red-100/60 text-red-600 font-bold text-[9px]">
+                PDF 檔案
+              </span>
+              {size && <span>{size}</span>}
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Actions Row */}
+        <div className="mt-3 pt-2.5 border-t border-black/5 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-1 text-red-600 font-bold text-[11px] group-hover:translate-x-0.5 transition-transform">
+            <ExternalLink size={13} />
+            <span>點擊預覽 / 開啟</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors flex items-center gap-1 text-[10px] font-bold cursor-pointer"
+            title="下載 PDF"
+          >
+            <Download size={12} />
+            <span>下載</span>
+          </button>
+        </div>
+      </div>
+
+      {msgTime && (
+        <span className="text-[10px] text-apple-gray-300 font-medium whitespace-nowrap mt-0.5 px-1">
+          {msgTime}
+        </span>
       )}
     </div>
   );
@@ -858,6 +1086,196 @@ const CURRENCY_RATES: { code: string; name: string; symbol: string; rate: number
   { code: 'MYR', name: '馬來西亞令吉', symbol: 'RM', rate: 7.30 },
   { code: 'PHP', name: '菲律賓披索', symbol: '₱', rate: 0.57 },
 ];
+
+export interface PlaceSpot {
+  id: string;
+  name: string;
+  enName?: string;
+  category: 'landmark' | 'food' | 'shopping' | 'transport' | 'hotel' | 'culture';
+  categoryLabel: string;
+  addr: string;
+  query: string;
+  keywords: string[];
+}
+
+const PLACES_DATABASE: PlaceSpot[] = [
+  // Taipei 101 Series
+  { id: 'p1', name: '台北 101 觀景台 (Taipei 101 Observatory)', enName: 'Taipei 101 Observatory', category: 'landmark', categoryLabel: '🏢 觀景地標', addr: '台北市信義區信義路五段7號89樓', query: '台北101觀景台', keywords: ['taipei 101', 'taipei101', '台北101', '觀景台', '信義區', '101'] },
+  { id: 'p2', name: '台北 101 購物中心 (Taipei 101 Shopping Mall)', enName: 'Taipei 101 Mall', category: 'shopping', categoryLabel: '🛍️ 購物商場', addr: '台北市信義區市府路45號', query: '台北101購物中心', keywords: ['taipei 101', 'taipei101', '台北101', '購物中心', '商場', '百貨'] },
+  { id: 'p3', name: '鼎泰豐 台北 101 店 (Din Tai Fung Taipei 101)', enName: 'Din Tai Fung Taipei 101', category: 'food', categoryLabel: '🍜 知名美食', addr: '台北市信義區市府路45號B1', query: '鼎泰豐 台北101', keywords: ['taipei 101', 'taipei101', '台北101', '鼎泰豐', '小籠包', '美食'] },
+  { id: 'p4', name: '捷運 台北 101 / 世貿站 (Taipei 101/World Trade Center Station)', enName: 'MRT Taipei 101 WTC Station', category: 'transport', categoryLabel: '🚉 捷運交通', addr: '台北市信義區信義路五段2號', query: '捷運台北101世貿站', keywords: ['taipei 101', 'taipei101', '台北101', '捷運', '世貿', '信義線'] },
+  { id: 'p5', name: '台北 101 隨意鳥地方 85F 景觀餐廳', enName: 'Diamond Tony 85F Taipei 101', category: 'food', categoryLabel: '🍷 景觀餐廳', addr: '台北市信義區信義路五段7號85樓', query: '台北101隨意鳥地方', keywords: ['taipei 101', 'taipei101', '台北101', '隨意鳥地方', '餐廳', '85樓'] },
+
+  // Tokyo Series
+  { id: 'p6', name: '東京鐵塔 (Tokyo Tower)', enName: 'Tokyo Tower', category: 'landmark', categoryLabel: '🏢 觀景地標', addr: '東京都港區芝公園4丁目2-8', query: '東京鐵塔 Tokyo Tower', keywords: ['東京', 'tokyo', '東京鐵塔', 'tokyo tower', '芝公園'] },
+  { id: 'p7', name: '東京晴空塔 (Tokyo Skytree)', enName: 'Tokyo Skytree', category: 'landmark', categoryLabel: '🏢 觀景地標', addr: '東京都墨田區押上1-1-2', query: '東京晴空塔 Tokyo Skytree', keywords: ['東京', 'tokyo', '晴空塔', 'skytree', '押上'] },
+  { id: 'p8', name: 'Shibuya Sky 展望台 (澀谷 Sky)', enName: 'Shibuya Sky', category: 'landmark', categoryLabel: '🏢 高空展望台', addr: '東京都澀谷區澀谷2-24-12', query: 'Shibuya Sky 展望台', keywords: ['東京', 'tokyo', '澀谷', 'shibuya', 'shibuya sky', '展望台'] },
+  { id: 'p9', name: '淺草寺 雷門 (Senso-ji Temple)', enName: 'Sensoji Temple Kaminarimon', category: 'culture', categoryLabel: '⛩️ 名勝古蹟', addr: '東京都台東區淺草2-3-1', query: '淺草寺雷門', keywords: ['東京', 'tokyo', '淺草寺', '雷門', 'sensoji', '淺草'] },
+  { id: 'p10', name: '東京迪士尼樂園 (Tokyo Disneyland)', enName: 'Tokyo Disneyland', category: 'landmark', categoryLabel: '🎡 主題樂園', addr: '千葉縣浦安市舞濱1-1', query: '東京迪士尼樂園', keywords: ['東京', 'disney', '迪士尼', 'disneyland', '舞濱'] },
+  { id: 'p11', name: '東京迪士尼海洋 (Tokyo DisneySea)', enName: 'Tokyo DisneySea', category: 'landmark', categoryLabel: '🎡 主題樂園', addr: '千葉縣浦安市舞濱1-13', query: '東京迪士尼海洋', keywords: ['東京', 'disney', '迪士尼海洋', 'disneysea', '舞濱'] },
+  { id: 'p12', name: '一蘭拉麵 澀谷店 (Ichiran Ramen Shibuya)', enName: 'Ichiran Shibuya', category: 'food', categoryLabel: '🍜 知名拉麵', addr: '東京都澀谷區神南1-22-7', query: '一蘭拉麵 澀谷', keywords: ['東京', '拉麵', '一蘭', '澀谷', 'ichiran', 'ramen'] },
+  { id: 'p13', name: '羽田機場 第3航廈 (Haneda Airport Terminal 3)', enName: 'Haneda Airport T3', category: 'transport', categoryLabel: '🛫 國際機場', addr: '東京都大田區羽田空港2-6-5', query: '羽田機場第3航廈', keywords: ['東京', '羽田', 'haneda', '機場', 't3'] },
+  { id: 'p14', name: '成田國際機場 (Narita International Airport)', enName: 'Narita Airport NRT', category: 'transport', categoryLabel: '🛫 國際機場', addr: '千葉縣成田市成田國際機場', query: '成田國際機場 NRT', keywords: ['東京', '成田', 'narita', '機場', 'nrt'] },
+
+  // Kyoto & Osaka Series
+  { id: 'p15', name: '京都清水寺 (Kiyomizu-dera Temple)', enName: 'Kiyomizudera Temple Kyoto', category: 'culture', categoryLabel: '⛩️ 世界遺產', addr: '京都府京都市東山區清水1丁目294', query: '京都清水寺', keywords: ['京都', 'kyoto', '清水寺', 'kiyomizu', '東山區'] },
+  { id: 'p16', name: '伏見稻荷大社 千本鳥居', enName: 'Fushimi Inari Taisha', category: 'culture', categoryLabel: '⛩️ 著名神社', addr: '京都府京都市伏見區深草藪之內町68', query: '伏見稻荷大社 千本鳥居', keywords: ['京都', 'kyoto', '伏見稻荷', '千本鳥居', 'fushimi inari'] },
+  { id: 'p17', name: '大阪道頓堀 跑跑人地標 (Glico Man)', enName: 'Dotonbori Glico Sign Osaka', category: 'landmark', categoryLabel: '🍜 鬧區商圈', addr: '大阪府大阪市中央區道頓堀1丁目10-1', query: '道頓堀跑跑人', keywords: ['大阪', 'osaka', '道頓堀', 'dotonbori', '跑跑人', 'glico'] },
+  { id: 'p18', name: '日本環球影城 (Universal Studios Japan USJ)', enName: 'Universal Studios Japan USJ', category: 'landmark', categoryLabel: '🎡 主題樂園', addr: '大阪府大阪市此花區櫻島2-1-33', query: '日本環球影城 USJ', keywords: ['大阪', 'osaka', '環球影城', 'usj', '瑪利歐'] },
+  { id: 'p19', name: '關西國際機場 (KIX Airport)', enName: 'Kansai International Airport', category: 'transport', categoryLabel: '🛫 國際機場', addr: '大阪府泉佐野市泉州空港北1', query: '關西國際機場 KIX', keywords: ['大阪', 'osaka', '關西機場', 'kix', '機場'] },
+  { id: 'p20', name: '富士山 五合目 (Mount Fuji 5th Station)', enName: 'Mt Fuji 5th Station', category: 'landmark', categoryLabel: '⛰️ 自然名勝', addr: '山梨縣南都留郡鳴澤村', query: '富士山5合目', keywords: ['富士山', 'mt fuji', '五合目', '山梨', 'fuji'] },
+
+  // Taiwan Spots
+  { id: 'p21', name: '國立故宮博物院 (National Palace Museum)', enName: 'National Palace Museum Taipei', category: 'culture', categoryLabel: '🏛️ 國家博物館', addr: '台北市士林區至善路二段221號', query: '故宮博物院', keywords: ['台北', 'taipei', '故宮', '博物館', '士林'] },
+  { id: 'p22', name: '士林觀光夜市 (Shilin Night Market)', enName: 'Shilin Night Market', category: 'food', categoryLabel: '🍜 觀光夜市', addr: '台北市士林區基河路101號', query: '士林夜市', keywords: ['台北', 'taipei', '士林夜市', '夜市', '美食', 'shilin'] },
+  { id: 'p23', name: '饒河街觀光夜市 (Raohe Street Night Market)', enName: 'Raohe Night Market', category: 'food', categoryLabel: '🍜 觀光夜市', addr: '台北市松山區饒河街', query: '饒河街夜市', keywords: ['台北', 'taipei', '饒河夜市', '夜市', '松山'] },
+  { id: 'p24', name: '象山親山步道觀景台 (Elephant Mountain Trail)', enName: 'Elephant Mountain Xiangshan', category: 'landmark', categoryLabel: '⛰️ 景觀步道', addr: '台北市信義區信義路五段150巷', query: '象山親山步道', keywords: ['台北', 'taipei', '象山', 'xiangshan', '夜景', '101夜景'] },
+  { id: 'p25', name: '九份老街 (Jiufen Old Street)', enName: 'Jiufen Old Street', category: 'culture', categoryLabel: '🏮 歷史老街', addr: '新北市瑞芳區基山街', query: '九份老街', keywords: ['九份', 'jiufen', '老街', '瑞芳', '新北'] },
+  { id: 'p26', name: '宜蘭羅東夜市 (Luodong Night Market)', enName: 'Luodong Night Market Yilan', category: 'food', categoryLabel: '🍜 觀光夜市', addr: '宜蘭縣羅東鎮興東路與民權路口', query: '羅東夜市', keywords: ['宜蘭', 'yilan', '羅東夜市', '夜市', '美食'] },
+  { id: 'p27', name: '日月潭 水社碼頭 (Sun Moon Lake)', enName: 'Sun Moon Lake Shuishe Pier', category: 'landmark', categoryLabel: '🚤 著名湖泊', addr: '南投縣魚池鄉水社村', query: '日月潭水社碼頭', keywords: ['日月潭', 'sun moon lake', '南投', '水社碼頭'] },
+
+  // Korea, Singapore, Thailand, US, Europe
+  { id: 'p28', name: '首爾塔 N Seoul Tower', enName: 'N Seoul Tower', category: 'landmark', categoryLabel: '🏢 城市地標', addr: '首爾特別市龍山區南山公園路105', query: '首爾塔 N Seoul Tower', keywords: ['首爾', 'seoul', '首爾塔', '南山塔', 'n seoul tower'] },
+  { id: 'p29', name: '新加坡濱海灣金沙飯店 (Marina Bay Sands)', enName: 'Marina Bay Sands Singapore', category: 'hotel', categoryLabel: '🏨 奢華飯店', addr: '10 Bayfront Ave, Singapore', query: 'Marina Bay Sands Singapore', keywords: ['新加坡', 'singapore', '金沙飯店', 'marina bay sands', '無邊際泳池'] },
+  { id: 'p30', name: '曼谷 ICONSIAM 暹羅天地購物中心', enName: 'ICONSIAM Bangkok', category: 'shopping', categoryLabel: '🛍️ 頂級商場', addr: '299 Charoen Nakhon Rd, Bangkok', query: 'ICONSIAM Bangkok', keywords: ['曼谷', 'bangkok', 'iconsiam', '暹羅天地', '水上市場'] },
+  { id: 'p31', name: '巴黎埃菲爾鐵塔 (Eiffel Tower)', enName: 'Eiffel Tower Paris', category: 'landmark', categoryLabel: '🗼 世界地標', addr: 'Champ de Mars, 5 Av. Anatole France, 75007 Paris', query: 'Eiffel Tower Paris', keywords: ['巴黎', 'paris', '鐵塔', 'eiffel tower', '法國'] },
+  { id: 'p32', name: '紐約時代廣場 (Times Square)', enName: 'Times Square New York', category: 'landmark', categoryLabel: '🗽 經典景點', addr: 'Manhattan, NY 10036, USA', query: 'Times Square New York', keywords: ['紐約', 'new york', '時代廣場', 'times square', '美國'] }
+];
+
+function getPlacesSearchResults(query: string, categoryFilter: string = 'all'): PlaceSpot[] {
+  const cleanQ = query.trim().toLowerCase().replace(/\s+/g, '');
+
+  let matches = PLACES_DATABASE.filter(spot => {
+    if (categoryFilter !== 'all' && spot.category !== categoryFilter) {
+      return false;
+    }
+    if (!cleanQ) return true;
+
+    const normName = spot.name.toLowerCase().replace(/\s+/g, '');
+    const normEnName = (spot.enName || '').toLowerCase().replace(/\s+/g, '');
+    const normAddr = spot.addr.toLowerCase().replace(/\s+/g, '');
+    const normQuery = spot.query.toLowerCase().replace(/\s+/g, '');
+
+    return (
+      normName.includes(cleanQ) ||
+      normEnName.includes(cleanQ) ||
+      normAddr.includes(cleanQ) ||
+      normQuery.includes(cleanQ) ||
+      spot.keywords.some(k => k.toLowerCase().replace(/\s+/g, '').includes(cleanQ) || cleanQ.includes(k.toLowerCase().replace(/\s+/g, '')))
+    );
+  });
+
+  if (cleanQ && matches.length < 3) {
+    const origQ = query.trim();
+    const dynamicSpots: PlaceSpot[] = [
+      {
+        id: `dyn_1_${cleanQ}`,
+        name: `${origQ} (主要地標 / 正門)`,
+        category: 'landmark',
+        categoryLabel: '🏢 搜尋地標',
+        addr: `開啟 Google Maps 導航「${origQ}」`,
+        query: origQ,
+        keywords: [origQ]
+      },
+      {
+        id: `dyn_2_${cleanQ}`,
+        name: `${origQ} - 捷運 / 交通轉乘站`,
+        category: 'transport',
+        categoryLabel: '🚉 交通樞紐',
+        addr: `${origQ} 周邊交通與接駁站點`,
+        query: `${origQ} 捷運站 公車站`,
+        keywords: [origQ]
+      },
+      {
+        id: `dyn_3_${cleanQ}`,
+        name: `${origQ} - 附近美食與推薦餐廳`,
+        category: 'food',
+        categoryLabel: '🍜 美食商圈',
+        addr: `${origQ} 周遭熱門美食景點`,
+        query: `${origQ} 美食 餐廳`,
+        keywords: [origQ]
+      },
+      {
+        id: `dyn_4_${cleanQ}`,
+        name: `${origQ} - 飯店與住宿`,
+        category: 'hotel',
+        categoryLabel: '🏨 附近住宿',
+        addr: `${origQ} 鄰近優質飯店住宿`,
+        query: `${origQ} 飯店 住宿`,
+        keywords: [origQ]
+      }
+    ];
+
+    const combined = [...matches];
+    dynamicSpots.forEach(ds => {
+      if (!combined.some(m => m.name === ds.name)) {
+        combined.push(ds);
+      }
+    });
+    matches = combined;
+  }
+
+  return matches;
+}
+
+interface LocationCardProps {
+  location: LocationData;
+  msgTime: string;
+  isMe: boolean;
+}
+
+const LocationCard: React.FC<LocationCardProps> = ({ location, msgTime }) => {
+  const queryStr = location.query || `${location.name} ${location.address || ''}`.trim();
+
+  const handleOpenMaps = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryStr)}`;
+    window.open(url, '_blank');
+  };
+
+  return (
+    <div className="w-[280px] sm:w-[320px] bg-[#ECFDF5] rounded-[18px] p-4 border border-[#10B981]/30 shadow-apple-xs font-sans text-left flex flex-col relative overflow-hidden">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5 text-[#047857] font-bold text-xs bg-white/90 px-2.5 py-1 rounded-full border border-[#10B981]/20 shadow-2xs">
+          <MapPin size={15} className="text-[#10B981] stroke-[2.5]" />
+          <span>📍 Google 地圖地點</span>
+        </div>
+        {msgTime && <span className="text-[10px] text-[#059669] font-medium">{msgTime}</span>}
+      </div>
+
+      <div className="my-1.5">
+        <h4 className="font-extrabold text-base text-apple-gray-900 leading-snug break-words">
+          {location.name}
+        </h4>
+        {location.address && (
+          <p className="text-xs text-apple-gray-500 mt-1 line-clamp-2 leading-relaxed">
+            {location.address}
+          </p>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={handleOpenMaps}
+        className="mt-2 w-full py-2.5 px-3 bg-[#10B981] hover:bg-[#059669] active:scale-98 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+      >
+        <Navigation size={14} />
+        <span>開啟 Google Maps 導航</span>
+        <ExternalLink size={12} className="opacity-80" />
+      </button>
+    </div>
+  );
+};
+
+const EmptyArchiveState: React.FC<{ icon: any, label: string }> = ({ icon: Icon, label }) => (
+  <div className="py-16 flex flex-col items-center justify-center text-center">
+    <div className="w-14 h-14 rounded-2xl bg-apple-gray-100 text-apple-gray-400 flex items-center justify-center mb-3">
+      <Icon size={28} />
+    </div>
+    <div className="font-bold text-sm text-apple-gray-600">{label}</div>
+    <div className="text-xs text-apple-gray-400 mt-1">此聊天室尚未產生相關紀錄</div>
+  </div>
+);
 
 interface ExpenseCardProps {
   expense: ExpenseData;
@@ -1527,7 +1945,7 @@ const ItineraryCard: React.FC<ItineraryCardProps> = ({ itineraryCard, msgTime, o
   );
 };
 
-const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (tripId: string) => void }> = ({ roomId, onBack, onBackToTrip }) => {
+const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (tripId: string) => void, onAvatarClick?: (userId: string) => void }> = ({ roomId, onBack, onBackToTrip, onAvatarClick }) => {
   const { user, profile } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
@@ -1555,6 +1973,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
   const [longPressedMediaUrl, setLongPressedMediaUrl] = useState<string | null>(null);
   const [showSaveSuccessToast, setShowSaveSuccessToast] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
 
   // Attachment sheet & quick action modals state
   const [showAttachmentSheet, setShowAttachmentSheet] = useState(false);
@@ -1563,6 +1982,12 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showPollModal, setShowPollModal] = useState(false);
   const [showDrawModal, setShowDrawModal] = useState(false);
+
+  // LINE-style Archive Drawer and Location states
+  const [showArchiveDrawer, setShowArchiveDrawer] = useState(false);
+  const [archiveTab, setArchiveTab] = useState<'media' | 'files' | 'links' | 'locations' | 'expenses' | 'draws' | 'itineraries'>('media');
+  const [locationSearchQuery, setLocationSearchQuery] = useState('');
+  const [locationCategoryFilter, setLocationCategoryFilter] = useState<string>('all');
 
   // Form states for feature modals
   const [customLocationName, setCustomLocationName] = useState('');
@@ -1574,8 +1999,44 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
   const [selectedDayNumbers, setSelectedDayNumbers] = useState<number[]>([]);
   const [itineraryTitle, setItineraryTitle] = useState('東京精華之旅');
   const [itineraryDetail, setItineraryDetail] = useState('');
+  const [deletionInfo, setDeletionInfo] = useState<TripDeletionInfo | null>(null);
 
-  const isGroupRoom = Boolean(room?.tripId);
+  const isGroupRoom = Boolean(room?.tripId) || room?.type === 'group';
+
+  // Automatically fetch group trip data when room.tripId exists
+  useEffect(() => {
+    if (!room?.tripId) return;
+    getDoc(doc(db, 'trips', room.tripId)).then(snap => {
+      if (snap.exists()) {
+        const t = { id: snap.id, ...snap.data() } as Trip;
+        setCurrentTrip(t);
+      }
+    }).catch(err => console.error('Error fetching group trip for chat room:', err));
+  }, [room?.tripId]);
+
+  // Realtime ticker for group trip deletion countdown
+  useEffect(() => {
+    if (!isGroupRoom || !currentTrip?.endDate) {
+      setDeletionInfo(null);
+      return;
+    }
+
+    const updateInfo = async () => {
+      const info = getTripDeletionInfo(currentTrip.endDate);
+      setDeletionInfo(info);
+
+      if (info && info.isExpired) {
+        console.log('Group chat room expired (>14 days post trip end). Auto deleting...');
+        await deleteChatRoomAndMessages(roomId, room?.tripId);
+        alert('【聊天室自動刪除】此旅程結束已超過 14 天，該「群組」聊天室已自動刪除並永久清空！');
+        onBack();
+      }
+    };
+
+    updateInfo();
+    const timer = setInterval(updateInfo, 1000);
+    return () => clearInterval(timer);
+  }, [isGroupRoom, currentTrip?.endDate, roomId, room?.tripId, onBack]);
 
   // Fetch trip data associated with current chat room or user
   useEffect(() => {
@@ -2278,26 +2739,71 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePdfFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Reset input value
+    e.target.value = '';
+
+    // Restrict strictly to PDF files
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
+      alert('【格式限制】目前聊天室僅支援傳送 PDF 格式檔案 (.pdf)！');
+      return;
+    }
+
+    // Limit size for Firestore Base64 document payload (~800KB)
+    if (file.size > 800 * 1024) {
+      alert(`PDF 檔案 "${file.name}" 大小為 ${(file.size / (1024 * 1024)).toFixed(1)} MB。聊天室傳送單一 PDF 檔請限制在 800 KB 以內喔！`);
+      return;
+    }
+
     const sizeStr = file.size > 1024 * 1024 
       ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` 
       : `${(file.size / 1024).toFixed(0)} KB`;
-    
-    if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
+
+    setIsSending(true);
+
+    try {
       const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          const type = file.type.startsWith('video/') ? 'video' : 'image';
-          const newMedia = { type, url: event.target.result as string };
-          setLocalUploadedMedia(prev => [newMedia, ...prev]);
-          setDraftMedia(prev => [...prev, newMedia]);
+      reader.onload = async (event) => {
+        const resultDataUrl = event.target?.result as string;
+        if (!resultDataUrl) {
+          setIsSending(false);
+          return;
         }
+
+        await addDoc(collection(db, 'chatRooms', roomId, 'messages'), {
+          senderId: user?.uid,
+          text: '',
+          mediaList: [{
+            type: 'file',
+            url: resultDataUrl,
+            name: file.name,
+            size: sizeStr
+          }],
+          createdAt: new Date().toISOString()
+        });
+
+        await updateDoc(doc(db, 'chatRooms', roomId), {
+          lastMessage: `[PDF 檔案] ${file.name}`,
+          lastUpdatedAt: serverTimestamp()
+        });
+
+        setIsSending(false);
       };
+
+      reader.onerror = () => {
+        alert('讀取 PDF 檔案失敗，請重新嘗試！');
+        setIsSending(false);
+      };
+
       reader.readAsDataURL(file);
-    } else {
-      sendCustomSystemCard(`📄 檔案分享：${file.name} (${sizeStr})`);
+    } catch (err) {
+      console.error('Failed to send PDF file:', err);
+      alert('發送 PDF 檔案失敗');
+      setIsSending(false);
     }
   };
 
@@ -2364,6 +2870,50 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
     }
   };
 
+  const formatFullDateTime = (time: any) => {
+    if (!time) return '未指定時間';
+    try {
+      const d = typeof time === 'string' ? new Date(time) : (time.toDate ? time.toDate() : new Date(time));
+      if (isNaN(d.getTime())) return '未指定時間';
+      const YYYY = d.getFullYear();
+      const MM = String(d.getMonth() + 1).padStart(2, '0');
+      const DD = String(d.getDate()).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      const ss = String(d.getSeconds()).padStart(2, '0');
+      return `${YYYY}年${MM}月${DD}日 ${hh}:${mm}:${ss}`;
+    } catch (e) {
+      return '未指定時間';
+    }
+  };
+
+  const handleSendLocation = async (name: string, address?: string, customQuery?: string) => {
+    if (!user || !roomId) return;
+    const query = customQuery || `${name} ${address || ''}`.trim();
+    const locObj: LocationData = {
+      id: 'loc_' + Date.now(),
+      name,
+      address: address || '',
+      query,
+      createdAt: new Date().toISOString(),
+      creatorId: user.uid
+    };
+    try {
+      await addDoc(collection(db, 'chatRooms', roomId, 'messages'), {
+        senderId: user.uid,
+        text: `📍 地點：${name}`,
+        location: locObj,
+        createdAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.error("Failed to send location message:", err);
+    }
+    setShowLocationModal(false);
+    setCustomLocationName('');
+    setCustomLocationAddress('');
+    setLocationSearchQuery('');
+  };
+
   const allChatMedia = React.useMemo(() => {
     const list: { type: 'image' | 'video', url: string, senderName?: string, time?: string }[] = [];
     messages.forEach(m => {
@@ -2371,13 +2921,135 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
         const sender = participantProfiles[m.senderId];
         const timeStr = formatMsgTime(m.createdAt);
         m.mediaList.forEach(media => {
-          list.push({
-            type: media.type,
-            url: media.url,
-            senderName: sender?.displayName || (m.senderId === user?.uid ? '我' : '使用者'),
-            time: timeStr
-          });
+          if (media.type === 'image' || media.type === 'video') {
+            list.push({
+              type: media.type,
+              url: media.url,
+              senderName: sender?.displayName || (m.senderId === user?.uid ? '我' : '使用者'),
+              time: timeStr
+            });
+          }
         });
+      }
+    });
+    return list;
+  }, [messages, participantProfiles, user]);
+
+  // Memoized lists for LINE-style Chat Archive Drawer
+  const archiveMediaList = React.useMemo(() => allChatMedia, [allChatMedia]);
+
+  const archiveFilesList = React.useMemo(() => {
+    const list: { name: string; size?: string; url?: string; senderName: string; time: string }[] = [];
+    messages.forEach(m => {
+      const sender = participantProfiles[m.senderId];
+      const sName = sender?.displayName || (m.senderId === user?.uid ? '我' : '成員');
+      const timeStr = formatMsgTime(m.createdAt);
+      
+      if (m.mediaList) {
+        m.mediaList.forEach(item => {
+          if (item.type === 'file') {
+            list.push({ name: item.name || '未命名檔案', size: item.size, url: item.url, senderName: sName, time: timeStr });
+          }
+        });
+      }
+      if (m.text && m.text.includes('📄 檔案分享：') && !m.mediaList?.some(i => i.type === 'file')) {
+        const matchName = m.text.replace('📄 檔案分享：', '');
+        list.push({ name: matchName, senderName: sName, time: timeStr });
+      }
+    });
+    return list;
+  }, [messages, participantProfiles, user]);
+
+  const archiveLinksList = React.useMemo(() => {
+    const list: { url: string; text: string; senderName: string; time: string }[] = [];
+    messages.forEach(m => {
+      const sender = participantProfiles[m.senderId];
+      const sName = sender?.displayName || (m.senderId === user?.uid ? '我' : '成員');
+      const timeStr = formatMsgTime(m.createdAt);
+      
+      if (m.text) {
+        const urls = m.text.match(/(https?:\/\/[^\s]+)/g);
+        if (urls) {
+          urls.forEach(u => {
+            list.push({ url: u, text: m.text, senderName: sName, time: timeStr });
+          });
+        }
+      }
+    });
+    return list;
+  }, [messages, participantProfiles, user]);
+
+  const archiveLocationsList = React.useMemo(() => {
+    const list: { name: string; address?: string; query?: string; senderName: string; time: string }[] = [];
+    messages.forEach(m => {
+      const sender = participantProfiles[m.senderId];
+      const sName = sender?.displayName || (m.senderId === user?.uid ? '我' : '成員');
+      const timeStr = formatMsgTime(m.createdAt);
+      
+      if (m.location) {
+        list.push({
+          name: m.location.name,
+          address: m.location.address,
+          query: m.location.query || `${m.location.name} ${m.location.address || ''}`,
+          senderName: sName,
+          time: timeStr
+        });
+      } else if (m.text && (m.text.includes('📍 地點') || m.text.includes('📍 地點分享：'))) {
+        const lines = m.text.split('\n');
+        const name = lines[0].replace('📍 地點分享：', '').replace('📍 地點：', '').trim();
+        const addrLine = lines.find(l => l.includes('地址：'));
+        const address = addrLine ? addrLine.replace('地址：', '').trim() : '';
+        list.push({
+          name: name || '分享地點',
+          address: address,
+          query: `${name} ${address}`.trim(),
+          senderName: sName,
+          time: timeStr
+        });
+      }
+    });
+    return list;
+  }, [messages, participantProfiles, user]);
+
+  const archiveExpensesList = React.useMemo(() => {
+    const list: { expense?: ExpenseData; settlement?: SettlementData; senderName: string; time: string }[] = [];
+    messages.forEach(m => {
+      const sender = participantProfiles[m.senderId];
+      const sName = sender?.displayName || (m.senderId === user?.uid ? '我' : '成員');
+      const timeStr = formatMsgTime(m.createdAt);
+      
+      if (m.expense) {
+        list.push({ expense: m.expense, senderName: sName, time: timeStr });
+      }
+      if (m.settlement) {
+        list.push({ settlement: m.settlement, senderName: sName, time: timeStr });
+      }
+    });
+    return list;
+  }, [messages, participantProfiles, user]);
+
+  const archiveDrawsList = React.useMemo(() => {
+    const list: { draw: LuckyDrawData; senderName: string; rawCreatedAt: any }[] = [];
+    messages.forEach(m => {
+      const sender = participantProfiles[m.senderId];
+      const sName = sender?.displayName || (m.senderId === user?.uid ? '我' : '成員');
+      
+      if (m.draw) {
+        list.push({ draw: m.draw, senderName: sName, rawCreatedAt: m.createdAt });
+      }
+    });
+    return list;
+  }, [messages, participantProfiles, user]);
+
+  const archiveItinerariesList = React.useMemo(() => {
+    const list: { itineraryCard: ItineraryCardData; senderName: string; time: string }[] = [];
+    messages.forEach(m => {
+      const sender = participantProfiles[m.senderId];
+      const sName = sender?.displayName || (m.senderId === user?.uid ? '我' : '成員');
+      const timeStr = formatMsgTime(m.createdAt);
+      
+      if (m.itineraryCard) {
+        list.push({ itineraryCard: m.itineraryCard, senderName: sName, time: timeStr });
       }
     });
     return list;
@@ -2502,11 +3174,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
   };
 
   const handleBackClick = () => {
-    if (room?.type === 'group' && room.tripId) {
-      setShowBackOptions(true);
-    } else {
-      onBack();
-    }
+    onBack();
   };
 
   const handleMediaClick = () => {
@@ -2621,58 +3289,90 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
 
   return (
     <div className="fixed inset-0 z-50 bg-white flex flex-col pt-12">
-      <div className="px-4 py-2 border-b border-apple-gray-50 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="relative z-50">
-            <button onClick={handleBackClick} className="p-1 -ml-1 flex items-center justify-center active:scale-95 transition-transform">
-              <ArrowLeft size={24} className="text-apple-gray-400" />
-            </button>
-            
-            {showBackOptions && (
-              <>
-                <div 
-                  className="fixed inset-0 bg-transparent" 
-                  onClick={(e) => { e.stopPropagation(); setShowBackOptions(false); }} 
-                />
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.9, x: 10 }}
-                  animate={{ opacity: 1, scale: 1, x: 0 }}
-                  className="absolute left-0 mt-2 w-48 bg-white rounded-2xl shadow-apple-lg border border-apple-gray-100 overflow-hidden z-[60]"
-                >
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); onBack(); }}
-                    className="w-full text-left px-4 py-3 text-sm font-medium hover:bg-apple-gray-50 flex items-center gap-3"
-                  >
-                    <ArrowLeft size={16} /> 返回聊天列表
-                  </button>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); onBackToTrip?.(room!.tripId!); }}
-                    className="w-full text-left px-4 py-3 text-sm font-medium hover:bg-apple-gray-50 flex items-center gap-3 border-t border-apple-gray-50"
-                  >
-                    <Plane size={16} /> 返回徵文詳情
-                  </button>
-                </motion.div>
-              </>
-            )}
-          </div>
+      <div className="px-4 py-2 border-b border-apple-gray-100 flex items-center justify-between bg-white sticky top-0 z-30">
+        <div className="flex items-center gap-2">
+          <button onClick={handleBackClick} className="p-1.5 -ml-1 flex items-center justify-center active:scale-95 transition-transform text-apple-gray-600 hover:text-apple-gray-900 cursor-pointer">
+            <ArrowLeft size={22} />
+          </button>
           
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-apple-gray-100 overflow-hidden flex items-center justify-center">
+          <button 
+            onClick={() => {
+              if (room?.type === 'group') {
+                if (room.tripId && onBackToTrip) {
+                  onBackToTrip(room.tripId);
+                } else {
+                  const tripMsg = messages.find(m => m.itineraryCard?.tripId);
+                  if (tripMsg?.itineraryCard?.tripId && onBackToTrip) {
+                    onBackToTrip(tripMsg.itineraryCard.tripId);
+                  } else if (onBackToTrip && room?.id) {
+                    onBackToTrip(room.id);
+                  }
+                }
+              } else {
+                if (otherUser?.uid && onAvatarClick) {
+                  onAvatarClick(otherUser.uid);
+                }
+              }
+            }}
+            className="flex items-center gap-2.5 hover:bg-apple-gray-50 p-1 rounded-xl transition-all cursor-pointer group text-left"
+            title={room?.type === 'group' ? '點擊跳轉至徵文詳情頁' : '點擊查看個人資料頁'}
+          >
+            <div className="w-8 h-8 rounded-full bg-apple-gray-100 overflow-hidden flex items-center justify-center border border-apple-gray-200 flex-shrink-0">
                {room?.type === 'group' ? (
                  <Users size={18} className="text-apple-blue" />
                ) : otherUser?.avatarUrl ? (
                  <img src={otherUser.avatarUrl} className="w-full h-full object-cover" />
-               ) : null}
+               ) : (
+                 <span className="font-bold text-apple-gray-400 text-xs">{otherUser?.displayName?.[0] || '?'}</span>
+               )}
             </div>
-            <span className="font-semibold text-sm">
-              {room?.type === 'group' ? room.name : otherUser?.displayName}
-            </span>
-          </div>
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-semibold text-sm text-apple-gray-900 group-hover:text-[#0081d1] transition-colors flex items-center gap-1 truncate">
+                  {room?.type === 'group' ? room.name : (otherUser?.displayName || '載入中...')}
+                  <ChevronRight size={14} className="text-apple-gray-400 group-hover:text-[#0081d1] flex-shrink-0" />
+                </span>
+                
+                {/* Countdown Timer Badge on right of room name (Appears day after trip ends) */}
+                {isGroupRoom && deletionInfo?.isCountdownActive && !deletionInfo?.isExpired && (
+                  <div 
+                    className="flex items-center gap-1 text-[11px] font-extrabold text-red-600 bg-red-50 border border-red-200/90 px-2 py-0.5 rounded-full shadow-2xs animate-pulse flex-shrink-0"
+                    title="旅程已結束，聊天室倒數 14 天將自動刪除"
+                  >
+                    <Clock size={12} className="stroke-[2.5]" />
+                    <span>倒數 {deletionInfo.formattedCountdown}</span>
+                  </div>
+                )}
+              </div>
+              <span className="text-[10px] text-apple-gray-400 font-medium">
+                {room?.type === 'group' ? '點擊查看徵文詳情' : '點擊查看個人主頁'}
+              </span>
+            </div>
+          </button>
         </div>
+
+        <button 
+          onClick={() => setShowArchiveDrawer(true)}
+          className="w-9 h-9 rounded-xl bg-apple-gray-50 hover:bg-[#0081d1]/10 text-apple-gray-700 hover:text-[#0081d1] flex items-center justify-center transition-all cursor-pointer border border-apple-gray-200/60 active:scale-95"
+          title="聊天室選單 & 紀錄庫 (照片、檔案、連結、地點、分帳、抽籤、行程)"
+        >
+          <Menu size={20} className="stroke-[2.2]" />
+        </button>
       </div>
       
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3.5 no-scrollbar bg-[#FAFAFA]">
+        {/* Automatic Deletion Notice Banner for Group Chat */}
+        {isGroupRoom && deletionInfo?.isCountdownActive && !deletionInfo?.isExpired && (
+          <div className="mx-auto max-w-sm my-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 shadow-2xs flex items-start gap-2.5 text-xs font-semibold leading-relaxed text-left">
+            <Clock size={18} className="text-amber-600 flex-shrink-0 mt-0.5 stroke-[2.2]" />
+            <div className="flex-1">
+              <p className="text-amber-900 text-xs font-bold leading-normal">
+                快樂的時光總是過得特別快！該聊天室將在14天後自動刪除，別忘了把重要資訊下載下來喔！
+              </p>
+            </div>
+          </div>
+        )}
         {messages.map((m, index) => {
           const isMe = m.senderId === user?.uid;
           const sender = participantProfiles[m.senderId];
@@ -2699,7 +3399,13 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                 )}
                 
                 <div className={`flex items-end gap-1.5 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                  {m.poll ? (
+                  {m.location ? (
+                    <LocationCard
+                      location={m.location}
+                      msgTime={msgTime}
+                      isMe={isMe}
+                    />
+                  ) : m.poll ? (
                     <PollCard 
                       messageId={m.id}
                       poll={m.poll}
@@ -2734,6 +3440,38 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                       isMe={isMe}
                       onViewTrip={(tripId) => onBackToTrip?.(tripId)}
                     />
+                  ) : (m.mediaList?.some(item => item.type === 'file') || (m.text && m.text.startsWith('📄 檔案分享：'))) ? (
+                    (() => {
+                      const fileMedia = m.mediaList?.find(item => item.type === 'file');
+                      let fileName = 'PDF 檔案';
+                      let fileSize = '';
+                      let fileUrl = '';
+
+                      if (fileMedia) {
+                        fileName = fileMedia.name || 'PDF 檔案';
+                        fileSize = fileMedia.size || '';
+                        fileUrl = fileMedia.url || '';
+                      } else if (m.text && m.text.startsWith('📄 檔案分享：')) {
+                        const clean = m.text.replace('📄 檔案分享：', '').trim();
+                        const match = clean.match(/(.+)\s*\(([^)]+)\)$/);
+                        if (match) {
+                          fileName = match[1].trim();
+                          fileSize = match[2].trim();
+                        } else {
+                          fileName = clean;
+                        }
+                      }
+
+                      return (
+                        <PdfFileCard
+                          name={fileName}
+                          size={fileSize}
+                          url={fileUrl}
+                          isMe={isMe}
+                          msgTime={msgTime}
+                        />
+                      );
+                    })()
                   ) : m.text ? (
                     <>
                       <div 
@@ -2744,6 +3482,21 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                         }`}
                       >
                         <div className="break-words whitespace-pre-wrap">{m.text}</div>
+                        {(m.text.includes('📍 地點') || m.text.includes('📍 地點分享：')) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const firstLine = m.text.split('\n')[0].replace('📍 地點分享：', '').replace('📍 地點：', '').trim();
+                              window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(firstLine)}`, '_blank');
+                            }}
+                            className="mt-2 w-full py-1.5 px-3 bg-[#10B981] hover:bg-[#059669] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95"
+                          >
+                            <Navigation size={13} />
+                            <span>開啟 Google Maps 導航</span>
+                            <ExternalLink size={11} />
+                          </button>
+                        )}
                       </div>
                       
                       {msgTime && (
@@ -2755,9 +3508,9 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                   ) : null}
                 </div>
                 
-                {m.mediaList && m.mediaList.length > 0 && (
+                {m.mediaList && m.mediaList.some(item => item.type === 'image' || item.type === 'video') && (
                   <LineImageGrid 
-                    mediaList={m.mediaList} 
+                    mediaList={m.mediaList.filter(item => item.type === 'image' || item.type === 'video') as any} 
                     isMe={isMe} 
                     onMediaClick={(url) => handleMediaClickInChat(url)} 
                     onMediaLongPress={(url) => setLongPressedMediaUrl(url)} 
@@ -2837,8 +3590,8 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
         </div>
       </div>
 
-      {/* Hidden File Input for document/file selection */}
-      <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
+      {/* Hidden File Input for PDF document selection */}
+      <input type="file" ref={docInputRef} accept="application/pdf,.pdf" className="hidden" onChange={handlePdfFileUpload} />
 
       {/* WhatsApp / iOS Style Attachment Drawer Sheet */}
       <AnimatePresence>
@@ -2886,14 +3639,14 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                   type="button"
                   onClick={() => {
                     setShowAttachmentSheet(false);
-                    fileInputRef.current?.click();
+                    docInputRef.current?.click();
                   }}
                   className="flex flex-col items-center gap-1.5 group"
                 >
                   <div className="w-16 h-12 rounded-[20px] bg-white shadow-2xs border border-black/5 flex items-center justify-center text-[#0284C7] group-active:scale-95 transition-transform">
                     <FileText size={24} className="stroke-[2.2]" />
                   </div>
-                  <span className="text-[12px] font-medium text-apple-gray-600">檔案</span>
+                  <span className="text-[12px] font-medium text-apple-gray-600">PDF 檔案</span>
                 </button>
 
                 {/* 3. 地點 */}
@@ -2987,62 +3740,157 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
               initial={{ scale: 0.92, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.92, opacity: 0 }}
-              className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl border border-apple-gray-100 relative"
+              className="bg-white rounded-3xl max-w-sm sm:max-w-md w-full p-5 shadow-2xl border border-apple-gray-100 relative max-h-[88vh] flex flex-col"
             >
-              <div className="flex justify-between items-center mb-4">
+              <div className="flex justify-between items-center mb-3">
                 <div className="flex items-center gap-2 text-[#10B981]">
                   <MapPin size={22} className="stroke-[2.2]" />
-                  <h3 className="font-bold text-apple-gray-800 text-base">分享地點</h3>
+                  <div>
+                    <h3 className="font-bold text-apple-gray-800 text-base leading-tight">搜尋與分享 Google Maps 地點</h3>
+                    <p className="text-[10px] text-apple-gray-400 font-medium">資料庫比對搜尋地標、美食與景點</p>
+                  </div>
                 </div>
                 <button onClick={() => setShowLocationModal(false)} className="text-apple-gray-400 hover:text-apple-gray-600 p-1">
                   <X size={18} />
                 </button>
               </div>
 
-              <p className="text-xs text-apple-gray-400 mb-3">點選常用景點，或自訂發送地址：</p>
-
-              <div className="space-y-2 mb-4">
-                {[
-                  { name: '📍 台北 101 觀景台', addr: '台北市信義區信義路五段7號' },
-                  { name: '📍 關西國際機場 (KIX)', addr: '大阪府泉佐野市泉州空港北1' },
-                  { name: '📍 京都清水寺', addr: '京都府京都市東山區清水1丁目294' },
-                  { name: '📍 東京鐵塔', addr: '東京都港區芝公園4丁目2-8' },
-                ].map((spot, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => {
-                      sendCustomSystemCard(`📍 地點分享：${spot.name}\n地址：${spot.addr}`);
-                      setShowLocationModal(false);
-                    }}
-                    className="w-full text-left p-2.5 rounded-2xl bg-[#F8FAFC] hover:bg-[#F0FDF4] border border-apple-gray-100 hover:border-[#10B981]/30 transition-all text-xs"
+              {/* Search Bar with Clear Button */}
+              <div className="relative mb-2 flex-shrink-0">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-apple-gray-400" />
+                <input
+                  value={locationSearchQuery}
+                  onChange={e => setLocationSearchQuery(e.target.value)}
+                  placeholder="搜尋景點、地標或地址 (如: taipei 101, 東京鐵塔)"
+                  className="w-full h-10 bg-apple-gray-50 rounded-xl pl-9 pr-8 text-xs focus:outline-none focus:bg-white border border-transparent focus:border-[#10B981] transition-all font-medium"
+                />
+                {locationSearchQuery && (
+                  <button 
+                    onClick={() => setLocationSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-apple-gray-400 hover:text-apple-gray-600 p-0.5 rounded-full bg-apple-gray-200/50"
                   >
-                    <div className="font-bold text-apple-gray-700">{spot.name}</div>
-                    <div className="text-[11px] text-apple-gray-400 mt-0.5">{spot.addr}</div>
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+
+              {/* Category Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-2 mb-2 flex-shrink-0">
+                {[
+                  { id: 'all', label: '全部' },
+                  { id: 'landmark', label: '🏢 地標' },
+                  { id: 'food', label: '🍜 美食' },
+                  { id: 'shopping', label: '🛍️ 購物' },
+                  { id: 'transport', label: '🚉 交通' },
+                  { id: 'hotel', label: '🏨 住宿' },
+                  { id: 'culture', label: '⛩️ 名勝' }
+                ].map(cat => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setLocationCategoryFilter(cat.id)}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition-all cursor-pointer ${
+                      locationCategoryFilter === cat.id
+                        ? 'bg-[#10B981] text-white shadow-xs'
+                        : 'bg-apple-gray-100 text-apple-gray-600 hover:bg-apple-gray-200'
+                    }`}
+                  >
+                    {cat.label}
                   </button>
                 ))}
               </div>
 
-              <div className="border-t border-apple-gray-100 pt-3 space-y-2">
-                <input 
-                  value={customLocationName}
-                  onChange={e => setCustomLocationName(e.target.value)}
-                  placeholder="自訂地點名稱 (如: 飯店大廳)"
-                  className="w-full h-9 bg-apple-gray-50 rounded-xl px-3 text-xs focus:outline-none focus:bg-white border border-transparent focus:border-[#10B981]"
-                />
+              {/* Search Results List */}
+              {(() => {
+                const searchResults = getPlacesSearchResults(locationSearchQuery, locationCategoryFilter);
+                return (
+                  <div className="flex-1 overflow-y-auto space-y-2 mb-3 pr-0.5 no-scrollbar min-h-[160px]">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-apple-gray-400 mb-1 px-1">
+                      <span>
+                        {locationSearchQuery.trim() ? `🔍 資料庫搜尋結果 (${searchResults.length} 個地點)` : `🔥 熱門推薦地點 (${searchResults.length} 個)`}
+                      </span>
+                      {locationSearchQuery.trim() && (
+                        <span className="text-emerald-600 text-[10px]">點擊選擇並發送</span>
+                      )}
+                    </div>
+
+                    {searchResults.length === 0 ? (
+                      <div className="py-8 text-center text-apple-gray-400 text-xs">
+                        未找到符合的地點，您可以於下方手動輸入自訂地點
+                      </div>
+                    ) : (
+                      searchResults.map((spot) => (
+                        <div
+                          key={spot.id}
+                          className="p-3 rounded-2xl bg-[#F8FAFC] hover:bg-[#F0FDF4] border border-apple-gray-100 hover:border-[#10B981]/40 transition-all text-xs flex items-center justify-between gap-2 group cursor-pointer"
+                          onClick={() => {
+                            handleSendLocation(spot.name, spot.addr, spot.query);
+                            setShowLocationModal(false);
+                          }}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-bold text-apple-gray-900 group-hover:text-[#047857] transition-colors leading-tight">
+                                📍 {spot.name}
+                              </span>
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-[#10B981] border border-emerald-100/60 flex-shrink-0">
+                                {spot.categoryLabel}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-apple-gray-400 mt-1 truncate">
+                              {spot.addr}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSendLocation(spot.name, spot.addr, spot.query);
+                              setShowLocationModal(false);
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-white font-bold text-[11px] shadow-2xs transition-transform active:scale-95 flex-shrink-0 cursor-pointer flex items-center gap-1"
+                          >
+                            <span>發送</span>
+                            <Send size={11} />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Custom Location Section */}
+              <div className="border-t border-apple-gray-100 pt-2.5 space-y-2 flex-shrink-0">
+                <div className="text-[11px] font-bold text-apple-gray-400">自訂名稱與地址 (若資料庫未包含)：</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input 
+                    value={customLocationName}
+                    onChange={e => setCustomLocationName(e.target.value)}
+                    placeholder="自訂名稱 (如: 飯店大廳)"
+                    className="w-full h-8.5 bg-apple-gray-50 rounded-xl px-2.5 text-xs focus:outline-none focus:bg-white border border-transparent focus:border-[#10B981]"
+                  />
+                  <input 
+                    value={customLocationAddress}
+                    onChange={e => setCustomLocationAddress(e.target.value)}
+                    placeholder="詳細地址 (可選)"
+                    className="w-full h-8.5 bg-apple-gray-50 rounded-xl px-2.5 text-xs focus:outline-none focus:bg-white border border-transparent focus:border-[#10B981]"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => {
                     if (customLocationName.trim()) {
-                      sendCustomSystemCard(`📍 地點分享：${customLocationName}`);
+                      handleSendLocation(customLocationName.trim(), customLocationAddress.trim());
                       setCustomLocationName('');
+                      setCustomLocationAddress('');
                       setShowLocationModal(false);
                     }
                   }}
                   disabled={!customLocationName.trim()}
-                  className="w-full h-10 rounded-xl bg-[#10B981] text-white font-bold text-xs hover:bg-[#059669] disabled:opacity-50 transition-colors"
+                  className="w-full h-9 rounded-xl bg-apple-gray-800 text-white font-bold text-xs hover:bg-black disabled:opacity-40 transition-colors shadow-xs cursor-pointer"
                 >
-                  發送自訂地點
+                  發送自訂地點卡片
                 </button>
               </div>
             </motion.div>
@@ -4349,6 +5197,296 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* LINE-Style Chatroom Content & Media Archive Drawer */}
+      <AnimatePresence>
+        {showArchiveDrawer && (
+          <div className="fixed inset-0 z-[120] bg-black/40 backdrop-blur-xs flex justify-end">
+            <div className="fixed inset-0 bg-transparent" onClick={() => setShowArchiveDrawer(false)} />
+            
+            <motion.div 
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 240 }}
+              className="w-full max-w-md bg-white h-full shadow-2xl relative z-10 flex flex-col overflow-hidden"
+            >
+              {/* Header */}
+              <div className="px-5 py-4 border-b border-apple-gray-100 flex items-center justify-between bg-apple-gray-50/80 backdrop-blur-md">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-[#0081d1]/10 text-[#0081d1] flex items-center justify-center font-bold">
+                    <Folder size={18} />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-apple-gray-900 text-sm">
+                      {room?.type === 'group' ? room.name : otherUser?.displayName} 的紀錄庫
+                    </h3>
+                    <p className="text-[10px] text-apple-gray-400 font-medium">查看照片、檔案、連結、地點、分帳、抽籤與行程</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowArchiveDrawer(false)}
+                  className="w-8 h-8 rounded-full bg-apple-gray-100 hover:bg-apple-gray-200 text-apple-gray-500 flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Tabs Navigation */}
+              <div className="flex border-b border-apple-gray-100 bg-white overflow-x-auto no-scrollbar px-2">
+                {[
+                  { id: 'media', label: `照片/影片 (${archiveMediaList.length})`, icon: ImageIcon },
+                  { id: 'files', label: `檔案 (${archiveFilesList.length})`, icon: Folder },
+                  { id: 'links', label: `連結 (${archiveLinksList.length})`, icon: LinkIcon },
+                  { id: 'locations', label: `地點 (${archiveLocationsList.length})`, icon: MapPin },
+                  { id: 'expenses', label: `分帳 (${archiveExpensesList.length})`, icon: Wallet },
+                  { id: 'draws', label: `抽籤 (${archiveDrawsList.length})`, icon: Dices },
+                  { id: 'itineraries', label: `行程 (${archiveItinerariesList.length})`, icon: Calendar }
+                ].map(tab => {
+                  const IconComponent = tab.icon;
+                  const isActive = archiveTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setArchiveTab(tab.id as any)}
+                      className={`flex-1 min-w-[85px] py-3 text-xs font-bold flex flex-col items-center gap-1 border-b-2 transition-all cursor-pointer ${
+                        isActive 
+                          ? 'border-[#0081d1] text-[#0081d1] bg-[#0081d1]/5' 
+                          : 'border-transparent text-apple-gray-400 hover:text-apple-gray-700'
+                      }`}
+                    >
+                      <IconComponent size={16} />
+                      <span className="whitespace-nowrap">{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Content Panel */}
+              <div className="flex-1 overflow-y-auto p-4 bg-[#F8FAFC]">
+                {/* 1. 照片 / 影片 */}
+                {archiveTab === 'media' && (
+                  archiveMediaList.length === 0 ? (
+                    <EmptyArchiveState icon={ImageIcon} label="尚無照片或影片" />
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2">
+                      {archiveMediaList.map((item, idx) => (
+                        <div 
+                          key={idx}
+                          onClick={() => handleMediaClickInChat(item.url)}
+                          className="aspect-square rounded-2xl overflow-hidden bg-apple-gray-100 border border-apple-gray-200/60 relative group cursor-pointer active:scale-95 transition-all"
+                        >
+                          {item.type === 'image' ? (
+                            <img src={item.url} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full relative">
+                              <video src={item.url} className="w-full h-full object-cover" muted />
+                              <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                                <Play size={20} className="text-white fill-white" />
+                              </div>
+                            </div>
+                          )}
+                          <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-1.5 flex justify-between items-center text-[9px] text-white font-medium">
+                            <span className="truncate">{item.senderName}</span>
+                            <span>{item.time}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
+
+                {/* 2. 檔案 */}
+                {archiveTab === 'files' && (
+                  archiveFilesList.length === 0 ? (
+                    <EmptyArchiveState icon={Folder} label="尚無傳送的檔案" />
+                  ) : (
+                    <div className="space-y-2">
+                      {archiveFilesList.map((file, idx) => (
+                        <div key={idx} className="bg-white p-3.5 rounded-2xl border border-apple-gray-100 shadow-2xs flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-blue-50 text-apple-blue flex items-center justify-center">
+                              <Folder size={20} />
+                            </div>
+                            <div>
+                              <div className="font-bold text-xs text-apple-gray-800 break-all">{file.name}</div>
+                              <div className="text-[10px] text-apple-gray-400 mt-0.5">
+                                {file.senderName} • {file.time} {file.size ? `(${file.size})` : ''}
+                              </div>
+                            </div>
+                          </div>
+                          {file.url && (
+                            <button
+                              onClick={() => downloadMedia(file.url!)}
+                              className="p-2 rounded-xl bg-apple-gray-50 hover:bg-apple-gray-100 text-apple-gray-600 transition-colors cursor-pointer"
+                              title="下載檔案"
+                            >
+                              <FileDown size={16} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
+
+                {/* 3. 連結 */}
+                {archiveTab === 'links' && (
+                  archiveLinksList.length === 0 ? (
+                    <EmptyArchiveState icon={LinkIcon} label="尚無分享的網址連結" />
+                  ) : (
+                    <div className="space-y-2">
+                      {archiveLinksList.map((link, idx) => (
+                        <a 
+                          key={idx}
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block bg-white p-3.5 rounded-2xl border border-apple-gray-100 shadow-2xs hover:border-[#0081d1]/30 transition-all group"
+                        >
+                          <div className="flex items-center gap-2 text-xs font-bold text-[#0081d1] break-all group-hover:underline">
+                            <LinkIcon size={14} className="flex-shrink-0" />
+                            <span>{link.url}</span>
+                            <ExternalLink size={12} className="flex-shrink-0 opacity-70" />
+                          </div>
+                          <div className="text-[11px] text-apple-gray-500 mt-1.5 line-clamp-2">
+                            {link.text}
+                          </div>
+                          <div className="text-[10px] text-apple-gray-400 mt-1 font-medium">
+                            由 {link.senderName} 發送 • {link.time}
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  )
+                )}
+
+                {/* 4. Google Maps 地點 */}
+                {archiveTab === 'locations' && (
+                  archiveLocationsList.length === 0 ? (
+                    <EmptyArchiveState icon={MapPin} label="尚無分享的 Google Maps 地點" />
+                  ) : (
+                    <div className="space-y-2.5">
+                      {archiveLocationsList.map((loc, idx) => (
+                        <div key={idx} className="bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-200/60 shadow-2xs">
+                          <div className="flex justify-between items-start gap-2">
+                            <div>
+                              <div className="font-bold text-xs text-emerald-950 flex items-center gap-1.5">
+                                <MapPin size={15} className="text-[#10B981] flex-shrink-0" />
+                                <span>{loc.name}</span>
+                              </div>
+                              {loc.address && (
+                                <div className="text-[11px] text-emerald-700 mt-1">{loc.address}</div>
+                              )}
+                              <div className="text-[10px] text-emerald-600/80 mt-1">
+                                發送者：{loc.senderName} • {loc.time}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc.query || loc.name)}`;
+                                window.open(url, '_blank');
+                              }}
+                              className="px-3 py-1.5 bg-[#10B981] hover:bg-[#059669] text-white text-[11px] font-bold rounded-xl flex items-center gap-1 shadow-xs whitespace-nowrap cursor-pointer active:scale-95"
+                            >
+                              <Navigation size={12} />
+                              <span>導航</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
+
+                {/* 5. 分帳結果 */}
+                {archiveTab === 'expenses' && (
+                  archiveExpensesList.length === 0 ? (
+                    <EmptyArchiveState icon={Wallet} label="尚無記帳或結算紀錄" />
+                  ) : (
+                    <div className="space-y-3">
+                      {archiveExpensesList.map((item, idx) => (
+                        <div key={idx} className="flex justify-center">
+                          {item.expense ? (
+                            <ExpenseCard expense={item.expense} msgTime={item.time} isMe={false} />
+                          ) : item.settlement ? (
+                            <SettlementCard settlement={item.settlement} msgTime={item.time} isMe={false} />
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
+
+                {/* 6. 抽籤紀錄 (年月日時分秒) */}
+                {archiveTab === 'draws' && (
+                  archiveDrawsList.length === 0 ? (
+                    <EmptyArchiveState icon={Dices} label="尚無隨機抽籤紀錄" />
+                  ) : (
+                    <div className="space-y-3">
+                      {archiveDrawsList.map((item, idx) => (
+                        <div key={idx} className="bg-purple-50/80 p-4 rounded-2xl border border-purple-200/70 shadow-2xs">
+                          <div className="flex items-center justify-between mb-2 pb-2 border-b border-purple-200/50">
+                            <div className="flex items-center gap-1.5 text-purple-700 font-extrabold text-xs">
+                              <Sparkles size={16} />
+                              <span>🎯 {item.draw.title || '隨機抽籤'}</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">
+                              幸運兒 {item.draw.winners?.length || 0} 人
+                            </span>
+                          </div>
+
+                          <div className="my-2">
+                            <div className="text-[11px] text-apple-gray-500 font-semibold mb-1">中籤名單：</div>
+                            <div className="text-sm font-black text-purple-900 bg-white/90 p-2.5 rounded-xl border border-purple-100 text-center">
+                              {item.draw.winners?.join('、') || '無中籤者'}
+                            </div>
+                          </div>
+
+                          <div className="mt-3 pt-2 border-t border-purple-200/40 flex items-center justify-between text-[11px] text-purple-700/80">
+                            <span>發起成員：{item.senderName}</span>
+                            <span className="font-mono text-[10px] font-bold bg-white/70 px-2 py-0.5 rounded-md border border-purple-200/50">
+                              📅 {formatFullDateTime(item.rawCreatedAt)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
+
+                {/* 7. 行程規劃 */}
+                {archiveTab === 'itineraries' && (
+                  archiveItinerariesList.length === 0 ? (
+                    <EmptyArchiveState icon={Calendar} label="尚無分享的行程規劃" />
+                  ) : (
+                    <div className="space-y-4">
+                      {archiveItinerariesList.map((item, idx) => (
+                        <div key={idx} className="flex flex-col items-center">
+                          <div className="text-[10px] text-apple-gray-400 font-medium mb-1.5 self-start pl-1 flex items-center gap-1.5">
+                            <span className="font-bold text-apple-gray-600">發起成員：{item.senderName}</span>
+                            <span>•</span>
+                            <span>{item.time}</span>
+                          </div>
+                          <ItineraryCard
+                            itineraryCard={item.itineraryCard}
+                            msgTime={item.time}
+                            isMe={false}
+                            onViewTrip={(tid) => {
+                              setShowArchiveDrawer(false);
+                              onBackToTrip?.(tid);
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -4748,6 +5886,7 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
              <ChatView 
                roomId={selectedRoomId} 
                onBack={() => setSelectedRoomId(null)} 
+               onAvatarClick={onAvatarClick}
                onBackToTrip={(tid) => {
                  setSelectedRoomId(null);
                  onBackToTrip?.(tid);

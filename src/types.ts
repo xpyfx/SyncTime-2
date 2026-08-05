@@ -262,18 +262,28 @@ export interface ItineraryCardData {
   creatorId: string;
 }
 
+export interface LocationData {
+  id: string;
+  name: string;
+  address?: string;
+  query?: string;
+  createdAt?: string;
+  creatorId?: string;
+}
+
 export interface Message {
   id: string;
   senderId: string;
   text: string;
   sharedPostId?: string;
   createdAt: string;
-  mediaList?: { type: 'image' | 'video', url: string }[];
+  mediaList?: { type: 'image' | 'video' | 'file', url: string; name?: string; size?: string }[];
   poll?: PollData;
   draw?: LuckyDrawData;
   expense?: ExpenseData;
   settlement?: SettlementData;
   itineraryCard?: ItineraryCardData;
+  location?: LocationData;
 }
 
 export interface Stay {
