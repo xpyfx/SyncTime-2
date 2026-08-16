@@ -347,10 +347,15 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
           type="button"
           onClick={handleSubmit} 
           disabled={isSubmitting}
-          className="liquid-glass-btn-primary px-5 py-2.5 text-xs font-bold flex items-center gap-2 disabled:opacity-50 transition-transform active:scale-95 shadow-md"
+          className="w-10 h-10 rounded-full liquid-glass-btn-primary flex items-center justify-center disabled:opacity-50 transition-transform active:scale-90 shadow-md shrink-0"
+          title={editingTrip ? '儲存' : '發布'}
+          aria-label={editingTrip ? '儲存' : '發布'}
         >
-          <Send size={16} className="stroke-[2.5] -rotate-12" />
-          <span>{isSubmitting ? '儲存中...' : (editingTrip ? '儲存' : '發布')}</span>
+          {isSubmitting ? (
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <Send size={18} className="stroke-[2.5] -rotate-12 translate-x-[-1px] translate-y-[1px]" />
+          )}
         </button>
       </div>
 
