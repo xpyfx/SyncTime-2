@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plane, Plus, MapPin, Calendar, Users, Info, Map as MapIcon, X, Search } from 'lucide-react';
+import { 
+  Plane, Plus, MapPin, Calendar, Users, Info, Map as MapIcon, X, Search, 
+  Send, Globe, UserPlus, UserCheck, Wallet, Compass, Car, Building, FileText, Lock,
+  PlaneTakeoff, Navigation 
+} from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
@@ -7,19 +11,28 @@ import { motion, AnimatePresence } from 'motion/react';
 import { BudgetLevel, SeekingGender, Trip, TripStatus, Accommodation } from '../types';
 import { COUNTRIES, getCitiesByCountry } from '../lib/locationData';
 
-const Label = ({ children, required = false }: { children: React.ReactNode, required?: boolean }) => (
-  <label className="block text-xs font-bold text-[#2B2B2B] uppercase tracking-wider mb-2 flex items-center gap-1">
-    {children} {required && <span className="text-[#F4B896] text-sm font-black">*</span>}
+const Label = ({ children, required = false, icon: Icon }: { children: React.ReactNode, required?: boolean, icon?: any }) => (
+  <label className="block text-xs font-bold text-[#2B2B2B] tracking-wider mb-2 flex items-center gap-1.5">
+    {Icon && <Icon size={16} className="text-[#035096] shrink-0" />}
+    <span>{children}</span>
+    {required && <span className="text-[#F4B896] text-sm font-black">*</span>}
   </label>
 );
 
-const Input = ({ className = '', hasError = false, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { hasError?: boolean }) => (
-  <input 
-    {...props} 
-    className={`w-full h-12 liquid-glass-input px-5 text-sm font-medium text-[#2B2B2B] placeholder:text-[#2B2B2B]/40 focus:outline-none transition-all ${
-      hasError ? '!border-red-400 !bg-red-50/30 ring-2 ring-red-400/50' : ''
-    } ${className}`}
-  />
+const Input = ({ className = '', hasError = false, icon: Icon, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { hasError?: boolean, icon?: any }) => (
+  <div className="relative w-full">
+    {Icon && (
+      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#035096] pointer-events-none">
+        <Icon size={18} />
+      </div>
+    )}
+    <input 
+      {...props} 
+      className={`w-full h-12 liquid-glass-input ${Icon ? 'pl-11 pr-5' : 'px-5'} text-sm font-medium text-[#2B2B2B] placeholder:text-[#2B2B2B]/40 focus:outline-none transition-all ${
+        hasError ? '!border-red-400 !bg-red-50/30 ring-2 ring-red-400/50' : ''
+      } ${className}`}
+    />
+  </div>
 );
 
 const AutocompleteInput = ({ 
@@ -321,18 +334,23 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
       {/* Sticky Header Bar */}
       <div className="sticky top-0 bg-white/60 backdrop-blur-2xl z-[130] px-6 pt-12 pb-4 flex items-center justify-between border-b border-white/80 shadow-[0_4px_24px_rgba(3,80,150,0.06)]">
         <button 
+          type="button"
           onClick={onCancel} 
-          className="liquid-glass-btn-secondary px-4 py-2 text-xs font-bold transition-transform active:scale-95"
+          className="w-10 h-10 rounded-full liquid-glass-btn-secondary flex items-center justify-center transition-transform active:scale-90 shadow-sm"
+          title="關閉"
+          aria-label="關閉"
         >
-          取消
+          <X size={20} className="text-[#035096] stroke-[2.5]" />
         </button>
         <h1 className="text-base sm:text-lg font-bold tracking-tight text-[#2B2B2B]">{editingTrip ? '編輯貼文' : '發布徵旅伴'}</h1>
         <button 
+          type="button"
           onClick={handleSubmit} 
           disabled={isSubmitting}
-          className="liquid-glass-btn-primary px-5 py-2 text-xs font-bold disabled:opacity-50"
+          className="liquid-glass-btn-primary px-5 py-2.5 text-xs font-bold flex items-center gap-2 disabled:opacity-50 transition-transform active:scale-95 shadow-md"
         >
-          {isSubmitting ? '儲存中...' : (editingTrip ? '儲存' : '發布')}
+          <Send size={16} className="stroke-[2.5] -rotate-12" />
+          <span>{isSubmitting ? '儲存中...' : (editingTrip ? '儲存' : '發布')}</span>
         </button>
       </div>
 
@@ -340,7 +358,7 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
         {/* Destination Section */}
         <section className="liquid-glass-card p-5 sm:p-6 space-y-5">
           <div>
-            <Label required>預計前往國家（想避免翻譯問題者請填寫英文）</Label>
+            <Label required icon={Globe}>預計前往國家（想避免翻譯問題者請填寫英文）</Label>
             <AutocompleteInput 
               value={country} 
               onChange={val => {
@@ -349,6 +367,7 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
               }} 
               placeholder="例如：義大利"
               suggestions={COUNTRIES}
+              icon={Globe}
               hasError={fieldErrors.country}
             />
             {fieldErrors.country && (
@@ -358,7 +377,7 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
             )}
           </div>
           <div>
-            <Label required>預計前往城市</Label>
+            <Label required icon={MapPin}>預計前往城市</Label>
             <div className="space-y-3">
               {cities.map((city, index) => (
                 <div key={index} className="flex gap-2.5 items-center">
@@ -368,6 +387,7 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
                       onChange={val => updateCity(index, val)} 
                       placeholder={`第 ${index + 1} 個城市`}
                       suggestions={country ? getCitiesByCountry(country) : []}
+                      icon={MapPin}
                       hasError={fieldErrors.city && cities.filter(c => c.trim()).length === 0}
                     />
                   </div>
@@ -398,7 +418,7 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
 
         {/* Date Section */}
         <section className="liquid-glass-card p-5 sm:p-6 space-y-5">
-          <Label required>預計旅遊日期</Label>
+          <Label required icon={Calendar}>預計旅遊日期</Label>
           <div className="flex flex-col gap-3">
             <div>
               <div className={`flex items-center gap-3 liquid-glass-input px-4 h-12 ${
@@ -477,19 +497,21 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
         {/* Departure Section */}
         <section className="liquid-glass-card p-5 sm:p-6 grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label>出發國家</Label>
+            <Label icon={PlaneTakeoff}>出發國家</Label>
             <AutocompleteInput 
               value={departureCountry} 
               onChange={setDepartureCountry} 
               suggestions={COUNTRIES}
+              icon={PlaneTakeoff}
             />
           </div>
           <div className="space-y-2">
-            <Label>出發城市</Label>
+            <Label icon={Navigation}>出發城市</Label>
             <AutocompleteInput 
               value={departureCity} 
               onChange={setDepartureCity} 
               suggestions={departureCountry ? getCitiesByCountry(departureCountry) : []}
+              icon={Navigation}
             />
           </div>
         </section>
@@ -497,19 +519,19 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
         {/* Numbers Section */}
         <section className="liquid-glass-card p-5 sm:p-6 grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label>旅遊總人數</Label>
-            <Input type="number" min={1} value={totalPeople} onChange={e => setTotalPeople(Number(e.target.value))} />
+            <Label icon={Users}>旅遊總人數</Label>
+            <Input type="number" min={1} value={totalPeople} onChange={e => setTotalPeople(Number(e.target.value))} icon={Users} />
           </div>
           <div className="space-y-2">
-            <Label>預計徵旅伴人數</Label>
-            <Input type="number" min={1} value={recruitingCount} onChange={e => setRecruitingCount(Number(e.target.value))} />
+            <Label icon={UserPlus}>預計徵旅伴人數</Label>
+            <Input type="number" min={1} value={recruitingCount} onChange={e => setRecruitingCount(Number(e.target.value))} icon={UserPlus} />
           </div>
         </section>
 
         {/* Gender & Budget Section */}
         <section className="liquid-glass-card p-5 sm:p-6 grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label>徵旅伴性別</Label>
+            <Label icon={UserCheck}>徵旅伴性別</Label>
             <div className="relative">
               <select 
                 value={seekingGender} 
@@ -526,7 +548,7 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
             </div>
           </div>
           <div className="space-y-2">
-            <Label>旅遊預算</Label>
+            <Label icon={Wallet}>旅遊預算</Label>
             <div className="relative">
               <select 
                 value={budgetLevel} 
@@ -547,18 +569,18 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
         {/* Arrival & Transport Section */}
         <section className="liquid-glass-card p-5 sm:p-6 space-y-4">
           <div>
-            <Label>抵達目的地方式</Label>
-            <Input value={arrivalMethod} onChange={e => setArrivalMethod(e.target.value)} placeholder="如：飛機、高鐵" />
+            <Label icon={Compass}>抵達目的地方式</Label>
+            <Input value={arrivalMethod} onChange={e => setArrivalMethod(e.target.value)} placeholder="如：飛機、高鐵" icon={Compass} />
           </div>
           <div>
-            <Label>交通資訊</Label>
-            <Input value={transportInfo} onChange={e => setTransportInfo(e.target.value)} placeholder="如：航空公司｜航班號" />
+            <Label icon={Car}>交通資訊</Label>
+            <Input value={transportInfo} onChange={e => setTransportInfo(e.target.value)} placeholder="如：航空公司｜航班號" icon={Car} />
           </div>
         </section>
 
         {/* Accommodation Section */}
         <section className="liquid-glass-card p-5 sm:p-6 space-y-4">
-          <Label>住宿安排</Label>
+          <Label icon={Building}>住宿安排</Label>
           <div className="liquid-glass-segmented flex p-1.5 gap-1.5">
             <button 
               onClick={() => setAccommodationStatus('已定')}
@@ -610,6 +632,7 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
                       value={acc.address} 
                       onChange={e => updateAccommodation(acc.id, 'address', e.target.value)} 
                       placeholder="住宿地址" 
+                      icon={Building}
                     />
                     <div className="relative">
                       <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#035096]">
@@ -638,7 +661,7 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
         {/* Notes & Privacy Section */}
         <section className="liquid-glass-card p-5 sm:p-6 space-y-5">
           <div>
-            <Label>備註 (Note)</Label>
+            <Label icon={FileText}>備註 (Note)</Label>
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
@@ -649,7 +672,10 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
 
           <div className="flex items-center justify-between p-4 bg-white/50 backdrop-blur-md rounded-2xl border border-white/80 shadow-xs">
             <div className="flex flex-col pr-3">
-              <span className="text-sm font-bold text-[#2B2B2B]">僅對好友展示。</span>
+              <span className="text-sm font-bold text-[#2B2B2B] flex items-center gap-1.5">
+                <Lock size={16} className="text-[#035096]" />
+                僅對好友展示
+              </span>
               <span className="text-xs font-medium text-[#2B2B2B]/60 mt-0.5">開啟後，只有您的好友能看見此徵旅伴訊息</span>
             </div>
             <button
