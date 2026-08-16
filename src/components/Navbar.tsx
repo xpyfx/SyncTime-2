@@ -5,9 +5,10 @@ import { motion } from 'motion/react';
 interface NavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  hasUnreadChat?: boolean;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
+export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, hasUnreadChat }) => {
   const tabs = [
     { id: 'home', icon: Home, label: '主頁' },
     { id: 'bar', icon: Beer, label: '旅吧' },
@@ -43,14 +44,19 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
               )}
 
               <span className={`relative z-10 flex flex-col items-center gap-0.5 transition-transform duration-200 ${isActive ? 'scale-105' : 'group-hover:scale-100 active:scale-95'}`}>
-                <tab.icon 
-                  size={20} 
-                  strokeWidth={isActive ? 2.5 : 1.8} 
-                  className={`transition-colors duration-200 ${
-                    isActive ? 'text-[#0081d1]' : 'text-apple-gray-600 group-hover:text-apple-gray-900'
-                  }`}
-                  fill={isActive && tab.id === 'home' ? 'currentColor' : 'none'}
-                />
+                <div className="relative flex items-center justify-center">
+                  <tab.icon 
+                    size={20} 
+                    strokeWidth={isActive ? 2.5 : 1.8} 
+                    className={`transition-colors duration-200 ${
+                      isActive ? 'text-[#0081d1]' : 'text-apple-gray-600 group-hover:text-apple-gray-900'
+                    }`}
+                    fill={isActive && tab.id === 'home' ? 'currentColor' : 'none'}
+                  />
+                  {tab.id === 'chat' && hasUnreadChat && (
+                    <span className="absolute -top-1 -right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white shadow-sm animate-pulse" />
+                  )}
+                </div>
                 <span className={`text-[10px] tracking-tight transition-colors duration-200 ${
                   isActive ? 'text-[#0081d1] font-bold' : 'text-apple-gray-600 font-medium'
                 }`}>

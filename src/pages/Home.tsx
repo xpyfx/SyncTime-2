@@ -4,6 +4,7 @@ import { db } from '../lib/firebase';
 import { collection, query, orderBy, onSnapshot, doc, getDoc, setDoc, where, updateDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Trip, UserProfile, GestureSettings } from '../types';
 import { TripCard } from '../components/TripCard';
+import { GlassSearchInput } from '../components/GlassSearchInput';
 import { useAuth } from '../context/AuthContext';
 import { SwipeableWrapper } from '../components/SwipeableWrapper';
 import { motion, AnimatePresence } from 'motion/react';
@@ -142,14 +143,12 @@ export const HomeView: React.FC<HomeViewProps> = ({ onAvatarClick, onTripClick, 
             <Plus size={20} />
           </button>
         </div>
-        <div className="relative mb-4">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-apple-gray-400" size={16} strokeWidth={2.5} />
-          <input
-            type="text"
+        <div className="mb-4">
+          <GlassSearchInput
             placeholder="搜尋目的地或旅伴"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-11 bg-white/90 backdrop-blur-sm border border-white/80 rounded-xl pl-11 pr-4 text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#8AD2FF] transition-all placeholder:text-apple-gray-400 shadow-2xs"
+            onClear={() => setSearch('')}
           />
         </div>
       </div>

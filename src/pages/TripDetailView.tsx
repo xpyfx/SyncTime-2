@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Trip, TripComment, UserProfile } from '../types';
+import { GlassSearchInput } from '../components/GlassSearchInput';
+import { GlassSendButton } from '../components/GlassSendButton';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { 
   doc, 
@@ -25,6 +27,7 @@ import { ArrowLeft, MoreVertical, Send, ShieldAlert, Trash2, Edit2, Calendar, Ma
 import { getOrCreateChatRoom } from '../lib/chatUtils';
 import { CreateTripView } from './CreateTrip';
 import { CommentReply } from '../types';
+import { getTripDeletionInfo } from './Chat';
 
 interface CommentItemProps {
   comment: TripComment;
@@ -46,7 +49,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, tripAuthorId, tripId
 
   useEffect(() => {
     if (!user) return;
-    const unsubLike = onSnapshot(doc(db, 'trips', tripId, 'comments', comment.id, 'likes', user.uid), s => setIsLiked(s.exists()));
+    const unsubLike = onSnapshot(doc(db, 'trips', tripId, 'comments', comment.id, 'likes', user.uid), s => setIsLiked(s.exists()), err => console.warn(err));
     const qR = query(collection(db, 'trips', tripId, 'comments', comment.id, 'replies'), orderBy('createdAt', 'asc'));
     const unsubReplies = onSnapshot(qR, async s => {
       const data = s.docs.map(d => ({ id: d.id, ...d.data() } as CommentReply));
@@ -60,7 +63,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, tripAuthorId, tripId
         }
       }
       setReplyAuthors(newReplyAuthors);
-    });
+    }, err => console.warn(err));
     return () => { unsubLike(); unsubReplies(); };
   }, [comment.id, tripId, user]);
 
@@ -271,6 +274,42 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
   const [showItineraryEditor, setShowItineraryEditor] = useState(false);
   const [editingDayIndex, setEditingDayIndex] = useState<number | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<'overview' | 'itinerary'>('overview');
+  const [chatRoomExists, setChatRoomExists] = useState<boolean>(true);
+
+  // Check if chat room exists and is not deleted
+  useEffect(() => {
+    if (!trip || !tripId) return;
+
+    const isTripExpired = getTripDeletionInfo(trip.endDate)?.isExpired;
+    if (isTripExpired) {
+      setChatRoomExists(false);
+      return;
+    }
+
+    if (trip.chatRoomId) {
+      const unsub = onSnapshot(doc(db, 'chatRooms', trip.chatRoomId), (snap) => {
+        setChatRoomExists(snap.exists());
+      }, (err) => {
+        console.warn('Chat room snapshot error:', err);
+        setChatRoomExists(false);
+      });
+      return () => unsub();
+    } else {
+      const q = query(
+        collection(db, 'chatRooms'),
+        where('tripId', '==', tripId),
+        where('type', '==', 'group'),
+        limit(1)
+      );
+      const unsub = onSnapshot(q, (snap) => {
+        setChatRoomExists(!snap.empty);
+      }, (err) => {
+        console.warn('Chat rooms query error:', err);
+        setChatRoomExists(false);
+      });
+      return () => unsub();
+    }
+  }, [trip, tripId, trip?.chatRoomId, trip?.endDate]);
 
   // Companion Evaluation States
   const [showEvaluateUserId, setShowEvaluateUserId] = useState<string | null>(null);
@@ -397,7 +436,7 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
           setMemberProfiles([]);
         }
       }
-    });
+    }, err => console.warn(err));
   }, [tripId]);
 
   useEffect(() => {
@@ -409,7 +448,7 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
       where('type', '==', 'trip_join_request'),
       where('status', '==', 'pending')
     );
-    return onSnapshot(q, s => setHasApplied(!s.empty));
+    return onSnapshot(q, s => setHasApplied(!s.empty), err => console.warn(err));
   }, [user, tripId]);
 
   const handleApplyJoin = async () => {
@@ -668,7 +707,7 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
         }
       }
       setCommentAuthors(newCommentAuthors);
-    });
+    }, err => console.warn(err));
   }, [tripId]);
 
   const handlePostComment = async () => {
@@ -743,6 +782,11 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
 
   useEffect(() => {
     if (!trip || !tripId || !user) return;
+
+    // Do NOT create or link group chat rooms for expired trips (> 14 days past end date)
+    const deletionInfo = getTripDeletionInfo(trip.endDate);
+    if (deletionInfo?.isExpired) return;
+
     if (isAuthor || isMember) {
       // Check if group chat exists (lazy creation for existing trips)
       if (trip.chatRoomId) {
@@ -770,6 +814,9 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
       );
       getDocs(q).then(async s => {
         if (s.empty) {
+          // Double check if expired before creating
+          if (getTripDeletionInfo(trip.endDate)?.isExpired) return;
+
           // Create it quietly if it doesn't exist
           const currentMembers = Array.from(new Set([trip.authorId, ...(trip.members || [])]));
           const docRef = await addDoc(collection(db, 'chatRooms'), {
@@ -806,7 +853,7 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
         }
       });
     }
-  }, [tripId, trip?.id, trip?.chatRoomId, isAuthor, isMember, user?.uid]);
+  }, [tripId, trip?.id, trip?.chatRoomId, isAuthor, isMember, user?.uid, trip?.endDate]);
 
   if (isEditingFull && trip) {
     return <CreateTripView editingTrip={trip} onCancel={() => setIsEditingFull(false)} />;
@@ -817,6 +864,12 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
   const handleOpenGroupChat = async () => {
     if (!user || !tripId || !trip) return;
     
+    const deletionInfo = getTripDeletionInfo(trip.endDate);
+    if (deletionInfo?.isExpired) {
+      alert('【群聊已失效】此旅程結束已超過 14 天，該「群組」聊天室已自動刪除並永久清理！');
+      return;
+    }
+
     const path = `chatRooms`;
     try {
       let roomId = trip.chatRoomId;
@@ -940,7 +993,7 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
         <button onClick={onBack} className="text-apple-gray-400 p-1"><ArrowLeft size={24} /></button>
         <h1 className="text-lg font-bold tracking-tight">旅伴詳情</h1>
         <div className="flex items-center gap-1">
-          {(isMember || isAuthor) && (
+          {(isMember || isAuthor) && !getTripDeletionInfo(trip?.endDate)?.isExpired && chatRoomExists && (
             <button 
               onClick={handleOpenGroupChat} 
               className="text-apple-gray-400 p-2 hover:bg-apple-gray-50 rounded-full transition-colors relative"
@@ -1435,21 +1488,14 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
               ) : (
                 <div className="space-y-6">
                   {/* Search bar */}
-                  <div className="flex gap-2">
-                    <input 
-                      type="text" 
+                  <div className="w-full">
+                    <GlassSearchInput
                       placeholder="搜尋 ID..."
                       value={searchMemberId}
                       onChange={e => setSearchMemberId(e.target.value)}
-                      className="flex-1 bg-apple-gray-50 rounded-xl px-4 text-sm focus:outline-none h-11"
+                      onSearchClick={handleSearchMembers}
+                      onClear={() => setSearchMemberId('')}
                     />
-                    <button 
-                      onClick={handleSearchMembers}
-                      disabled={isSearchingMembers}
-                      className="bg-apple-gray-600 text-white px-4 py-2 rounded-xl text-sm font-bold"
-                    >
-                      搜尋
-                    </button>
                   </div>
 
                   {searchMemberResult && (
@@ -1680,17 +1726,14 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
           placeholder="對這趟旅程感興趣嗎？留個言吧..."
           className="flex-1 h-11 bg-apple-gray-50 rounded-2xl px-4 text-sm focus:outline-none focus:ring-1 focus:ring-apple-gray-100 transition-all font-medium"
         />
-        <button 
+        <GlassSendButton
           onClick={handlePostComment}
           disabled={!newComment.trim() || isPostingComment}
-          className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${newComment.trim() && !isPostingComment ? 'bg-apple-blue text-white shadow-apple-sm' : 'bg-apple-gray-50 text-apple-gray-200'}`}
-        >
-          {isPostingComment ? (
-            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-          ) : (
-            <Send size={18} strokeWidth={3} />
-          )}
-        </button>
+          isSending={isPostingComment}
+          size="lg"
+          iconType="arrow"
+          title="發送留言"
+        />
       </div>
 
       <ItineraryManager 

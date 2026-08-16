@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
 import { AnimatePresence, motion } from 'motion/react';
 import { LogIn } from 'lucide-react';
+import { db } from './lib/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 import { HomeView } from './pages/Home';
 import { TravelBarView } from './pages/TravelBar';
@@ -18,11 +20,33 @@ const AppContent = () => {
   const { user, loading, login } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
   const [selectedChatRoomId, setSelectedChatRoomId] = useState<string | null>(null);
+  const [hasUnreadChat, setHasUnreadChat] = useState(false);
   
   // Detail views stack
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [viewingUserPostsId, setViewingUserPostsId] = useState<string | null>(null);
+
+  // Listen for unread chat messages
+  useEffect(() => {
+    if (!user?.uid) {
+      setHasUnreadChat(false);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'chatRooms'),
+      where('unreadBy', 'array-contains', user.uid)
+    );
+
+    const unsub = onSnapshot(q, (snapshot) => {
+      setHasUnreadChat(!snapshot.empty);
+    }, (err) => {
+      console.warn('Unread chat rooms listener warning:', err);
+    });
+
+    return () => unsub();
+  }, [user?.uid]);
 
   const handleOpenChat = (roomId: string) => {
     setSelectedChatRoomId(roomId);
@@ -89,7 +113,13 @@ const AppContent = () => {
           }}
         />
       );
-      case 'notifications': return <NotificationsPage onTripClick={setSelectedTripId} onUserClick={setSelectedUserId} />;
+      case 'notifications': return (
+        <NotificationsPage 
+          onTripClick={setSelectedTripId} 
+          onUserClick={setSelectedUserId} 
+          onChatClick={handleOpenChat}
+        />
+      );
       case 'profile': return (
         <ProfilePage 
           onMyPostsClick={() => setViewingUserPostsId(user?.uid || null)} 
@@ -118,7 +148,7 @@ const AppContent = () => {
           </motion.div>
         </AnimatePresence>
       </div>
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} hasUnreadChat={hasUnreadChat} />
 
       {/* Full screen overlays with layered Z-indices */}
       <AnimatePresence>

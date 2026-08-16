@@ -29,17 +29,17 @@ if (typeof window !== 'undefined') {
     true
   );
 
-  window.addEventListener(
-    'error',
-    (event) => {
-      if (isExtensionError(event.error) || isExtensionError(event.message)) {
-        event.preventDefault();
-        event.stopImmediatePropagation?.();
-        console.warn('Suppressed browser extension error:', event.message);
-      }
-    },
-    true
-  );
+  const originalOnError = window.onerror;
+  window.onerror = function (message, source, lineno, colno, error) {
+    if (isExtensionError(message) || isExtensionError(error) || isExtensionError(source)) {
+      console.warn('Suppressed browser extension window.onerror:', message);
+      return true; // Prevents error reporting
+    }
+    if (originalOnError) {
+      return originalOnError.apply(this, arguments as any);
+    }
+    return false;
+  };
 }
 
 createRoot(document.getElementById('root')!).render(

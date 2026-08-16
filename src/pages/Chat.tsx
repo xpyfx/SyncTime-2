@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Search, UserPlus, Send, ArrowLeft, Users, Plane, Image as ImageIcon, Video, Plus, X, Lock, Play, Camera, ShieldCheck, Download, ChevronLeft, ChevronRight, ArrowUp, FileText, MapPin, Calendar, Wallet, BarChart2, Dices, Sparkles, Navigation, DollarSign, Vote, CheckCircle2, Trash2, Clock, Check, MessageCircle, CreditCard, Tag, Calculator, Folder, Link as LinkIcon, ExternalLink, FileDown, Eye, Menu } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where, doc, getDoc, getDocs, updateDoc, arrayUnion, limit, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where, doc, getDoc, getDocs, updateDoc, arrayUnion, arrayRemove, limit, deleteDoc } from 'firebase/firestore';
 import { ChatRoom, Message, UserProfile, PollData, PollOption, LuckyDrawData, ExpenseData, SettlementData, SettlementItem, SettlementExpenseDetail, SettlementPayerTotal, Trip, ItineraryCardData, ItineraryCardDay, ItineraryCardActivity, LocationData } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
+import { GlassSearchInput } from '../components/GlassSearchInput';
+import { GlassSendButton } from '../components/GlassSendButton';
 
 export interface TripDeletionInfo {
   isGroupTripEnded: boolean;
@@ -19,8 +21,9 @@ export interface TripDeletionInfo {
 export function getTripDeletionInfo(endDateStr: string | undefined): TripDeletionInfo | null {
   if (!endDateStr) return null;
 
-  const cleanStr = endDateStr.replace(/\//g, '-').trim();
-  const parts = cleanStr.split('-');
+  const cleanStr = String(endDateStr).replace(/\./g, '-').replace(/\//g, '-').trim();
+  const dateOnly = cleanStr.split('T')[0];
+  const parts = dateOnly.split('-');
   if (parts.length < 3) return null;
 
   const year = parseInt(parts[0], 10);
@@ -63,19 +66,137 @@ export function getTripDeletionInfo(endDateStr: string | undefined): TripDeletio
   };
 }
 
+const deletingRoomsSet = new Set<string>();
+
 export const deleteChatRoomAndMessages = async (roomId: string, tripId?: string) => {
+  if (!roomId || deletingRoomsSet.has(roomId)) return;
+  deletingRoomsSet.add(roomId);
   try {
     const msgsSnap = await getDocs(collection(db, 'chatRooms', roomId, 'messages'));
-    for (const d of msgsSnap.docs) {
-      await deleteDoc(d.ref).catch(() => {});
-    }
+    const deletePromises = msgsSnap.docs.map(d => deleteDoc(d.ref).catch(() => {}));
+    await Promise.all(deletePromises);
+
     await deleteDoc(doc(db, 'chatRooms', roomId)).catch(() => {});
     if (tripId) {
       await updateDoc(doc(db, 'trips', tripId), { chatRoomId: '' }).catch(() => {});
+    } else {
+      const q = query(collection(db, 'trips'), where('chatRoomId', '==', roomId));
+      const s = await getDocs(q);
+      s.docs.forEach(d => {
+        updateDoc(d.ref, { chatRoomId: '' }).catch(() => {});
+      });
     }
   } catch (err) {
     console.error('Failed to delete chat room:', err);
+  } finally {
+    deletingRoomsSet.delete(roomId);
   }
+};
+
+interface CountdownBadgeProps {
+  endDate?: string;
+  onExpire?: () => void;
+  size?: 'sm' | 'md';
+}
+
+export const CountdownBadge: React.FC<CountdownBadgeProps> = ({ endDate, onExpire, size = 'sm' }) => {
+  const [countdownText, setCountdownText] = useState<string | null>(null);
+  const [isActive, setIsActive] = useState<boolean>(false);
+  const hasExpiredRef = useRef(false);
+  const onExpireRef = useRef(onExpire);
+
+  useEffect(() => {
+    onExpireRef.current = onExpire;
+  }, [onExpire]);
+
+  useEffect(() => {
+    if (!endDate) {
+      setCountdownText(null);
+      setIsActive(false);
+      return;
+    }
+
+    const checkAndSet = () => {
+      const info = getTripDeletionInfo(endDate);
+      if (!info || !info.isCountdownActive) {
+        setIsActive(false);
+        setCountdownText(null);
+        return;
+      }
+
+      if (info.isExpired) {
+        setIsActive(false);
+        if (!hasExpiredRef.current) {
+          hasExpiredRef.current = true;
+          if (onExpireRef.current) onExpireRef.current();
+        }
+        return;
+      }
+
+      setIsActive(true);
+      setCountdownText(info.formattedCountdown);
+    };
+
+    checkAndSet();
+    const timer = setInterval(checkAndSet, 1000);
+    return () => clearInterval(timer);
+  }, [endDate]);
+
+  if (!isActive || !countdownText) return null;
+
+  if (size === 'sm') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200/90 px-1.5 py-0.5 rounded-md flex-shrink-0 whitespace-nowrap tabular-nums select-none leading-none">
+        <Clock size={10} className="stroke-[2.5] flex-shrink-0 text-red-500" />
+        <span>倒數 {countdownText}</span>
+      </span>
+    );
+  }
+
+  return (
+    <div 
+      className="inline-flex items-center gap-1 text-[11px] font-bold text-red-600 bg-red-50 border border-red-200/90 px-2 py-0.5 rounded-full shadow-2xs flex-shrink-0 whitespace-nowrap tabular-nums select-none leading-tight"
+      title="旅程結束已超過 14 天將自動刪除並永久清空此群組聊天室"
+    >
+      <Clock size={12} className="stroke-[2.5] flex-shrink-0 text-red-500" />
+      <span>倒數 {countdownText}</span>
+    </div>
+  );
+};
+
+const GroupDeletionBanner: React.FC<{ endDate?: string }> = ({ endDate }) => {
+  const [info, setInfo] = useState(() => getTripDeletionInfo(endDate));
+
+  useEffect(() => {
+    if (!endDate) return;
+    const update = () => {
+      setInfo(getTripDeletionInfo(endDate));
+    };
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [endDate]);
+
+  if (!info || !info.isCountdownActive || info.isExpired) return null;
+
+  return (
+    <div className="mx-auto max-w-md w-full my-3 p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-500/15 to-orange-500/10 border border-amber-500/30 text-amber-950 shadow-2xs flex items-start gap-3 text-xs font-semibold leading-relaxed text-left flex-shrink-0">
+      <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center flex-shrink-0 mt-0.5">
+        <Clock size={18} className="stroke-[2.5]" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+          <span className="text-amber-900 font-extrabold text-xs">【聊天室自動刪除預告】</span>
+          <span className="text-[11px] font-bold text-red-600 bg-red-100/80 px-2 py-0.5 rounded-full border border-red-200/80 tabular-nums flex-shrink-0 whitespace-nowrap">
+            倒數 {info.formattedCountdown}
+          </span>
+        </div>
+        <p className="text-amber-900/90 text-xs font-medium leading-relaxed">
+          旅程已經圓滿結束！為保護個人隱私與系統資源，本「群組」聊天室將於 14 天後自動刪除並永久清空對話，請務必提早下載或儲存相片與行程資料。
+        </p>
+      </div>
+    </div>
+  );
 };
 
 interface ChatRoomItemProps {
@@ -86,52 +207,36 @@ interface ChatRoomItemProps {
 const ChatRoomItem: React.FC<ChatRoomItemProps> = ({ room, onClick }) => {
   const { user } = useAuth();
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
-  const [deletionInfo, setDeletionInfo] = useState<TripDeletionInfo | null>(null);
+  const [tripEndDate, setTripEndDate] = useState<string | undefined>(undefined);
   const isGroup = room.type === 'group';
   const otherId = room.participants.find(id => id !== user?.uid);
 
   useEffect(() => {
     if (!isGroup && otherId) {
       getDoc(doc(db, 'users', otherId)).then(s => s.exists() && setOtherUser(s.data() as UserProfile));
-    } else if (isGroup && room.tripId) {
-      getDoc(doc(db, 'trips', room.tripId)).then(s => {
-        if (s.exists()) {
-          const t = s.data() as Trip;
-          if (t.endDate) {
-            const info = getTripDeletionInfo(t.endDate);
-            setDeletionInfo(info);
-            if (info && info.isExpired) {
-              deleteChatRoomAndMessages(room.id, room.tripId);
-            }
+    } else if (isGroup) {
+      if (room.tripId) {
+        getDoc(doc(db, 'trips', room.tripId)).then(s => {
+          if (s.exists()) {
+            const t = s.data() as Trip;
+            setTripEndDate(t.endDate);
           }
-        }
-      }).catch(console.error);
+        }).catch(console.error);
+      } else {
+        getDoc(doc(db, 'trips', room.id)).then(s => {
+          if (s.exists()) {
+            setTripEndDate((s.data() as Trip).endDate);
+          } else {
+            getDocs(query(collection(db, 'trips'), where('chatRoomId', '==', room.id))).then(qs => {
+              if (!qs.empty) {
+                setTripEndDate((qs.docs[0].data() as Trip).endDate);
+              }
+            }).catch(console.error);
+          }
+        }).catch(console.error);
+      }
     }
   }, [otherId, isGroup, room.tripId, room.id]);
-
-  useEffect(() => {
-    if (!isGroup || !deletionInfo?.isCountdownActive) return;
-    const timer = setInterval(() => {
-      if (deletionInfo?.deletionTime) {
-        const remainingMs = Math.max(0, deletionInfo.deletionTime.getTime() - Date.now());
-        if (remainingMs <= 0) {
-          deleteChatRoomAndMessages(room.id, room.tripId);
-        } else {
-          const totalSec = Math.floor(remainingMs / 1000);
-          const days = Math.floor(totalSec / (24 * 3600));
-          const hours = Math.floor((totalSec % (24 * 3600)) / 3600);
-          const minutes = Math.floor((totalSec % 3600) / 60);
-          const seconds = totalSec % 60;
-          const pad = (n: number) => n.toString().padStart(2, '0');
-          setDeletionInfo(prev => prev ? {
-            ...prev,
-            formattedCountdown: `${days}天 ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
-          } : null);
-        }
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [isGroup, deletionInfo?.isCountdownActive, room.id, room.tripId]);
 
   const formatTime = (time: any) => {
     if (!time) return '';
@@ -144,11 +249,11 @@ const ChatRoomItem: React.FC<ChatRoomItemProps> = ({ room, onClick }) => {
   };
 
   return (
-    <div onClick={onClick} className="flex gap-4 p-4 active:bg-apple-gray-50 transition-colors cursor-pointer border-b border-apple-gray-50">
-      <div className="w-14 h-14 rounded-full bg-apple-gray-100 flex-shrink-0 overflow-hidden flex items-center justify-center">
+    <div onClick={onClick} className="flex gap-3.5 p-4 active:bg-apple-gray-50 transition-colors cursor-pointer border-b border-apple-gray-100/70 items-center">
+      <div className="w-13 h-13 rounded-full bg-apple-gray-100 flex-shrink-0 overflow-hidden flex items-center justify-center border border-apple-gray-200/50">
         {isGroup ? (
           <div className="bg-apple-blue/10 w-full h-full flex items-center justify-center text-apple-blue">
-            <Users size={28} />
+            <Users size={26} />
           </div>
         ) : otherUser?.avatarUrl ? (
           <img src={otherUser.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
@@ -158,24 +263,26 @@ const ChatRoomItem: React.FC<ChatRoomItemProps> = ({ room, onClick }) => {
           </div>
         )}
       </div>
+
       <div className="flex-1 min-w-0 flex flex-col justify-center">
-        <div className="flex justify-between items-baseline mb-1">
+        <div className="flex justify-between items-center gap-2 mb-1">
           <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <h3 className="font-semibold text-sm truncate">
+            <h3 className="font-semibold text-sm text-apple-gray-900 truncate min-w-0">
               {isGroup ? room.name : (otherUser?.displayName || '載入中...')}
             </h3>
-            {isGroup && deletionInfo?.isCountdownActive && !deletionInfo?.isExpired && (
-              <span className="text-[10px] font-extrabold text-red-600 bg-red-50 border border-red-200/80 px-1.5 py-0.5 rounded-md flex items-center gap-1 animate-pulse flex-shrink-0">
-                <Clock size={10} className="stroke-[2.5]" />
-                <span>倒數 {deletionInfo.formattedCountdown}</span>
-              </span>
+            {isGroup && tripEndDate && (
+              <CountdownBadge 
+                endDate={tripEndDate} 
+                onExpire={() => deleteChatRoomAndMessages(room.id, room.tripId)} 
+                size="sm" 
+              />
             )}
           </div>
-          <span className="text-[10px] text-apple-gray-300 ml-2 flex-shrink-0">
+          <span className="text-[10px] text-apple-gray-400 font-medium ml-1 flex-shrink-0 whitespace-nowrap">
             {formatTime(room.lastUpdatedAt)}
           </span>
         </div>
-        <p className="text-xs text-apple-gray-400 truncate font-light">{room.lastMessage || '尚無訊息'}</p>
+        <p className="text-xs text-apple-gray-400 truncate font-light leading-snug">{room.lastMessage || '尚無訊息'}</p>
       </div>
     </div>
   );
@@ -1999,44 +2106,41 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
   const [selectedDayNumbers, setSelectedDayNumbers] = useState<number[]>([]);
   const [itineraryTitle, setItineraryTitle] = useState('東京精華之旅');
   const [itineraryDetail, setItineraryDetail] = useState('');
-  const [deletionInfo, setDeletionInfo] = useState<TripDeletionInfo | null>(null);
 
   const isGroupRoom = Boolean(room?.tripId) || room?.type === 'group';
 
-  // Automatically fetch group trip data when room.tripId exists
+  // Automatically fetch group trip data when room exists
   useEffect(() => {
-    if (!room?.tripId) return;
-    getDoc(doc(db, 'trips', room.tripId)).then(snap => {
-      if (snap.exists()) {
-        const t = { id: snap.id, ...snap.data() } as Trip;
-        setCurrentTrip(t);
-      }
-    }).catch(err => console.error('Error fetching group trip for chat room:', err));
-  }, [room?.tripId]);
+    if (room?.type !== 'group') return;
 
-  // Realtime ticker for group trip deletion countdown
-  useEffect(() => {
-    if (!isGroupRoom || !currentTrip?.endDate) {
-      setDeletionInfo(null);
-      return;
-    }
-
-    const updateInfo = async () => {
-      const info = getTripDeletionInfo(currentTrip.endDate);
-      setDeletionInfo(info);
-
-      if (info && info.isExpired) {
-        console.log('Group chat room expired (>14 days post trip end). Auto deleting...');
-        await deleteChatRoomAndMessages(roomId, room?.tripId);
-        alert('【聊天室自動刪除】此旅程結束已超過 14 天，該「群組」聊天室已自動刪除並永久清空！');
-        onBack();
+    const findTrip = async () => {
+      try {
+        if (room.tripId) {
+          const snap = await getDoc(doc(db, 'trips', room.tripId));
+          if (snap.exists()) {
+            setCurrentTrip({ id: snap.id, ...snap.data() } as Trip);
+            return;
+          }
+        }
+        // Fallback 1: check doc(db, 'trips', room.id)
+        const snapDirect = await getDoc(doc(db, 'trips', room.id));
+        if (snapDirect.exists()) {
+          setCurrentTrip({ id: snapDirect.id, ...snapDirect.data() } as Trip);
+          return;
+        }
+        // Fallback 2: query trips by chatRoomId == room.id
+        const q = query(collection(db, 'trips'), where('chatRoomId', '==', room.id));
+        const qs = await getDocs(q);
+        if (!qs.empty) {
+          setCurrentTrip({ id: qs.docs[0].id, ...qs.docs[0].data() } as Trip);
+        }
+      } catch (err) {
+        console.error('Error fetching group trip for chat room:', err);
       }
     };
 
-    updateInfo();
-    const timer = setInterval(updateInfo, 1000);
-    return () => clearInterval(timer);
-  }, [isGroupRoom, currentTrip?.endDate, roomId, room?.tripId, onBack]);
+    findTrip();
+  }, [room?.tripId, room?.id, room?.type]);
 
   // Fetch trip data associated with current chat room or user
   useEffect(() => {
@@ -2124,6 +2228,83 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
     setItineraryTitle(defaultTitle);
   };
 
+  const updateRoomAndNotifyRecipients = async (
+    targetRoomId: string,
+    lastMsgText: string,
+    senderId?: string
+  ) => {
+    const sId = senderId || user?.uid;
+    if (!sId || !targetRoomId) return;
+
+    let recipientIds: string[] = [];
+
+    if (room?.participants) {
+      recipientIds = room.participants.filter(id => id !== sId);
+    }
+
+    if (currentTrip) {
+      const tripMembers = [currentTrip.authorId, ...(currentTrip.members || [])];
+      tripMembers.forEach(mId => {
+        if (mId && mId !== sId && !recipientIds.includes(mId)) {
+          recipientIds.push(mId);
+        }
+      });
+    }
+
+    if (recipientIds.length === 0) {
+      try {
+        const roomSnap = await getDoc(doc(db, 'chatRooms', targetRoomId));
+        if (roomSnap.exists()) {
+          const rData = roomSnap.data() as ChatRoom;
+          if (rData.participants) {
+            recipientIds = rData.participants.filter(id => id !== sId);
+          }
+        }
+      } catch (e) {
+        console.warn('Error fetching room for recipients:', e);
+      }
+    }
+
+    // 1. Update room document with lastMessage, lastSenderId, lastUpdatedAt, unreadBy
+    try {
+      const roomRef = doc(db, 'chatRooms', targetRoomId);
+      if (recipientIds.length > 0) {
+        await updateDoc(roomRef, {
+          lastMessage: lastMsgText,
+          lastSenderId: sId,
+          lastUpdatedAt: serverTimestamp(),
+          unreadBy: arrayUnion(...recipientIds)
+        });
+      } else {
+        await updateDoc(roomRef, {
+          lastMessage: lastMsgText,
+          lastSenderId: sId,
+          lastUpdatedAt: serverTimestamp()
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to update room unreadBy:', err);
+    }
+
+    // 2. Add notification record for each recipient
+    for (const toId of recipientIds) {
+      try {
+        await addDoc(collection(db, 'notifications'), {
+          type: 'chat_message',
+          fromId: sId,
+          toId: toId,
+          tripId: room?.tripId || currentTrip?.id || '',
+          roomId: targetRoomId,
+          messageSnippet: lastMsgText,
+          status: 'pending',
+          createdAt: new Date().toISOString()
+        });
+      } catch (e) {
+        console.warn('Failed to send chat notification:', e);
+      }
+    }
+  };
+
   const handleSendTripItineraryCard = async () => {
     const tripTitle = currentTrip
       ? `${currentTrip.country} ${currentTrip.cities?.join(' ')} 行程`
@@ -2187,10 +2368,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
         createdAt: new Date().toISOString()
       });
 
-      await updateDoc(doc(db, 'chatRooms', roomId), {
-        lastMessage: `🗓️ 行程卡：${tripTitle}`,
-        lastUpdatedAt: serverTimestamp()
-      });
+      await updateRoomAndNotifyRecipients(roomId, `🗓️ 行程卡：${tripTitle}`, user?.uid);
 
       setShowItineraryModal(false);
     } catch (e) {
@@ -2339,10 +2517,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
         createdAt: new Date().toISOString()
       });
 
-      await updateDoc(doc(db, 'chatRooms', roomId), {
-        lastMessage: summaryText,
-        lastUpdatedAt: serverTimestamp()
-      });
+      await updateRoomAndNotifyRecipients(roomId, summaryText, user?.uid);
 
       // Reset
       setExpenseTitle('');
@@ -2532,10 +2707,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
         createdAt: new Date().toISOString()
       });
 
-      await updateDoc(doc(db, 'chatRooms', roomId), {
-        lastMessage: summaryText,
-        lastUpdatedAt: serverTimestamp()
-      });
+      await updateRoomAndNotifyRecipients(roomId, summaryText, user?.uid);
 
       setShowExpenseModal(false);
     } catch (e) {
@@ -2610,10 +2782,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
         poll: pollData,
         createdAt: new Date().toISOString()
       });
-      await updateDoc(doc(db, 'chatRooms', roomId), {
-        lastMessage: `📊 投票：${pollQuestion.trim()}`,
-        lastUpdatedAt: serverTimestamp()
-      });
+      await updateRoomAndNotifyRecipients(roomId, `📊 投票：${pollQuestion.trim()}`, user?.uid);
 
       // Reset form
       setPollQuestion('');
@@ -2730,10 +2899,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
         text: msgText,
         createdAt: new Date().toISOString()
       });
-      await updateDoc(doc(db, 'chatRooms', roomId), {
-        lastMessage: msgText,
-        lastUpdatedAt: serverTimestamp()
-      });
+      await updateRoomAndNotifyRecipients(roomId, msgText, user?.uid);
     } catch (e) {
       console.error('Error sending message:', e);
     }
@@ -2786,10 +2952,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
           createdAt: new Date().toISOString()
         });
 
-        await updateDoc(doc(db, 'chatRooms', roomId), {
-          lastMessage: `[PDF 檔案] ${file.name}`,
-          lastUpdatedAt: serverTimestamp()
-        });
+        await updateRoomAndNotifyRecipients(roomId, `[PDF 檔案] ${file.name}`, user?.uid);
 
         setIsSending(false);
       };
@@ -2848,10 +3011,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
               createdAt: new Date().toISOString()
             });
 
-            await updateDoc(doc(db, 'chatRooms', roomId), {
-              lastMessage: `🎲 抽籤【${drawTopic || '隨機抽籤'}】🎉 幸運兒：${finalPick.join('、')}`,
-              lastUpdatedAt: serverTimestamp()
-            });
+            await updateRoomAndNotifyRecipients(roomId, `🎲 抽籤【${drawTopic || '隨機抽籤'}】🎉 幸運兒：${finalPick.join('、')}`, user.uid);
           } catch (e) {
             console.error('Failed to auto send draw result:', e);
           }
@@ -2905,6 +3065,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
         location: locObj,
         createdAt: serverTimestamp()
       });
+      await updateRoomAndNotifyRecipients(roomId, `📍 地點：${name}`, user.uid);
     } catch (err) {
       console.error("Failed to send location message:", err);
     }
@@ -3072,30 +3233,70 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
     scrollToBottom();
   }, [messages]);
 
+  const onBackRef = useRef(onBack);
   useEffect(() => {
-    getDoc(doc(db, 'chatRooms', roomId)).then(async s => {
-      if (s.exists()) {
-        const rData = s.data() as ChatRoom;
-        setRoom(rData);
-        
-        // Fetch labels for all participants
-        const profiles: {[key: string]: UserProfile} = {};
-        for (const pId of rData.participants) {
-          const uS = await getDoc(doc(db, 'users', pId));
-          if (uS.exists()) {
-            profiles[pId] = uS.data() as UserProfile;
-          }
-        }
-        setParticipantProfiles(profiles);
+    onBackRef.current = onBack;
+  }, [onBack]);
+
+  useEffect(() => {
+    if (!roomId) return;
+
+    const unsubRoom = onSnapshot(doc(db, 'chatRooms', roomId), async (s) => {
+      if (!s.exists()) {
+        onBackRef.current?.();
+        return;
       }
+      const rData = { id: s.id, ...s.data() } as ChatRoom;
+      setRoom(rData);
+
+      const profiles: {[key: string]: UserProfile} = {};
+      for (const pId of rData.participants) {
+        const uS = await getDoc(doc(db, 'users', pId));
+        if (uS.exists()) {
+          profiles[pId] = uS.data() as UserProfile;
+        }
+      }
+      setParticipantProfiles(profiles);
+    }, (err) => {
+      console.warn('Chat room snapshot listener error:', err);
+      onBackRef.current?.();
     });
 
     const q = query(collection(db, 'chatRooms', roomId, 'messages'), orderBy('createdAt', 'asc'));
-    return onSnapshot(q, (s) => {
+    const unsubMsgs = onSnapshot(q, (s) => {
       const mapped = s.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
       setMessages(mapped);
+    }, (err) => {
+      console.warn('Messages snapshot listener error:', err);
     });
-  }, [roomId, user]);
+
+    return () => {
+      unsubRoom();
+      unsubMsgs();
+    };
+  }, [roomId]);
+
+  useEffect(() => {
+    if (!roomId || !user?.uid) return;
+
+    // Clear unread flag for current user in this room
+    updateDoc(doc(db, 'chatRooms', roomId), {
+      unreadBy: arrayRemove(user.uid)
+    }).catch(() => {});
+
+    // Mark pending chat notifications for this room and user as read
+    const qPendingNotifs = query(
+      collection(db, 'notifications'),
+      where('toId', '==', user.uid),
+      where('roomId', '==', roomId),
+      where('status', '==', 'pending')
+    );
+    getDocs(qPendingNotifs).then(snap => {
+      snap.docs.forEach(d => {
+        updateDoc(doc(db, 'notifications', d.id), { status: 'read' }).catch(() => {});
+      });
+    }).catch(() => {});
+  }, [roomId, user?.uid, messages.length]);
 
   const otherUser = room?.type !== 'group' ? (Object.values(participantProfiles) as UserProfile[]).find(p => p.uid !== user?.uid) : null;
 
@@ -3161,10 +3362,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
         lastMsgText = `[傳送了 ${mediaToSend.length} 個媒體內容]`;
       }
       
-      await updateDoc(doc(db, 'chatRooms', roomId), {
-        lastMessage: lastMsgText,
-        lastUpdatedAt: serverTimestamp()
-      });
+      await updateRoomAndNotifyRecipients(roomId, lastMsgText, user.uid);
     } catch (e) {
       console.error('Error sending message:', e);
       alert('訊息傳送失敗');
@@ -3290,8 +3488,8 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
   return (
     <div className="fixed inset-0 z-50 bg-white flex flex-col pt-12">
       <div className="px-4 py-2 border-b border-apple-gray-100 flex items-center justify-between bg-white sticky top-0 z-30">
-        <div className="flex items-center gap-2">
-          <button onClick={handleBackClick} className="p-1.5 -ml-1 flex items-center justify-center active:scale-95 transition-transform text-apple-gray-600 hover:text-apple-gray-900 cursor-pointer">
+        <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+          <button onClick={handleBackClick} className="p-1.5 -ml-1 flex items-center justify-center active:scale-95 transition-transform text-apple-gray-600 hover:text-apple-gray-900 cursor-pointer flex-shrink-0">
             <ArrowLeft size={22} />
           </button>
           
@@ -3314,7 +3512,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                 }
               }
             }}
-            className="flex items-center gap-2.5 hover:bg-apple-gray-50 p-1 rounded-xl transition-all cursor-pointer group text-left"
+            className="flex items-center gap-2.5 hover:bg-apple-gray-50 p-1 rounded-xl transition-all cursor-pointer group text-left min-w-0 flex-1"
             title={room?.type === 'group' ? '點擊跳轉至徵文詳情頁' : '點擊查看個人資料頁'}
           >
             <div className="w-8 h-8 rounded-full bg-apple-gray-100 overflow-hidden flex items-center justify-center border border-apple-gray-200 flex-shrink-0">
@@ -3326,25 +3524,27 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                  <span className="font-bold text-apple-gray-400 text-xs">{otherUser?.displayName?.[0] || '?'}</span>
                )}
             </div>
-            <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="font-semibold text-sm text-apple-gray-900 group-hover:text-[#0081d1] transition-colors flex items-center gap-1 truncate">
-                  {room?.type === 'group' ? room.name : (otherUser?.displayName || '載入中...')}
+            <div className="flex flex-col min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="font-semibold text-sm text-apple-gray-900 group-hover:text-[#0081d1] transition-colors flex items-center gap-1 truncate min-w-0 flex-shrink">
+                  <span className="truncate">{room?.type === 'group' ? room.name : (otherUser?.displayName || '載入中...')}</span>
                   <ChevronRight size={14} className="text-apple-gray-400 group-hover:text-[#0081d1] flex-shrink-0" />
                 </span>
                 
-                {/* Countdown Timer Badge on right of room name (Appears day after trip ends) */}
-                {isGroupRoom && deletionInfo?.isCountdownActive && !deletionInfo?.isExpired && (
-                  <div 
-                    className="flex items-center gap-1 text-[11px] font-extrabold text-red-600 bg-red-50 border border-red-200/90 px-2 py-0.5 rounded-full shadow-2xs animate-pulse flex-shrink-0"
-                    title="旅程已結束，聊天室倒數 14 天將自動刪除"
-                  >
-                    <Clock size={12} className="stroke-[2.5]" />
-                    <span>倒數 {deletionInfo.formattedCountdown}</span>
-                  </div>
+                {/* Countdown Timer Badge on right of room name */}
+                {isGroupRoom && currentTrip?.endDate && (
+                  <CountdownBadge 
+                    endDate={currentTrip.endDate} 
+                    onExpire={async () => {
+                      await deleteChatRoomAndMessages(roomId, room?.tripId);
+                      alert('【聊天室自動刪除】此旅程結束已超過 14 天，該「群組」聊天室已自動刪除並永久清空！');
+                      onBack();
+                    }} 
+                    size="md" 
+                  />
                 )}
               </div>
-              <span className="text-[10px] text-apple-gray-400 font-medium">
+              <span className="text-[10px] text-apple-gray-400 font-medium truncate">
                 {room?.type === 'group' ? '點擊查看徵文詳情' : '點擊查看個人主頁'}
               </span>
             </div>
@@ -3353,7 +3553,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
 
         <button 
           onClick={() => setShowArchiveDrawer(true)}
-          className="w-9 h-9 rounded-xl bg-apple-gray-50 hover:bg-[#0081d1]/10 text-apple-gray-700 hover:text-[#0081d1] flex items-center justify-center transition-all cursor-pointer border border-apple-gray-200/60 active:scale-95"
+          className="w-9 h-9 rounded-xl bg-apple-gray-50 hover:bg-[#0081d1]/10 text-apple-gray-700 hover:text-[#0081d1] flex items-center justify-center transition-all cursor-pointer border border-apple-gray-200/60 active:scale-95 flex-shrink-0"
           title="聊天室選單 & 紀錄庫 (照片、檔案、連結、地點、分帳、抽籤、行程)"
         >
           <Menu size={20} className="stroke-[2.2]" />
@@ -3363,15 +3563,8 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3.5 no-scrollbar bg-[#FAFAFA]">
         {/* Automatic Deletion Notice Banner for Group Chat */}
-        {isGroupRoom && deletionInfo?.isCountdownActive && !deletionInfo?.isExpired && (
-          <div className="mx-auto max-w-sm my-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 shadow-2xs flex items-start gap-2.5 text-xs font-semibold leading-relaxed text-left">
-            <Clock size={18} className="text-amber-600 flex-shrink-0 mt-0.5 stroke-[2.2]" />
-            <div className="flex-1">
-              <p className="text-amber-900 text-xs font-bold leading-normal">
-                快樂的時光總是過得特別快！該聊天室將在14天後自動刪除，別忘了把重要資訊下載下來喔！
-              </p>
-            </div>
-          </div>
+        {isGroupRoom && currentTrip?.endDate && (
+          <GroupDeletionBanner endDate={currentTrip.endDate} />
         )}
         {messages.map((m, index) => {
           const isMe = m.senderId === user?.uid;
@@ -3550,16 +3743,16 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
       )}
 
       {/* Message input & actions area */}
-      <div className="p-3 safe-bottom border-t border-apple-gray-100 bg-white shadow-apple-sm">
-        <div className="flex items-center gap-2 bg-[#F3F5F7] rounded-full px-3 py-1.5 border border-apple-gray-100/80 focus-within:border-[#00C2D1]/40 focus-within:bg-white focus-within:shadow-xs transition-all">
+      <div className="p-3 safe-bottom border-t border-apple-gray-100 bg-white/80 backdrop-blur-md shadow-apple-sm">
+        <div className="flex items-center gap-2 glass-input-wrapper px-3 py-1.5 transition-all">
           {/* WhatsApp-style Plus (+) Button for Attachments */}
           <button 
             type="button"
             onClick={() => setShowAttachmentSheet(prev => !prev)}
             className={`w-8 h-8 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
               showAttachmentSheet 
-                ? 'bg-apple-gray-200 text-apple-gray-800 rotate-45' 
-                : 'text-apple-gray-500 hover:text-apple-gray-800 hover:bg-black/5 active:scale-95'
+                ? 'bg-white/80 text-apple-gray-800 rotate-45 shadow-xs' 
+                : 'text-apple-gray-600 hover:text-apple-gray-800 hover:bg-white/40 active:scale-95'
             }`}
             title="附加選單"
           >
@@ -3570,23 +3763,20 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
             value={text} 
             onChange={e => setText(e.target.value)}
             placeholder="輸入訊息..."
-            className="flex-1 bg-transparent border-none text-sm text-[#2A2B2A] placeholder:text-apple-gray-400 focus:outline-none px-1 py-1"
+            className="flex-1 bg-transparent border-none text-sm text-[#2A2B2A] placeholder:text-apple-gray-400 focus:outline-none px-1 py-1 font-medium"
             onKeyDown={(e) => e.key === 'Enter' && sendMsg()}
           />
 
-          {/* Upward Arrow Send Button */}
-          <button 
+          {/* Frosted Glass Send Button */}
+          <GlassSendButton
             type="button"
-            onClick={sendMsg} 
+            onClick={sendMsg}
             disabled={isSending || (!text.trim() && draftMedia.length === 0)}
-            className={`w-9 h-9 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
-              isSending || (!text.trim() && draftMedia.length === 0)
-                ? 'bg-apple-gray-200 text-white cursor-not-allowed' 
-                : 'bg-[#00C2D1] text-white active:scale-95 shadow-xs hover:bg-[#00b0bd]'
-            }`}
-          >
-            <ArrowUp size={20} className={`stroke-[2.5] ${isSending ? 'animate-pulse' : ''}`} />
-          </button>
+            isSending={isSending}
+            size="md"
+            iconType="arrow"
+            title="發送訊息"
+          />
         </div>
       </div>
 
@@ -3756,22 +3946,13 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
               </div>
 
               {/* Search Bar with Clear Button */}
-              <div className="relative mb-2 flex-shrink-0">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-apple-gray-400" />
-                <input
+              <div className="mb-2 flex-shrink-0">
+                <GlassSearchInput
                   value={locationSearchQuery}
                   onChange={e => setLocationSearchQuery(e.target.value)}
                   placeholder="搜尋景點、地標或地址 (如: taipei 101, 東京鐵塔)"
-                  className="w-full h-10 bg-apple-gray-50 rounded-xl pl-9 pr-8 text-xs focus:outline-none focus:bg-white border border-transparent focus:border-[#10B981] transition-all font-medium"
+                  onClear={() => setLocationSearchQuery('')}
                 />
-                {locationSearchQuery && (
-                  <button 
-                    onClick={() => setLocationSearchQuery('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-apple-gray-400 hover:text-apple-gray-600 p-0.5 rounded-full bg-apple-gray-200/50"
-                  >
-                    <X size={12} />
-                  </button>
-                )}
               </div>
 
               {/* Category Filter Pills */}
@@ -3938,14 +4119,12 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                     </div>
 
                     {/* Search Bar for 1-on-1 Chat */}
-                    <div className="relative">
-                      <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
-                      <input 
-                        type="text"
+                    <div>
+                      <GlassSearchInput
                         value={searchTripQuery}
                         onChange={e => setSearchTripQuery(e.target.value)}
                         placeholder="搜尋您的旅程 (國家、城市)..."
-                        className="w-full h-9 bg-slate-100 rounded-xl pl-8 pr-3 text-xs focus:outline-none focus:bg-white focus:ring-1 focus:ring-[#F43F5E] font-medium text-slate-800"
+                        onClear={() => setSearchTripQuery('')}
                       />
                     </div>
 
@@ -5523,6 +5702,8 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
         return getTime(b.lastUpdatedAt) - getTime(a.lastUpdatedAt);
       });
       setRooms(mapped);
+    }, (err) => {
+      console.warn('Chat rooms list snapshot listener error:', err);
     });
   }, [user]);
 
@@ -5665,21 +5846,14 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
               <button onClick={() => setShowSearch(false)} className="text-apple-gray-600 font-medium">關閉</button>
             </div>
             <div className="p-4 space-y-4">
-              <div className="flex gap-2">
-                <input 
-                  type="text" 
+              <div className="w-full">
+                <GlassSearchInput
                   placeholder="輸入用戶 ID / Username"
                   value={searchId}
                   onChange={e => setSearchId(e.target.value)}
-                  className="flex-1 bg-apple-gray-50 rounded-xl px-4 text-sm focus:outline-none h-11 border border-apple-gray-100"
+                  onSearchClick={handleSearch}
+                  onClear={() => setSearchId('')}
                 />
-                <button 
-                  onClick={handleSearch}
-                  disabled={isSearching}
-                  className="bg-apple-gray-600 text-white px-4 py-2 rounded-xl text-sm font-bold"
-                >
-                  搜尋
-                </button>
               </div>
 
               {searchResult && (
@@ -5768,29 +5942,17 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
       </div>
 
       {/* Top Search Input Bar */}
-      <div className="p-4 bg-white border-b border-apple-gray-50">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-apple-gray-300" size={16} />
-          <input 
-            type="text" 
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder={
-              activeTab === 'friends' ? '搜尋好友名稱或 @username' :
-              activeTab === 'chat' ? '搜尋好友或聊天記錄' :
-              '搜尋旅友群組記錄'
-            } 
-            className="w-full h-10 bg-apple-gray-50 rounded-xl pl-11 pr-9 text-sm focus:outline-none focus:bg-white border border-apple-gray-100/60 font-medium placeholder:text-apple-gray-300 transition-colors" 
-          />
-          {searchQuery && (
-            <button 
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-apple-gray-300 hover:text-apple-gray-500"
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
+      <div className="p-4 bg-white/80 backdrop-blur-md border-b border-apple-gray-50">
+        <GlassSearchInput
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder={
+            activeTab === 'friends' ? '搜尋好友名稱或 @username' :
+            activeTab === 'chat' ? '搜尋好友或聊天記錄' :
+            '搜尋旅友群組記錄'
+          }
+          onClear={() => setSearchQuery('')}
+        />
       </div>
 
       {/* Tab Content List */}

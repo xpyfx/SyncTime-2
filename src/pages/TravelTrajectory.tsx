@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { doc, collection, getDocs, getDoc, addDoc, deleteDoc, query, where, writeBatch, updateDoc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { GlassSearchInput } from '../components/GlassSearchInput';
 import { Stay, UserProfile } from '../types';
 import EXIF from 'exif-js';
 import { Country, City } from 'country-state-city';
@@ -1676,17 +1677,13 @@ export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUser
                     <Globe size={12} className="text-apple-gray-400" />
                     <span>旅遊國家 (英文國家資料庫)</span>
                   </label>
-                  <div className="relative">
-                    <input 
-                      type="text"
+                  <div>
+                    <GlassSearchInput 
                       placeholder="輸入英文搜尋國家, 例如: Japan, Czechia..."
                       value={countryInput}
                       onChange={e => handleCountrySearch(e.target.value)}
-                      className="w-full bg-white border border-apple-gray-100 rounded-xl pl-9 pr-3 h-11 text-xs focus:outline-apple-blue font-bold shadow-inner"
+                      onClear={() => handleCountrySearch('')}
                     />
-                    <div className="absolute left-3 top-3.5 text-apple-gray-400">
-                      <Globe size={14} />
-                    </div>
                   </div>
 
                   {/* Country suggestions popup list */}
@@ -1714,18 +1711,14 @@ export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUser
                     <MapPin size={12} className="text-apple-gray-400" />
                     <span>旅遊城市 (與上方國家資料庫關聯)</span>
                   </label>
-                  <div className="relative">
-                    <input 
-                      type="text"
+                  <div>
+                    <GlassSearchInput 
                       placeholder={selectedCountryCode ? "輸入英文查詢城市..." : "請先選擇一個上方的國家"}
                       value={cityInput}
                       disabled={!selectedCountryCode}
                       onChange={e => handleCitySearch(e.target.value)}
-                      className="w-full bg-white border border-apple-gray-100 rounded-xl pl-9 pr-3 h-11 text-xs focus:outline-apple-blue font-bold shadow-inner disabled:bg-apple-gray-50 disabled:cursor-not-allowed"
+                      onClear={() => handleCitySearch('')}
                     />
-                    <div className="absolute left-3 top-3.5 text-apple-gray-400">
-                      <MapPin size={14} />
-                    </div>
                   </div>
 
                   {/* City suggestions list */}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { GlassSearchInput } from '../components/GlassSearchInput';
 import TravelTrajectory from './TravelTrajectory';
 import { 
   Settings, 
@@ -1670,21 +1671,14 @@ export const ProfilePage: React.FC<{
             
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 <div className="bg-apple-gray-50 rounded-2xl p-4 flex flex-col gap-3 border border-apple-gray-100">
-                  <div className="flex gap-2">
-                    <input 
-                      type="text" 
+                  <div className="w-full">
+                    <GlassSearchInput
                       placeholder="輸入用戶 ID"
                       value={searchId}
                       onChange={e => setSearchId(e.target.value)}
-                      className="flex-1 bg-white border border-apple-gray-100 rounded-xl px-4 text-sm focus:outline-none h-11"
+                      onSearchClick={handleSearch}
+                      onClear={() => setSearchId('')}
                     />
-                    <button 
-                      onClick={handleSearch}
-                      disabled={isSearching}
-                      className="bg-apple-gray-600 text-white px-4 py-2 rounded-xl text-sm font-bold active:scale-95 transition-transform"
-                    >
-                      {isSearching ? '搜尋器' : '搜尋'}
-                    </button>
                   </div>
 
                   {searchResult && (
@@ -2020,14 +2014,12 @@ export const ProfilePage: React.FC<{
             </div>
 
             {/* Search Bar */}
-            <div className="relative mb-4">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-apple-gray-300" />
-              <input 
-                type="text"
+            <div className="mb-4">
+              <GlassSearchInput 
                 placeholder="搜尋國家、城市、旅伴..."
                 value={tripsSearch}
                 onChange={e => setTripsSearch(e.target.value)}
-                className="w-full bg-apple-gray-50 border border-apple-gray-100 rounded-xl pl-9 pr-4 h-10 text-sm focus:outline-none"
+                onClear={() => setTripsSearch('')}
               />
             </div>
 
@@ -2095,14 +2087,12 @@ export const ProfilePage: React.FC<{
             </div>
 
             {/* Search Bar */}
-            <div className="relative mb-4">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-apple-gray-300" />
-              <input 
-                type="text"
+            <div className="mb-4">
+              <GlassSearchInput 
                 placeholder="搜尋國家、城市、旅伴..."
                 value={savedSearch}
                 onChange={e => setSavedSearch(e.target.value)}
-                className="w-full bg-apple-gray-50 border border-apple-gray-100 rounded-xl pl-9 pr-4 h-10 text-sm focus:outline-none"
+                onClear={() => setSavedSearch('')}
               />
             </div>
 
@@ -2150,14 +2140,12 @@ export const ProfilePage: React.FC<{
         {activeTab === 'friends' && (
           <div className="space-y-4">
             {/* Search Bar */}
-            <div className="relative mb-4">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-apple-gray-300" />
-              <input 
-                type="text"
+            <div className="mb-4">
+              <GlassSearchInput 
                 placeholder="搜尋好友姓名或 ID..."
                 value={friendsSearch}
                 onChange={e => setFriendsSearch(e.target.value)}
-                className="w-full bg-apple-gray-50 border border-apple-gray-100 rounded-xl pl-9 pr-4 h-10 text-sm focus:outline-none"
+                onClear={() => setFriendsSearch('')}
               />
             </div>
 
@@ -2241,14 +2229,12 @@ export const ProfilePage: React.FC<{
             </div>
 
             {/* Search Bar */}
-            <div className="relative mb-4">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-apple-gray-300" />
-              <input 
-                type="text"
+            <div className="mb-4">
+              <GlassSearchInput 
                 placeholder={postTab === 'recruitment' ? "搜尋國家、城市..." : "搜尋內容..."}
                 value={postsSearch}
                 onChange={e => setPostsSearch(e.target.value)}
-                className="w-full bg-apple-gray-50 border border-apple-gray-100 rounded-xl pl-9 pr-4 h-10 text-sm focus:outline-none"
+                onClear={() => setPostsSearch('')}
               />
             </div>
 

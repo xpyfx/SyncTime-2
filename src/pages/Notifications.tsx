@@ -18,8 +18,9 @@ import { Notification, UserProfile, Trip } from '../types';
 
 export const NotificationsPage: React.FC<{ 
   onTripClick: (id: string) => void,
-  onUserClick: (id: string) => void
-}> = ({ onTripClick, onUserClick }) => {
+  onUserClick: (id: string) => void,
+  onChatClick?: (roomId: string) => void
+}> = ({ onTripClick, onUserClick, onChatClick }) => {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<(Notification & { fromProfile?: UserProfile, trip?: Trip })[]>([]);
   const [loading, setLoading] = useState(true);
@@ -161,7 +162,13 @@ export const NotificationsPage: React.FC<{
           notifications.map(n => (
             <div 
               key={n.id} 
-              onClick={() => n.tripId && onTripClick(n.tripId)}
+              onClick={() => {
+                if (n.type === 'chat_message' && n.roomId && onChatClick) {
+                  onChatClick(n.roomId);
+                } else if (n.tripId) {
+                  onTripClick(n.tripId);
+                }
+              }}
               className={`flex items-start gap-3 p-4 rounded-2xl transition-all active:scale-[0.98] ${n.status === 'pending' ? 'bg-[#E6F5FF] border border-[#CCE8FF] shadow-apple-sm' : 'bg-white border border-apple-gray-100 shadow-apple-xs'}`}
             >
               <div 
@@ -193,7 +200,13 @@ export const NotificationsPage: React.FC<{
                   {n.type === 'trip_join_rejected' && ` 拒絕了你的 ${n.trip?.country || '旅程'} 申請。`}
                   {n.type === 'trip_member_removed' && ` 將你從 ${n.trip?.country || '旅程'} 中移除了。`}
                   {n.type === 'trip_member_exited' && ` 退出了你的 ${n.trip?.country || '旅程'}。`}
+                  {n.type === 'chat_message' && (n.trip ? `在 ${n.trip.country} 旅程群組傳送了訊息：` : `傳送了一則新訊息：`)}
                 </p>
+                {n.type === 'chat_message' && n.messageSnippet && (
+                  <div className="mt-1.5 p-2 bg-apple-gray-50 rounded-xl text-xs text-apple-gray-700 font-normal border border-apple-gray-100 line-clamp-2">
+                    "{n.messageSnippet}"
+                  </div>
+                )}
                 <p className="text-[10px] text-apple-gray-300 mt-1">
                   {formatDateTime(n.createdAt)}
                 </p>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ThumbsUp, Bookmark, MessageCircle, Send, MoreHorizontal, Trash2, Edit2, ShieldAlert, ArrowUp } from 'lucide-react';
 import { BarPost, UserProfile } from '../types';
+import { GlassSendButton } from './GlassSendButton';
 import { motion, AnimatePresence } from 'motion/react';
 import { getOrCreateChatRoom } from '../lib/chatUtils';
 import { useAuth } from '../context/AuthContext';
@@ -377,15 +378,14 @@ export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatCl
                     placeholder="發表留言..."
                     className="flex-1 h-10 bg-apple-gray-50 rounded-full px-4 text-xs focus:outline-none ring-1 ring-inset ring-apple-gray-100"
                   />
-                  <button 
+                  <GlassSendButton
                     type="button"
                     onClick={handlePostComment}
                     disabled={!newComment.trim() || isPostingComment}
-                    className="w-10 h-10 rounded-full bg-[#0081d1] text-white flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all shadow-xs flex-shrink-0 cursor-pointer"
+                    isSending={isPostingComment}
                     title="發送留言"
-                  >
-                    <ArrowUp size={20} strokeWidth={2.5} />
-                  </button>
+                    size="sm"
+                  />
                 </div>
 
                 {/* Comment List */}

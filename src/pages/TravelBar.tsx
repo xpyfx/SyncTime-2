@@ -4,6 +4,7 @@ import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, getDoc, doc, updateDoc, arrayUnion, arrayRemove, setDoc, deleteDoc, increment } from 'firebase/firestore';
 import { BarPost, UserProfile, GestureSettings } from '../types';
 import { BarPostCard } from '../components/BarPostCard';
+import { GlassSearchInput } from '../components/GlassSearchInput';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { SwipeableWrapper } from '../components/SwipeableWrapper';
@@ -174,16 +175,12 @@ export const TravelBarView: React.FC<{
 
       {/* Search */}
       <div className="p-5">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-apple-gray-300 opacity-60" size={16} strokeWidth={2.5} />
-          <input
-            type="text"
-            placeholder="搜尋旅吧見聞"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-11 bg-white border border-apple-gray-100 rounded-xl pl-11 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-apple-gray-200 transition-all placeholder:text-apple-gray-300"
-          />
-        </div>
+        <GlassSearchInput
+          placeholder="搜尋旅吧見聞"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onClear={() => setSearch('')}
+        />
       </div>
 
       {/* Posts */}

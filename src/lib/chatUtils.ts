@@ -23,6 +23,7 @@ export const getOrCreateChatRoom = async (currentUserId: string, otherUserId: st
 
   // Create new
   const newRoom = await addDoc(collection(db, 'chatRooms'), {
+    type: 'direct',
     participants: [currentUserId, otherUserId],
     lastUpdatedAt: serverTimestamp(),
     lastMessage: '與新朋友開始聊天吧！'

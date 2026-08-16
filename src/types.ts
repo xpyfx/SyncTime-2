@@ -103,7 +103,7 @@ export interface Trip {
   itinerary?: ItineraryDay[];
 }
 
-export type NotificationType = 'friend_request' | 'trip_join_request' | 'trip_join_approved' | 'trip_join_rejected' | 'trip_member_removed' | 'trip_member_exited';
+export type NotificationType = 'friend_request' | 'trip_join_request' | 'trip_join_approved' | 'trip_join_rejected' | 'trip_member_removed' | 'trip_member_exited' | 'chat_message';
 
 export interface Notification {
   id: string;
@@ -111,6 +111,8 @@ export interface Notification {
   fromId: string;
   toId: string;
   tripId?: string;
+  roomId?: string;
+  messageSnippet?: string;
   status: 'pending' | 'approved' | 'rejected' | 'read';
   createdAt: string;
 }
