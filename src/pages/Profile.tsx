@@ -26,7 +26,11 @@ import {
   Star,
   Sparkles,
   Plane,
-  Calendar
+  Calendar,
+  Award,
+  Compass,
+  CheckCircle2,
+  Filter
 } from 'lucide-react';
 import { getOrCreateChatRoom } from '../lib/chatUtils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -53,6 +57,8 @@ import { TripCard } from '../components/TripCard';
 import { BarPostCard } from '../components/BarPostCard';
 import { CompanionRadarChart } from '../components/CompanionRadarChart';
 import { COUNTRIES, ENGLISH_COUNTRIES, getCountryISO3, searchCities } from '../lib/locationData';
+import { COUNTRY_STAMPS, CountryStamp } from '../lib/countryStampData';
+import { CountryStampBadge } from '../components/CountryStampBadge';
 
 const getZodiacSign = (dateVal: any) => {
   if (!dateVal) return 'Unknown';
@@ -317,6 +323,105 @@ export const ProfilePage: React.FC<{
   });
 
   const [isPassportExpanded, setIsPassportExpanded] = useState(false);
+  const [stampRegionFilter, setStampRegionFilter] = useState<'all' | 'unlocked' | 'asia' | 'europe' | 'americas' | 'oceania' | 'middle_east' | 'africa'>('all');
+  const [stampSearchQuery, setStampSearchQuery] = useState('');
+  const [selectedStamp, setSelectedStamp] = useState<CountryStamp | null>(null);
+
+  // Map of unlocked stamps for the profile user based on trips and profile info
+  const userStampMap = React.useMemo(() => {
+    const map = new Map<string, { date: string; tripTitle?: string; visitedCity?: string }>();
+    
+    // Scan all trips for the effective user
+    myTrips.forEach(t => {
+      const dest = `${t.country || ''} ${t.destination || ''} ${t.title || ''}`.toLowerCase();
+      // Format travel completion date
+      const tripDate = t.endDate || t.startDate || (t.createdAt ? new Date(t.createdAt).toISOString().split('T')[0] : '2026-08-15');
+      
+      COUNTRY_STAMPS.forEach(st => {
+        const matchNameZh = dest.includes(st.nameZh.toLowerCase());
+        const matchNameEn = dest.includes(st.nameEn.toLowerCase());
+        const matchCityZh = dest.includes(st.cityZh.toLowerCase());
+        const matchCityEn = dest.includes(st.cityEn.toLowerCase());
+        const matchId = dest.includes(st.id.toLowerCase());
+        
+        if (matchNameZh || matchNameEn || matchCityZh || matchCityEn || matchId) {
+          // Check if specific destination city was mentioned
+          let city = st.cityEn;
+          if (t.destination && t.destination.trim()) {
+            const destTrim = t.destination.trim();
+            // If destination is not just the country name, use destination as city
+            if (!destTrim.toLowerCase().includes(st.nameZh.toLowerCase()) && !destTrim.toLowerCase().includes(st.nameEn.toLowerCase())) {
+              city = destTrim.toUpperCase();
+            }
+          }
+          const existing = map.get(st.id);
+          if (!existing || (tripDate && tripDate > existing.date)) {
+            map.set(st.id, { date: tripDate, tripTitle: t.title, visitedCity: city });
+          }
+        }
+      });
+    });
+
+    // Profile nationality & residence default unlock
+    if (profile?.nationality) {
+      const nat = profile.nationality.toLowerCase();
+      COUNTRY_STAMPS.forEach(st => {
+        if (nat.includes(st.nameZh.toLowerCase()) || nat.includes(st.nameEn.toLowerCase()) || nat.includes(st.id.toLowerCase())) {
+          if (!map.has(st.id)) {
+            map.set(st.id, { 
+              date: profile.createdAt ? (typeof profile.createdAt === 'string' ? profile.createdAt.split('T')[0] : '2026-01-01') : '2026-01-01', 
+              tripTitle: '護照國籍',
+              visitedCity: st.cityEn
+            });
+          }
+        }
+      });
+    }
+
+    if (profile?.residence) {
+      const res = profile.residence.toLowerCase();
+      COUNTRY_STAMPS.forEach(st => {
+        if (res.includes(st.nameZh.toLowerCase()) || res.includes(st.nameEn.toLowerCase()) || res.includes(st.cityZh.toLowerCase()) || res.includes(st.cityEn.toLowerCase())) {
+          if (!map.has(st.id)) {
+            map.set(st.id, { 
+              date: profile.createdAt ? (typeof profile.createdAt === 'string' ? profile.createdAt.split('T')[0] : '2026-01-01') : '2026-01-01', 
+              tripTitle: '目前居籍',
+              visitedCity: profile.residence.toUpperCase()
+            });
+          }
+        }
+      });
+    }
+    
+    return map;
+  }, [myTrips, profile]);
+
+  // Filtered stamps based on tab and search
+  const filteredStamps = React.useMemo(() => {
+    return COUNTRY_STAMPS.filter(stamp => {
+      // Region filter
+      if (stampRegionFilter === 'unlocked') {
+        if (!userStampMap.has(stamp.id)) return false;
+      } else if (stampRegionFilter !== 'all') {
+        if (stamp.region !== stampRegionFilter) return false;
+      }
+
+      // Search filter
+      if (stampSearchQuery.trim()) {
+        const q = stampSearchQuery.toLowerCase().trim();
+        const matchZh = stamp.nameZh.toLowerCase().includes(q);
+        const matchEn = stamp.nameEn.toLowerCase().includes(q);
+        const matchCityZh = stamp.cityZh.toLowerCase().includes(q);
+        const matchCityEn = stamp.cityEn.toLowerCase().includes(q);
+        const matchId = stamp.id.toLowerCase().includes(q);
+        const matchCode = stamp.airportCode.toLowerCase().includes(q);
+        return matchZh || matchEn || matchCityZh || matchCityEn || matchId || matchCode;
+      }
+
+      return true;
+    });
+  }, [stampRegionFilter, stampSearchQuery, userStampMap]);
+
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1920,8 +2025,11 @@ export const ProfilePage: React.FC<{
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.25 }}
-              className="fixed inset-0 z-[600] bg-black/60 backdrop-blur-md flex flex-col justify-end items-center p-0"
-              onClick={() => setIsPassportExpanded(false)}
+              className="fixed inset-0 z-[600] bg-black/70 backdrop-blur-md flex flex-col justify-end items-center p-0"
+              onClick={() => {
+                setIsPassportExpanded(false);
+                setSelectedStamp(null);
+              }}
             >
               <motion.div 
                 drag="y"
@@ -1931,103 +2039,289 @@ export const ProfilePage: React.FC<{
                   // If pulled down past threshold or swiped down with momentum, close the sheet
                   if (info.offset.y > 120 || info.velocity.y > 450) {
                     setIsPassportExpanded(false);
+                    setSelectedStamp(null);
                   }
                 }}
                 initial={{ y: '100%' }}
                 animate={{ y: 0 }}
                 exit={{ y: '100%' }}
                 transition={{ type: 'spring', damping: 30, stiffness: 300, mass: 0.8 }}
-                className="w-full max-w-lg bg-[#1a1a1e]/95 backdrop-blur-3xl border-t border-white/20 rounded-t-[36px] px-6 pt-3 pb-10 text-white relative shadow-[0_-10px_40px_rgba(0,0,0,0.5)] overflow-hidden touch-none"
+                className="w-full max-w-lg bg-[#18181c]/95 backdrop-blur-3xl border-t border-white/20 rounded-t-[36px] px-5 pt-3 pb-8 text-white relative shadow-[0_-10px_40px_rgba(0,0,0,0.6)] max-h-[88vh] flex flex-col overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* Background Ambient Glow */}
-                <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 bg-gradient-to-b from-[#F4B896]/25 via-[#e76f51]/10 to-transparent rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-80 h-80 bg-gradient-to-b from-[#F4B896]/20 via-[#035096]/15 to-transparent rounded-full blur-3xl pointer-events-none" />
 
                 {/* Top Notch Drag Bar Handle (Interactive & Visual) */}
-                <div className="w-full py-2 flex flex-col items-center justify-center cursor-grab active:cursor-grabbing select-none group">
+                <div className="w-full py-1.5 flex flex-col items-center justify-center cursor-grab active:cursor-grabbing select-none group shrink-0">
                   <div className="w-12 h-1.5 bg-white/30 group-hover:bg-white/50 group-active:bg-white/60 rounded-full transition-colors" />
                 </div>
 
                 {/* Close Button ('X') on Top Left */}
                 <button 
                   type="button"
-                  onClick={() => setIsPassportExpanded(false)}
-                  className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 active:scale-90 flex items-center justify-center text-white/80 transition-all cursor-pointer absolute left-5 top-5 z-20"
+                  onClick={() => {
+                    setIsPassportExpanded(false);
+                    setSelectedStamp(null);
+                  }}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 active:scale-90 flex items-center justify-center text-white/80 transition-all cursor-pointer absolute left-5 top-4 z-20"
                   title="關閉"
                   aria-label="關閉"
                 >
-                  <X size={18} className="stroke-[2.5]" />
+                  <X size={16} className="stroke-[2.5]" />
                 </button>
 
-                {/* Center User Avatar & Identity (Video Style) */}
-                <div className="flex flex-col items-center mt-1">
-                  <div className="relative p-1 rounded-full bg-gradient-to-tr from-[#f4a261] via-[#e76f51] to-[#f4b896] shadow-[0_8px_24px_rgba(231,111,81,0.35)]">
-                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden bg-[#2d2a23] border-2 border-white/70 flex items-center justify-center">
-                      {profile?.avatarUrl ? (
-                        <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                      ) : (
-                        <span className="text-3xl font-black text-[#F4B896]">
-                          {profile?.displayName?.[0] || '旅'}
-                        </span>
-                      )}
+                {/* Scrollable Container Inside Bottom Sheet */}
+                <div className="overflow-y-auto overflow-x-hidden flex-1 px-1 mt-1 pr-2 scrollbar-thin scrollbar-thumb-white/20">
+                  {/* Center User Avatar & Identity (Video Style) */}
+                  <div className="flex flex-col items-center mt-1">
+                    <div className="relative p-1 rounded-full bg-gradient-to-tr from-[#f4a261] via-[#e76f51] to-[#f4b896] shadow-[0_8px_24px_rgba(231,111,81,0.35)]">
+                      <div className="w-22 h-22 sm:w-26 sm:h-26 rounded-full overflow-hidden bg-[#2d2a23] border-2 border-white/70 flex items-center justify-center">
+                        {profile?.avatarUrl ? (
+                          <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <span className="text-3xl font-black text-[#F4B896]">
+                            {profile?.displayName?.[0] || '旅'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Name & Handle */}
+                    <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-3 text-center">
+                      {profile?.displayName || '旅人'}
+                    </h2>
+                    <p className="text-xs sm:text-sm font-medium text-white/50 text-center mt-0.5">
+                      @{profile?.username || 'user'}
+                    </p>
+                  </div>
+
+                  {/* Video-Style Tags / Interest Pills */}
+                  <div className="mt-5 grid grid-cols-3 gap-2">
+                    {[
+                      { icon: '🏛️', label: 'History' },
+                      { icon: '🍸', label: 'Nightlife' },
+                      { icon: '🍲', label: 'Street Food' },
+                      { icon: '💻', label: 'Technology' },
+                      { icon: '🎶', label: 'Music' },
+                      { icon: '🛍️', label: 'Shopping' }
+                    ].map((item, idx) => (
+                      <div 
+                        key={idx}
+                        className="px-2 py-2.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.12] border border-white/10 text-xs font-semibold text-white/90 flex items-center justify-center gap-1.5 backdrop-blur-md shadow-xs select-none transition-all"
+                      >
+                        <span className="text-sm leading-none">{item.icon}</span>
+                        <span className="truncate text-[11px] sm:text-xs">{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Bottom Stats & Info Row (Video Style) */}
+                  <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-2 gap-2.5">
+                    <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/[0.05] border border-white/10">
+                      <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white/80 shrink-0">
+                        <Calendar size={16} className="text-[#F4B896]" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Joined</div>
+                        <div className="text-xs font-bold text-white truncate">
+                          {profile?.createdAt ? formatDatePassport(profile.createdAt) : '2026 年'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/[0.05] border border-white/10">
+                      <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white/80 shrink-0">
+                        <Plane size={16} className="text-[#F4B896]" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Created</div>
+                        <div className="text-xs font-bold text-white truncate">
+                          {myTrips.length} Trips
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  
-                  {/* Name & Handle */}
-                  <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-3 text-center">
-                    {profile?.displayName || '旅人'}
-                  </h2>
-                  <p className="text-xs sm:text-sm font-medium text-white/50 text-center mt-0.5">
-                    @{profile?.username || 'user'}
-                  </p>
+
+                  {/* Divider Line */}
+                  <div className="my-6 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+
+                  {/* ── NEW SECTION: 100+ Country Stamps Collection ── */}
+                  <div className="pb-4">
+                    {/* Section Header */}
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#035096] to-[#0284c7] flex items-center justify-center text-white shadow-xs">
+                          <Award size={15} />
+                        </div>
+                        <div>
+                          <h3 className="text-sm sm:text-base font-bold text-white tracking-tight flex items-center gap-1.5">
+                            各國印章圖鑑
+                          </h3>
+                        </div>
+                      </div>
+                      <div className="px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-[11px] font-bold text-[#F4B896] flex items-center gap-1 shadow-xs shrink-0">
+                        <CheckCircle2 size={12} className="text-[#38bdf8]" />
+                        <span>{userStampMap.size} / {COUNTRY_STAMPS.length} 解鎖</span>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-white/50 leading-relaxed mb-3.5">
+                      點亮您曾探索的國家印章。獲得徽章時將自動記錄旅程結束日期與機場出入境戳記。
+                    </p>
+
+                    {/* Search & Region Filter Bar */}
+                    <div className="space-y-2 mb-3.5">
+                      {/* Search Bar */}
+                      <div className="relative">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+                        <input
+                          type="text"
+                          value={stampSearchQuery}
+                          onChange={(e) => setStampSearchQuery(e.target.value)}
+                          placeholder="搜尋國家名稱、城市或機場代碼 (如: 日本, TOKYO, TPE)..."
+                          className="w-full pl-8.5 pr-8 py-2 bg-white/[0.06] hover:bg-white/[0.09] focus:bg-white/[0.12] border border-white/15 focus:border-[#F4B896] rounded-xl text-xs text-white placeholder:text-white/40 outline-hidden transition-all"
+                        />
+                        {stampSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setStampSearchQuery('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
+                          >
+                            <X size={13} />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Region Pills */}
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                        {[
+                          { id: 'all', label: '全部' },
+                          { id: 'unlocked', label: `已解鎖 (${userStampMap.size})` },
+                          { id: 'asia', label: '亞洲' },
+                          { id: 'europe', label: '歐洲' },
+                          { id: 'americas', label: '美洲' },
+                          { id: 'oceania', label: '大洋洲' },
+                          { id: 'middle_east', label: '中東' },
+                          { id: 'africa', label: '非洲' },
+                        ].map((tab) => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setStampRegionFilter(tab.id as any)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all shrink-0 cursor-pointer ${
+                              stampRegionFilter === tab.id
+                                ? 'bg-[#035096] text-white border border-[#38bdf8]/40 shadow-xs'
+                                : 'bg-white/[0.05] text-white/60 hover:bg-white/[0.1] hover:text-white border border-white/10'
+                            }`}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Country Badges Grid */}
+                    {filteredStamps.length === 0 ? (
+                      <div className="p-8 text-center bg-white/[0.02] border border-dashed border-white/10 rounded-2xl">
+                        <Compass size={28} className="mx-auto text-white/30 mb-2" />
+                        <p className="text-xs text-white/50 font-medium">找不到相符的國家印章</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStampSearchQuery('');
+                            setStampRegionFilter('all');
+                          }}
+                          className="mt-2 text-[11px] text-[#F4B896] hover:underline font-bold"
+                        >
+                          清除搜尋條件
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 xs:gap-2.5">
+                        {filteredStamps.map((stamp) => {
+                          const isUnlocked = userStampMap.has(stamp.id);
+                          const stampMeta = userStampMap.get(stamp.id);
+                          return (
+                            <CountryStampBadge
+                              key={stamp.id}
+                              stamp={stamp}
+                              isUnlocked={isUnlocked}
+                              unlockedDate={stampMeta?.date}
+                              visitedCity={stampMeta?.visitedCity}
+                              tripTitle={stampMeta?.tripTitle}
+                              onClick={() => setSelectedStamp(stamp)}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* Video-Style Tags / Interest Pills */}
-                <div className="mt-5 grid grid-cols-3 gap-2 px-1">
-                  {[
-                    { icon: '🏛️', label: 'History' },
-                    { icon: '🍸', label: 'Nightlife' },
-                    { icon: '🍲', label: 'Street Food' },
-                    { icon: '💻', label: 'Technology' },
-                    { icon: '🎶', label: 'Music' },
-                    { icon: '🛍️', label: 'Shopping' }
-                  ].map((item, idx) => (
-                    <div 
-                      key={idx}
-                      className="px-2 py-2.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.12] border border-white/10 text-xs font-semibold text-white/90 flex items-center justify-center gap-1.5 backdrop-blur-md shadow-xs select-none transition-all"
+                {/* Selected Stamp Preview Dialog Overlay */}
+                <AnimatePresence>
+                  {selectedStamp && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.92, y: 20 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.92, y: 20 }}
+                      transition={{ duration: 0.2 }}
+                      className="absolute inset-x-4 bottom-4 z-30 p-4 rounded-2xl bg-[#202026]/95 backdrop-blur-2xl border border-white/25 shadow-2xl flex flex-col gap-3"
                     >
-                      <span className="text-sm leading-none">{item.icon}</span>
-                      <span className="truncate text-[11px] sm:text-xs">{item.label}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Bottom Stats & Info Row (Video Style) */}
-                <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-2 gap-2.5 px-1">
-                  <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/[0.05] border border-white/10">
-                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white/80 shrink-0">
-                      <Calendar size={16} className="text-[#F4B896]" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Joined</div>
-                      <div className="text-xs font-bold text-white truncate">
-                        {profile?.createdAt ? formatDatePassport(profile.createdAt) : '2026 年'}
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-black border"
+                            style={{
+                              backgroundColor: `${selectedStamp.inkColor}20`,
+                              borderColor: selectedStamp.inkColor,
+                              color: userStampMap.has(selectedStamp.id) ? selectedStamp.inkColor : '#9ca3af',
+                            }}
+                          >
+                            <Plane size={20} className={userStampMap.has(selectedStamp.id) ? 'text-white' : 'text-white/40'} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-base font-bold text-white">{selectedStamp.nameZh}</h4>
+                              <span className="text-xs font-mono font-bold text-white/50">{selectedStamp.nameEn}</span>
+                            </div>
+                            <p className="text-[11px] text-white/60">
+                              {selectedStamp.cityZh} ({selectedStamp.cityEn}) · {selectedStamp.airportCode}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedStamp(null)}
+                          className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/70 hover:text-white"
+                        >
+                          <X size={14} />
+                        </button>
                       </div>
-                    </div>
-                  </div>
 
-                  <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/[0.05] border border-white/10">
-                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white/80 shrink-0">
-                      <Plane size={16} className="text-[#F4B896]" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Created</div>
-                      <div className="text-xs font-bold text-white truncate">
-                        {myTrips.length} Trips
+                      <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/10 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-white/50">狀態：</span>
+                          {userStampMap.has(selectedStamp.id) ? (
+                            <span className="font-bold text-emerald-400 flex items-center gap-1">
+                              <CheckCircle2 size={13} /> 已解鎖紀念印章
+                            </span>
+                          ) : (
+                            <span className="font-bold text-white/40 flex items-center gap-1">
+                              <Lock size={13} /> 尚未造訪探索
+                            </span>
+                          )}
+                        </div>
+                        <div className="font-mono text-[11px] text-[#F4B896] font-bold">
+                          {userStampMap.has(selectedStamp.id)
+                            ? `獲得日期: ${userStampMap.get(selectedStamp.id)?.date || '2026-08-15'}`
+                            : '待解鎖'}
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             </motion.div>
           )}
