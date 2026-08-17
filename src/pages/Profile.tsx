@@ -24,7 +24,9 @@ import {
   EyeOff,
   Lock,
   Star,
-  Sparkles
+  Sparkles,
+  Plane,
+  Calendar
 } from 'lucide-react';
 import { getOrCreateChatRoom } from '../lib/chatUtils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -369,42 +371,29 @@ export const ProfilePage: React.FC<{
   };
 
   // Passport Content Component (Internal to ProfileView)
-  const renderPassportContent = (isExpanded = false) => (
-    <div className={`${isExpanded ? 'p-10' : 'p-4'} flex-1 flex flex-col min-h-0 relative select-none`}>
+  const renderPassportContent = () => (
+    <div className="p-4 flex-1 flex flex-col min-h-0 relative select-none">
       {/* Top Bar - Identity */}
-      <div className={`flex justify-between items-center ${isExpanded ? 'mb-8' : 'mb-2.5'}`}>
+      <div className="flex justify-between items-center mb-2.5">
         <div className="flex items-center gap-2">
-          <span className={`${isExpanded ? 'text-[22px]' : 'text-[11px]'} font-black tracking-[0.25em] text-[#cc9673] uppercase`}>Passport</span>
-          <div className={`${isExpanded ? 'w-[2px] h-6' : 'w-[1px] h-3'} bg-[#f0d0bd]`} />
-          <span className={`${isExpanded ? 'text-[14px]' : 'text-[8px]'} font-bold text-[#cc9673] opacity-80 uppercase tracking-widest`}>Synctime Network</span>
+          <span className="text-[11px] font-black tracking-[0.25em] text-[#cc9673] uppercase">Passport</span>
+          <div className="w-[1px] h-3 bg-[#f0d0bd]" />
+          <span className="text-[8px] font-bold text-[#cc9673] opacity-80 uppercase tracking-widest">Synctime Network</span>
         </div>
-        {!isExpanded && (
-          <div className="flex gap-1.5">
-            <div className="w-5 h-4 rounded-sm border border-[#cc9673]/30 bg-[#cc9673]/5" />
-            <div className="w-2 h-2 rounded-full bg-[#cc9673] opacity-20" />
-          </div>
-        )}
-        {isExpanded && (
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsPassportExpanded(false);
-            }}
-            className="text-[#cc9673] cursor-pointer -rotate-90 p-2"
-          >
-            <X size={32} />
-          </button>
-        )}
+        <div className="flex gap-1.5">
+          <div className="w-5 h-4 rounded-sm border border-[#cc9673]/30 bg-[#cc9673]/5" />
+          <div className="w-2 h-2 rounded-full bg-[#cc9673] opacity-20" />
+        </div>
       </div>
 
-      <div className={`flex ${isExpanded ? 'gap-12' : 'gap-4'} flex-1 min-h-0`}>
+      <div className="flex gap-4 flex-1 min-h-0">
         {/* Profile Photo - Left Side */}
-        <div className={`${isExpanded ? 'w-[200px]' : 'w-[100px]'} shrink-0 flex flex-col justify-center`}>
-          <div className={`aspect-[3/4] w-full bg-[#fce5d8] ${isExpanded ? 'rounded-2xl shadow-lg' : 'rounded-lg shadow-sm'} overflow-hidden border border-[#f0d0bd] relative`}>
+        <div className="w-[100px] shrink-0 flex flex-col justify-center">
+          <div className="aspect-[3/4] w-full bg-[#fce5d8] rounded-lg shadow-sm overflow-hidden border border-[#f0d0bd] relative">
             {profile?.avatarUrl ? (
               <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover grayscale-[0.05] contrast-[1.05]" referrerPolicy="no-referrer" />
             ) : (
-              <div className={`w-full h-full flex items-center justify-center ${isExpanded ? 'text-8xl' : 'text-4xl'} text-[#cc9673] font-bold`}>
+              <div className="w-full h-full flex items-center justify-center text-4xl text-[#cc9673] font-bold">
                 {profile?.displayName?.[0]}
               </div>
             )}
@@ -415,76 +404,74 @@ export const ProfilePage: React.FC<{
         {/* Passport Information - Right Side */}
         <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
           {/* Row 1: Age / Code / Passport ID */}
-          <div className={`flex border-b border-[#f3ded0] ${isExpanded ? 'gap-6 pb-3 mb-3' : 'gap-4 pb-1.5 mb-1.5'}`}>
-            <div className={isExpanded ? 'w-14' : 'w-8'}>
-              <label className={`${isExpanded ? 'text-[9px]' : 'text-[6px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>年齡 Age</label>
-              <p className={`${isExpanded ? 'text-xl' : 'text-[11px]'} font-black text-[#2d2a23] leading-none mt-1`}>{calculateAge(profile?.birthday || '')}</p>
+          <div className="flex border-b border-[#f3ded0] gap-4 pb-1.5 mb-1.5">
+            <div className="w-8">
+              <label className="text-[6px] font-bold text-[#cc9673] uppercase tracking-tighter block">年齡 Age</label>
+              <p className="text-[11px] font-black text-[#2d2a23] leading-none mt-1">{calculateAge(profile?.birthday || '')}</p>
             </div>
-            <div className={isExpanded ? 'w-16' : 'w-10'}>
-              <label className={`${isExpanded ? 'text-[9px]' : 'text-[6px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>代碼 Code</label>
-              <p className={`${isExpanded ? 'text-xl' : 'text-[11px]'} font-black text-[#2d2a23] leading-none mt-1`}>{getCountryISO3(profile?.nationality || '')}</p>
+            <div className="w-10">
+              <label className="text-[6px] font-bold text-[#cc9673] uppercase tracking-tighter block">代碼 Code</label>
+              <p className="text-[11px] font-black text-[#2d2a23] leading-none mt-1">{getCountryISO3(profile?.nationality || '')}</p>
             </div>
             <div className="min-w-0 flex-1">
-              <label className={`${isExpanded ? 'text-[9px]' : 'text-[6px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>護照ID</label>
-              <p className={`${isExpanded ? 'text-xl' : 'text-[11px]'} font-black text-[#2d2a23] leading-none mt-1 truncate uppercase`}>{profile?.username}</p>
+              <label className="text-[6px] font-bold text-[#cc9673] uppercase tracking-tighter block">護照ID</label>
+              <p className="text-[11px] font-black text-[#2d2a23] leading-none mt-1 truncate uppercase">{profile?.username}</p>
             </div>
           </div>
 
           {/* Row 2: Name */}
-          <div className={isExpanded ? 'py-3' : 'py-1'}>
-            <label className={`${isExpanded ? 'text-[9px]' : 'text-[6px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>姓名 Name</label>
-            <p className={`${isExpanded ? 'text-3xl' : 'text-[19px]'} font-black text-[#2d2a23] leading-none truncate tracking-tight py-1`}>{profile?.displayName}</p>
+          <div className="py-1">
+            <label className="text-[6px] font-bold text-[#cc9673] uppercase tracking-tighter block">姓名 Name</label>
+            <p className="text-[19px] font-black text-[#2d2a23] leading-none truncate tracking-tight py-1">{profile?.displayName}</p>
           </div>
 
           {/* Bio Info Rows */}
-          <div className={isExpanded ? 'space-y-4' : 'space-y-3'}>
+          <div className="space-y-3">
             <div className="grid grid-cols-3 gap-2">
               <div className="min-w-0">
-                <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>國籍 NAT.</label>
-                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#2d2a23] leading-none uppercase truncate mt-0.5`}>{profile?.nationality || 'Global'}</p>
+                <label className="text-[5.5px] font-bold text-[#cc9673] uppercase tracking-tighter block">國籍 NAT.</label>
+                <p className="text-[9px] font-black text-[#2d2a23] leading-none uppercase truncate mt-0.5">{profile?.nationality || 'Global'}</p>
               </div>
               <div className="min-w-0">
-                <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>性別 SEX</label>
-                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#2d2a23] leading-none uppercase mt-0.5`}>{profile?.gender || 'O'}</p>
+                <label className="text-[5.5px] font-bold text-[#cc9673] uppercase tracking-tighter block">性別 SEX</label>
+                <p className="text-[9px] font-black text-[#2d2a23] leading-none uppercase mt-0.5">{profile?.gender || 'O'}</p>
               </div>
               <div className="min-w-0">
-                <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>出生 BIRTH</label>
-                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#2d2a23] leading-none uppercase mt-0.5`}>{formatDatePassport(profile?.birthday || '')}</p>
+                <label className="text-[5.5px] font-bold text-[#cc9673] uppercase tracking-tighter block">出生 BIRTH</label>
+                <p className="text-[9px] font-black text-[#2d2a23] leading-none uppercase mt-0.5">{formatDatePassport(profile?.birthday || '')}</p>
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
               <div className="min-w-0">
-                <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>發照 ISSUE</label>
-                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#2d2a23] leading-none uppercase truncate mt-0.5`}>{formatDatePassport(profile?.createdAt || '')}</p>
+                <label className="text-[5.5px] font-bold text-[#cc9673] uppercase tracking-tighter block">發照 ISSUE</label>
+                <p className="text-[9px] font-black text-[#2d2a23] leading-none uppercase truncate mt-0.5">{formatDatePassport(profile?.createdAt || '')}</p>
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-0.5">
-                  <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>已旅國 VISIT.</label>
-                  {!isExpanded && (
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowFootprintInfo(true);
-                      }}
-                      className="text-[#cc9673]/60 hover:text-[#cc9673] transition-colors"
-                    >
-                      <Info size={5} />
-                    </button>
-                  )}
+                  <label className="text-[5.5px] font-bold text-[#cc9673] uppercase tracking-tighter block">已旅國 VISIT.</label>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowFootprintInfo(true);
+                    }}
+                    className="text-[#cc9673]/60 hover:text-[#cc9673] transition-colors"
+                  >
+                    <Info size={5} />
+                  </button>
                 </div>
-                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#2d2a23] leading-none uppercase mt-0.5`}>{profile?.visitedCities || 0}</p>
+                <p className="text-[9px] font-black text-[#2d2a23] leading-none uppercase mt-0.5">{profile?.visitedCities || 0}</p>
               </div>
               <div className="min-w-0">
-                <label className={`${isExpanded ? 'text-[9px]' : 'text-[5.5px]'} font-bold text-[#cc9673] uppercase tracking-tighter block`}>居住地 RES.</label>
-                <p className={`${isExpanded ? 'text-sm' : 'text-[9px]'} font-black text-[#2d2a23] leading-none uppercase truncate mt-0.5`}>{profile?.residence || '---'}</p>
+                <label className="text-[5.5px] font-bold text-[#cc9673] uppercase tracking-tighter block">居住地 RES.</label>
+                <p className="text-[9px] font-black text-[#2d2a23] leading-none uppercase truncate mt-0.5">{profile?.residence || '---'}</p>
               </div>
             </div>
           </div>
 
-          <div className={`mt-auto ${isExpanded ? 'pt-4 pb-1' : 'pt-2 pb-0.5'}`}>
-            <label className={`${isExpanded ? 'text-[8px]' : 'text-[5px]'} font-bold text-[#cc9673] uppercase tracking-tighter block mb-0.5`}>發照機構 AUTHORITY</label>
-            <p className={`${isExpanded ? 'text-[9px]' : 'text-[7.5px]'} font-bold text-[#cc9673] opacity-90 italic leading-none truncate`}>
+          <div className="mt-auto pt-2 pb-0.5">
+            <label className="text-[5px] font-bold text-[#cc9673] uppercase tracking-tighter block mb-0.5">發照機構 AUTHORITY</label>
+            <p className="text-[7.5px] font-bold text-[#cc9673] opacity-90 italic leading-none truncate">
               Synctime Professional Certification Organization
             </p>
           </div>
@@ -492,17 +479,16 @@ export const ProfilePage: React.FC<{
       </div>
 
       {/* MRZ Area */}
-      <div className={`${isExpanded ? 'mt-4 pt-3' : 'mt-1.5 pt-2'} border-t border-[#f3ded0] opacity-60`}>
+      <div className="mt-1.5 pt-2 border-t border-[#f3ded0] opacity-60">
         {profile && generateMRZ(profile).map((line, idx) => (
-          <div key={idx} className={`grid grid-cols-[repeat(45,1fr)] w-full ${isExpanded ? 'mb-1' : 'mb-0.5'}`}>
+          <div key={idx} className="grid grid-cols-[repeat(45,1fr)] w-full mb-0.5">
             {line.split('').map((char, charIdx) => (
-              <span key={charIdx} className={`font-mono ${isExpanded ? 'text-[11px]' : 'text-[8.5px]'} text-center leading-none text-[#cc9673] uppercase font-bold`}>
+              <span key={charIdx} className="font-mono text-[8.5px] text-center leading-none text-[#cc9673] uppercase font-bold">
                 {char}
               </span>
             ))}
           </div>
         ))}
-
       </div>
     </div>
   );
@@ -1854,14 +1840,13 @@ export const ProfilePage: React.FC<{
       <div className="px-4 pt-4">
         <motion.div 
           onClick={() => setIsPassportExpanded(true)}
-          layoutId={`passport-card-${effectiveUserId}`}
-          className="w-full aspect-[1.36/1] bg-[#FFF9F5] rounded-[24px] shadow-2xl border border-[#f5d9c7] overflow-hidden relative flex flex-col cursor-pointer"
+          className="w-full aspect-[1.36/1] bg-[#FFF9F5] rounded-[24px] shadow-2xl border border-[#f5d9c7] overflow-hidden relative flex flex-col cursor-pointer active:scale-[0.99] transition-transform"
         >
           {/* Passport Texture Overlay */}
           <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 0.5px, transparent 0.5px)', backgroundSize: '10px 10px' }} />
           <div className="absolute inset-0 bg-gradient-to-tr from-[#ffe6d5]/50 to-transparent pointer-events-none" />
           
-          {renderPassportContent(false)}
+          {renderPassportContent()}
           
           {/* Apple Style Edit Trigger */}
           {isOwnProfile && (
@@ -1870,7 +1855,7 @@ export const ProfilePage: React.FC<{
                 e.stopPropagation();
                 setShowEditPassport(true);
               }} 
-              className="absolute right-3.5 top-3.5 p-2 rounded-full bg-white/40 shadow-sm border border-white/50 text-[#cc9673] backdrop-blur-xl active:scale-90 transition-transform"
+              className="absolute right-3.5 top-3.5 p-2 rounded-full bg-white/40 shadow-sm border border-white/50 text-[#cc9673] backdrop-blur-xl active:scale-90 transition-transform z-10"
             >
               <Edit2 size={14} />
             </button>
@@ -1927,42 +1912,123 @@ export const ProfilePage: React.FC<{
           </div>
         )}
 
-        {/* Full-screen Expanded Passport */}
+        {/* Profile Card Bottom Sheet Modal (Liquid Glass + Native Drag Dismiss) */}
         <AnimatePresence>
           {isPassportExpanded && (
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[600] bg-black flex items-center justify-center p-0 overflow-hidden"
+              transition={{ duration: 0.25 }}
+              className="fixed inset-0 z-[600] bg-black/60 backdrop-blur-md flex flex-col justify-end items-center p-0"
               onClick={() => setIsPassportExpanded(false)}
             >
-              <div className="relative w-full h-full flex items-center justify-center">
-                <motion.div 
-                  layoutId={`passport-card-${effectiveUserId}`}
-                  initial={{ rotate: 0, scale: 0.5 }}
-                  animate={{ rotate: 90, scale: 1 }}
-                  exit={{ rotate: 0, scale: 0.5 }}
-                  transition={{ type: 'spring', damping: 25, stiffness: 180 }}
-                  className="bg-[#FFF9F5] rounded-[48px] shadow-[0_0_100px_rgba(0,0,0,0.8)] border border-[#f5d9c7] overflow-hidden flex flex-col relative"
-                  style={{ 
-                    // Calculate dimensions to fit landscape card in portrait screen after 90deg rotation.
-                    // The element's HEIGHT becomes visual WIDTH.
-                    // The element's WIDTH becomes visual HEIGHT.
-                    height: '92vw', 
-                    width: 'calc(92vw * 1.36)',
-                    maxHeight: '94vh',
-                    minWidth: 'min(125vw, 92vh)'
-                  }}
-                  onClick={(e) => e.stopPropagation()}
+              <motion.div 
+                drag="y"
+                dragConstraints={{ top: 0, bottom: 0 }}
+                dragElastic={{ top: 0.05, bottom: 0.7 }}
+                onDragEnd={(_, info) => {
+                  // If pulled down past threshold or swiped down with momentum, close the sheet
+                  if (info.offset.y > 120 || info.velocity.y > 450) {
+                    setIsPassportExpanded(false);
+                  }
+                }}
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                exit={{ y: '100%' }}
+                transition={{ type: 'spring', damping: 30, stiffness: 300, mass: 0.8 }}
+                className="w-full max-w-lg bg-[#1a1a1e]/95 backdrop-blur-3xl border-t border-white/20 rounded-t-[36px] px-6 pt-3 pb-10 text-white relative shadow-[0_-10px_40px_rgba(0,0,0,0.5)] overflow-hidden touch-none"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Background Ambient Glow */}
+                <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 bg-gradient-to-b from-[#F4B896]/25 via-[#e76f51]/10 to-transparent rounded-full blur-3xl pointer-events-none" />
+
+                {/* Top Notch Drag Bar Handle (Interactive & Visual) */}
+                <div className="w-full py-2 flex flex-col items-center justify-center cursor-grab active:cursor-grabbing select-none group">
+                  <div className="w-12 h-1.5 bg-white/30 group-hover:bg-white/50 group-active:bg-white/60 rounded-full transition-colors" />
+                </div>
+
+                {/* Close Button ('X') on Top Left */}
+                <button 
+                  type="button"
+                  onClick={() => setIsPassportExpanded(false)}
+                  className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 active:scale-90 flex items-center justify-center text-white/80 transition-all cursor-pointer absolute left-5 top-5 z-20"
+                  title="關閉"
+                  aria-label="關閉"
                 >
-                  {/* Passport Texture Overlay */}
-                  <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 0.5px, transparent 0.5px)', backgroundSize: '10px 10px' }} />
-                  <div className="absolute inset-0 bg-gradient-to-tr from-[#ffe6d5]/50 to-transparent pointer-events-none" />
+                  <X size={18} className="stroke-[2.5]" />
+                </button>
+
+                {/* Center User Avatar & Identity (Video Style) */}
+                <div className="flex flex-col items-center mt-1">
+                  <div className="relative p-1 rounded-full bg-gradient-to-tr from-[#f4a261] via-[#e76f51] to-[#f4b896] shadow-[0_8px_24px_rgba(231,111,81,0.35)]">
+                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden bg-[#2d2a23] border-2 border-white/70 flex items-center justify-center">
+                      {profile?.avatarUrl ? (
+                        <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        <span className="text-3xl font-black text-[#F4B896]">
+                          {profile?.displayName?.[0] || '旅'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                   
-                  {renderPassportContent(true)}
-                </motion.div>
-              </div>
+                  {/* Name & Handle */}
+                  <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-3 text-center">
+                    {profile?.displayName || '旅人'}
+                  </h2>
+                  <p className="text-xs sm:text-sm font-medium text-white/50 text-center mt-0.5">
+                    @{profile?.username || 'user'}
+                  </p>
+                </div>
+
+                {/* Video-Style Tags / Interest Pills */}
+                <div className="mt-5 grid grid-cols-3 gap-2 px-1">
+                  {[
+                    { icon: '🏛️', label: 'History' },
+                    { icon: '🍸', label: 'Nightlife' },
+                    { icon: '🍲', label: 'Street Food' },
+                    { icon: '💻', label: 'Technology' },
+                    { icon: '🎶', label: 'Music' },
+                    { icon: '🛍️', label: 'Shopping' }
+                  ].map((item, idx) => (
+                    <div 
+                      key={idx}
+                      className="px-2 py-2.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.12] border border-white/10 text-xs font-semibold text-white/90 flex items-center justify-center gap-1.5 backdrop-blur-md shadow-xs select-none transition-all"
+                    >
+                      <span className="text-sm leading-none">{item.icon}</span>
+                      <span className="truncate text-[11px] sm:text-xs">{item.label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Bottom Stats & Info Row (Video Style) */}
+                <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-2 gap-2.5 px-1">
+                  <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/[0.05] border border-white/10">
+                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white/80 shrink-0">
+                      <Calendar size={16} className="text-[#F4B896]" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Joined</div>
+                      <div className="text-xs font-bold text-white truncate">
+                        {profile?.createdAt ? formatDatePassport(profile.createdAt) : '2026 年'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/[0.05] border border-white/10">
+                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white/80 shrink-0">
+                      <Plane size={16} className="text-[#F4B896]" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Created</div>
+                      <div className="text-xs font-bold text-white truncate">
+                        {myTrips.length} Trips
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
