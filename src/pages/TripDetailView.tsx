@@ -1719,12 +1719,12 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
       </AnimatePresence>
 
       {/* Post Comment Input */}
-      <div className="fixed bottom-0 left-0 right-0 max-w-2xl mx-auto bg-white/90 backdrop-blur-xl p-4 safe-bottom border-t border-apple-gray-50 z-50 flex gap-3">
+      <div className="fixed bottom-0 left-0 right-0 max-w-2xl mx-auto bg-white/95 backdrop-blur-xl p-3 sm:p-4 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] border-t border-apple-gray-100 z-50 flex gap-3">
         <input 
           value={newComment}
           onChange={e => setNewComment(e.target.value)}
           placeholder="對這趟旅程感興趣嗎？留個言吧..."
-          className="flex-1 h-11 bg-apple-gray-50 rounded-2xl px-4 text-sm focus:outline-none focus:ring-1 focus:ring-apple-gray-100 transition-all font-medium"
+          className="flex-1 h-11 bg-apple-gray-50 rounded-2xl px-4 text-base focus:outline-none focus:ring-1 focus:ring-apple-gray-100 transition-all font-medium"
         />
         <GlassSendButton
           onClick={handlePostComment}
@@ -1750,6 +1750,15 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
           setEditingDayIndex(null);
         }}
       />
+
+      <AnimatePresence>
+        {isEditingFull && trip && (
+          <CreateTripView 
+            editingTrip={trip} 
+            onCancel={() => setIsEditingFull(false)} 
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

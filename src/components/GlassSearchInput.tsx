@@ -46,7 +46,7 @@ export const GlassSearchInput: React.FC<GlassSearchInputProps> = ({
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`flex-1 h-11 bg-transparent border-none text-sm text-apple-gray-900 placeholder:text-apple-gray-400 focus:outline-none font-medium ${
+        className={`flex-1 h-11 bg-transparent border-none text-base text-apple-gray-900 placeholder:text-apple-gray-400 focus:outline-none font-medium ${
           iconPosition === 'left' ? 'pl-2.5 pr-4' : 'pl-5 pr-2'
         } ${className}`}
         {...props}

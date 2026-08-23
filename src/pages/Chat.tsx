@@ -3233,6 +3233,18 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
     scrollToBottom();
   }, [messages]);
 
+  useEffect(() => {
+    const handleViewportResize = () => {
+      scrollToBottom();
+    };
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleViewportResize);
+      return () => {
+        window.visualViewport?.removeEventListener('resize', handleViewportResize);
+      };
+    }
+  }, []);
+
   const onBackRef = useRef(onBack);
   useEffect(() => {
     onBackRef.current = onBack;
@@ -3486,8 +3498,8 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-white flex flex-col pt-12">
-      <div className="px-4 py-2 border-b border-apple-gray-100 flex items-center justify-between bg-white sticky top-0 z-30">
+    <div className="fixed inset-0 z-[110] bg-white flex flex-col h-[100dvh] w-full overflow-hidden">
+      <div className="px-4 pt-[max(env(safe-area-inset-top,0px),0.75rem)] pb-2.5 border-b border-apple-gray-100 flex items-center justify-between bg-white/95 backdrop-blur-md sticky top-0 z-30 shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
           <button onClick={handleBackClick} className="p-1.5 -ml-1 flex items-center justify-center active:scale-95 transition-transform text-apple-gray-600 hover:text-apple-gray-900 cursor-pointer flex-shrink-0">
             <ArrowLeft size={22} />
@@ -3743,7 +3755,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
       )}
 
       {/* Message input & actions area */}
-      <div className="p-3 safe-bottom border-t border-apple-gray-100 bg-white/80 backdrop-blur-md shadow-apple-sm">
+      <div className="p-3 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] border-t border-apple-gray-100 bg-white/95 backdrop-blur-md shadow-apple-sm z-30 shrink-0">
         <div className="flex items-center gap-2 glass-input-wrapper px-3 py-1.5 transition-all">
           {/* WhatsApp-style Plus (+) Button for Attachments */}
           <button 
@@ -3762,8 +3774,13 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
           <input 
             value={text} 
             onChange={e => setText(e.target.value)}
+            onFocus={() => {
+              setTimeout(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+              }, 250);
+            }}
             placeholder="輸入訊息..."
-            className="flex-1 bg-transparent border-none text-sm text-[#2A2B2A] placeholder:text-apple-gray-400 focus:outline-none px-1 py-1 font-medium"
+            className="flex-1 bg-transparent border-none text-base text-[#2A2B2A] placeholder:text-apple-gray-400 focus:outline-none px-1 py-1 font-medium min-h-[40px]"
             onKeyDown={(e) => e.key === 'Enter' && sendMsg()}
           />
 
@@ -6044,7 +6061,13 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
 
       <AnimatePresence>
         {selectedRoomId && (
-          <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} className="fixed inset-0 z-[100]">
+          <motion.div 
+            initial={{ x: '100%' }} 
+            animate={{ x: 0 }} 
+            exit={{ x: '100%' }} 
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }} 
+            className="fixed inset-0 z-[100] bg-white w-full h-[100dvh] overflow-hidden"
+          >
              <ChatView 
                roomId={selectedRoomId} 
                onBack={() => setSelectedRoomId(null)} 

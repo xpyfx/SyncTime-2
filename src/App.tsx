@@ -133,7 +133,7 @@ const AppContent = () => {
   };
 
   return (
-    <div className="min-h-screen bg-apple-gray-50 max-w-md mx-auto relative overflow-x-hidden shadow-2xl">
+    <div className="min-h-screen bg-apple-gray-50 max-w-md mx-auto relative overflow-x-hidden">
       <div className="flex flex-col h-full">
         <AnimatePresence mode="wait">
           <motion.div

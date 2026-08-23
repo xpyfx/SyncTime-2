@@ -12,7 +12,7 @@ import { BudgetLevel, SeekingGender, Trip, TripStatus, Accommodation } from '../
 import { COUNTRIES, getCitiesByCountry } from '../lib/locationData';
 
 const Label = ({ children, required = false, icon: Icon }: { children: React.ReactNode, required?: boolean, icon?: any }) => (
-  <label className="block text-xs font-bold text-[#2B2B2B] tracking-wider mb-2 flex items-center gap-1.5">
+  <label className="block text-xs font-bold text-[#2B2B2B] tracking-wider mb-2 flex items-center gap-1.5 flex-wrap">
     {Icon && <Icon size={16} className="text-[#035096] shrink-0" />}
     <span>{children}</span>
     {required && <span className="text-[#F4B896] text-sm font-black">*</span>}
@@ -28,7 +28,7 @@ const Input = ({ className = '', hasError = false, icon: Icon, ...props }: React
     )}
     <input 
       {...props} 
-      className={`w-full h-12 liquid-glass-input ${Icon ? 'pl-11 pr-5' : 'px-5'} text-sm font-medium text-[#2B2B2B] placeholder:text-[#2B2B2B]/40 focus:outline-none transition-all ${
+      className={`w-full min-h-[48px] h-12 liquid-glass-input ${Icon ? 'pl-11 pr-5' : 'px-5'} text-sm font-medium text-[#2B2B2B] placeholder:text-[#2B2B2B]/40 focus:outline-none transition-all ${
         hasError ? '!border-red-400 !bg-red-50/30 ring-2 ring-red-400/50' : ''
       } ${className}`}
     />
@@ -70,7 +70,7 @@ const AutocompleteInput = ({
       const matches = suggestions.filter(s => 
         s.toLowerCase().includes(query) && s.toLowerCase() !== query
       );
-      setFiltered(matches.slice(0, 5)); // Limit to top 5
+      setFiltered(matches.slice(0, 6)); // Limit to top 6
       setIsOpen(matches.length > 0);
     } else {
       setFiltered([]);
@@ -79,8 +79,8 @@ const AutocompleteInput = ({
   }, [value, suggestions]);
 
   return (
-    <div className="relative" ref={containerRef}>
-      <div className="relative">
+    <div className="relative w-full" ref={containerRef}>
+      <div className="relative w-full">
         <Input 
           value={value} 
           onChange={e => onChange(e.target.value)} 
@@ -91,7 +91,7 @@ const AutocompleteInput = ({
           }}
         />
         {Icon && (
-          <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[#035096]">
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[#035096] pointer-events-none">
             <Icon size={18} />
           </div>
         )}
@@ -100,23 +100,23 @@ const AutocompleteInput = ({
       <AnimatePresence>
         {isOpen && (
           <motion.div 
-            initial={{ opacity: 0, y: -10, scale: 0.98 }}
+            initial={{ opacity: 0, y: -8, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.98 }}
-            className="absolute top-full left-0 right-0 liquid-glass-card border border-white/90 rounded-2xl mt-2 shadow-2xl z-[200] overflow-hidden backdrop-blur-2xl p-1"
+            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+            className="absolute top-full left-0 right-0 liquid-glass-card border border-white/90 rounded-2xl mt-1.5 shadow-2xl z-[200] max-h-56 overflow-y-auto backdrop-blur-2xl p-1"
           >
             {filtered.map(s => (
               <button
                 key={s}
                 type="button"
-                className="w-full text-left px-4 py-3 text-sm hover:bg-white/70 rounded-xl transition-all border-b border-white/40 last:border-0 flex items-center gap-3 text-[#2B2B2B] font-semibold"
+                className="w-full text-left px-4 py-2.5 text-sm hover:bg-white/70 active:bg-white/90 rounded-xl transition-all border-b border-white/40 last:border-0 flex items-center gap-3 text-[#2B2B2B] font-semibold cursor-pointer"
                 onClick={() => {
                   onChange(s);
                   setIsOpen(false);
                 }}
               >
                 <Search size={14} className="text-[#035096] shrink-0" />
-                <span>{s}</span>
+                <span className="truncate">{s}</span>
               </button>
             ))}
           </motion.div>
@@ -151,30 +151,30 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
   useEffect(() => {
     if (editingTrip) {
       setCountry(editingTrip.country);
-      setCities(editingTrip.cities);
+      setCities(editingTrip.cities && editingTrip.cities.length > 0 ? editingTrip.cities : ['']);
       setStartDate(editingTrip.startDate);
       setEndDate(editingTrip.endDate);
-      setIsAdjustable(editingTrip.isAdjustable);
+      setIsAdjustable(editingTrip.isAdjustable || false);
       setDepartureCountry(editingTrip.departureCountry || '');
       setDepartureCity(editingTrip.departureCity || '');
-      setTotalPeople(editingTrip.totalPeople);
-      setRecruitingCount(editingTrip.recruitingCount);
-      setSeekingGender(editingTrip.seekingGender);
+      setTotalPeople(editingTrip.totalPeople || 1);
+      setRecruitingCount(editingTrip.recruitingCount || 1);
+      setSeekingGender(editingTrip.seekingGender || '男女');
       setArrivalMethod(editingTrip.arrivalMethod || '');
       setTransportInfo(editingTrip.transportInfo || '');
-      setAccommodationStatus(editingTrip.accommodationStatus);
+      setAccommodationStatus(editingTrip.accommodationStatus || '待定');
       if (editingTrip.accommodations && editingTrip.accommodations.length > 0) {
         setAccommodations(editingTrip.accommodations);
       } else {
         setAccommodations([{ id: Math.random().toString(36).substr(2, 9), note: '', hotelName: '', address: '', mapLink: '' }]);
       }
-      setNotes(editingTrip.notes);
-      setBudgetLevel(editingTrip.budgetLevel);
+      setNotes(editingTrip.notes || '');
+      setBudgetLevel(editingTrip.budgetLevel || '低價');
       setIsFriendsOnly(editingTrip.isFriendsOnly || false);
     }
   }, [editingTrip]);
 
-  const addCity = () => setCities([...cities, '']);
+  const addCity = () => setCities(prev => [...prev, '']);
   const updateCity = (index: number, val: string) => {
     const newCities = [...cities];
     newCities[index] = val;
@@ -189,7 +189,7 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
     }
   };
 
-  const addAccommodation = () => setAccommodations([...accommodations, { id: Math.random().toString(36).substr(2, 9), note: '', hotelName: '', address: '', mapLink: '' }]);
+  const addAccommodation = () => setAccommodations(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), note: '', hotelName: '', address: '', mapLink: '' }]);
   const removeAccommodation = (id: string) => {
     if (accommodations.length > 1) {
       setAccommodations(accommodations.filter(a => a.id !== id));
@@ -279,7 +279,7 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
         notes,
         budgetLevel,
         isFriendsOnly,
-        status: editingTrip ? editingTrip.status : '徵人中' as TripStatus,
+        status: editingTrip ? editingTrip.status : ('徵人中' as TripStatus),
         updatedAt: serverTimestamp(),
       };
 
@@ -325,29 +325,33 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
   };
 
   return (
-    <div className="fixed inset-0 z-[120] bg-slate-100/80 overflow-y-auto font-sans h-screen overscroll-contain relative">
-      {/* Soft Floating Ambient Light Blobs for Glass Refraction */}
-      <div className="fixed -top-16 -left-16 w-80 h-80 rounded-full bg-[#B6CADA]/50 blur-3xl pointer-events-none animate-pulse" />
-      <div className="fixed top-1/3 -right-20 w-96 h-96 rounded-full bg-[#F4B896]/35 blur-3xl pointer-events-none" />
-      <div className="fixed bottom-10 left-1/3 w-80 h-80 rounded-full bg-[#035096]/20 blur-3xl pointer-events-none" />
+    <div className="fixed inset-0 z-[120] bg-[#f4f7fb]/95 backdrop-blur-3xl font-sans flex flex-col h-[100dvh] w-full overflow-hidden select-none">
+      {/* Background Soft Ambient Light Blobs */}
+      <div className="fixed -top-16 -left-16 w-80 h-80 rounded-full bg-[#B6CADA]/40 blur-3xl pointer-events-none animate-pulse" />
+      <div className="fixed top-1/3 -right-20 w-96 h-96 rounded-full bg-[#F4B896]/25 blur-3xl pointer-events-none" />
+      <div className="fixed bottom-10 left-1/3 w-80 h-80 rounded-full bg-[#035096]/15 blur-3xl pointer-events-none" />
 
-      {/* Sticky Header Bar */}
-      <div className="sticky top-0 bg-white/60 backdrop-blur-2xl z-[130] px-6 pt-12 pb-4 flex items-center justify-between border-b border-white/80 shadow-[0_4px_24px_rgba(3,80,150,0.06)]">
+      {/* Permanently Pinned Header Bar (Supports Dynamic Island & Safe Area) */}
+      <header className="shrink-0 w-full bg-white/80 backdrop-blur-2xl z-30 pt-[max(env(safe-area-inset-top,0px),0.75rem)] pb-3 px-4 sm:px-6 border-b border-white/80 shadow-[0_4px_24px_rgba(3,80,150,0.06)] flex items-center justify-between gap-3">
         <button 
           type="button"
           onClick={onCancel} 
-          className="w-10 h-10 rounded-full liquid-glass-btn-secondary flex items-center justify-center transition-transform active:scale-90 shadow-sm"
+          className="w-10 h-10 rounded-full liquid-glass-btn-secondary flex items-center justify-center transition-transform active:scale-90 shadow-sm shrink-0 cursor-pointer"
           title="關閉"
           aria-label="關閉"
         >
           <X size={20} className="text-[#035096] stroke-[2.5]" />
         </button>
-        <h1 className="text-base sm:text-lg font-bold tracking-tight text-[#2B2B2B]">{editingTrip ? '編輯貼文' : '發布徵旅伴'}</h1>
+
+        <h1 className="flex-1 text-center text-base sm:text-lg font-bold tracking-tight text-[#2B2B2B] truncate px-1">
+          {editingTrip ? '編輯貼文' : '發布徵旅伴'}
+        </h1>
+
         <button 
           type="button"
           onClick={handleSubmit} 
           disabled={isSubmitting}
-          className="w-10 h-10 rounded-full liquid-glass-btn-primary flex items-center justify-center disabled:opacity-50 transition-transform active:scale-90 shadow-md shrink-0"
+          className="w-10 h-10 rounded-full liquid-glass-btn-primary flex items-center justify-center disabled:opacity-50 transition-transform active:scale-90 shadow-md shrink-0 cursor-pointer"
           title={editingTrip ? '儲存' : '發布'}
           aria-label={editingTrip ? '儲存' : '發布'}
         >
@@ -357,11 +361,12 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
             <Send size={18} className="stroke-[2.5] -rotate-12 translate-x-[-1px] translate-y-[1px]" />
           )}
         </button>
-      </div>
+      </header>
 
-      <div className="p-5 sm:p-6 space-y-6 max-w-xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-40 relative z-10">
+      {/* Scrollable Form Body Container */}
+      <main className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-6 py-5 space-y-4 sm:space-y-6 max-w-xl mx-auto w-full pb-[max(env(safe-area-inset-bottom,0px)+6rem,7rem)] relative z-10 scrollbar-thin">
         {/* Destination Section */}
-        <section className="liquid-glass-card p-5 sm:p-6 space-y-5">
+        <section className="liquid-glass-card p-4 sm:p-6 space-y-4 sm:space-y-5">
           <div>
             <Label required icon={Globe}>預計前往國家（想避免翻譯問題者請填寫英文）</Label>
             <AutocompleteInput 
@@ -370,27 +375,28 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
                 setCountry(val);
                 if (fieldErrors.country) setFieldErrors(prev => ({ ...prev, country: false }));
               }} 
-              placeholder="例如：義大利"
+              placeholder="例如：義大利 或 Japan"
               suggestions={COUNTRIES}
               icon={Globe}
               hasError={fieldErrors.country}
             />
             {fieldErrors.country && (
-              <p className="text-xs text-red-500 font-bold mt-2 flex items-center gap-1">
+              <p className="text-xs text-red-500 font-bold mt-1.5 flex items-center gap-1">
                 ⚠️ 請填寫預計前往國家
               </p>
             )}
           </div>
+
           <div>
             <Label required icon={MapPin}>預計前往城市</Label>
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {cities.map((city, index) => (
-                <div key={index} className="flex gap-2.5 items-center">
-                  <div className="flex-1">
+                <div key={index} className="flex gap-2 items-center">
+                  <div className="flex-1 min-w-0">
                     <AutocompleteInput 
                       value={city} 
                       onChange={val => updateCity(index, val)} 
-                      placeholder={`第 ${index + 1} 個城市`}
+                      placeholder={`第 ${index + 1} 個城市（如：羅馬、米蘭）`}
                       suggestions={country ? getCitiesByCountry(country) : []}
                       icon={MapPin}
                       hasError={fieldErrors.city && cities.filter(c => c.trim()).length === 0}
@@ -398,22 +404,28 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
                   </div>
                   {cities.length > 1 && (
                     <button 
+                      type="button"
                       onClick={() => removeCity(index)} 
-                      className="w-10 h-10 rounded-full liquid-glass-btn-secondary flex items-center justify-center text-red-500 hover:text-red-600 shrink-0"
+                      className="w-10 h-10 rounded-full liquid-glass-btn-secondary flex items-center justify-center text-red-500 hover:text-red-600 shrink-0 cursor-pointer active:scale-90 transition-transform"
+                      title="刪除城市"
+                      aria-label="刪除城市"
                     >
                       <X size={18} />
                     </button>
                   )}
                 </div>
               ))}
+
               {fieldErrors.city && (
                 <p className="text-xs text-red-500 font-bold mt-1 flex items-center gap-1">
                   ⚠️ 請填寫至少一個預計前往城市
                 </p>
               )}
+
               <button 
+                type="button"
                 onClick={addCity}
-                className="liquid-glass-btn-secondary w-full py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-all mt-1"
+                className="liquid-glass-btn-secondary w-full py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-all mt-1 min-h-[44px] cursor-pointer"
               >
                 <Plus size={16} strokeWidth={2.5} /> 新增城市
               </button>
@@ -422,14 +434,14 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
         </section>
 
         {/* Date Section */}
-        <section className="liquid-glass-card p-5 sm:p-6 space-y-5">
+        <section className="liquid-glass-card p-4 sm:p-6 space-y-4 sm:space-y-5">
           <Label required icon={Calendar}>預計旅遊日期</Label>
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2.5">
             <div>
-              <div className={`flex items-center gap-3 liquid-glass-input px-4 h-12 ${
+              <div className={`flex items-center gap-3 liquid-glass-input px-4 min-h-[48px] h-12 ${
                 fieldErrors.startDate ? '!border-red-400 !bg-red-50/30 ring-2 ring-red-400/50' : ''
               }`}>
-                <Calendar size={18} className={fieldErrors.startDate ? "text-red-400" : "text-[#035096]"} />
+                <Calendar size={18} className={`shrink-0 ${fieldErrors.startDate ? "text-red-400" : "text-[#035096]"}`} />
                 <input 
                   type="date" 
                   value={startDate} 
@@ -437,7 +449,7 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
                     setStartDate(e.target.value);
                     if (fieldErrors.startDate) setFieldErrors(prev => ({ ...prev, startDate: false }));
                   }} 
-                  className="flex-1 bg-transparent text-sm font-semibold text-[#2B2B2B] focus:outline-none"
+                  className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-[#2B2B2B] focus:outline-none cursor-pointer"
                 />
               </div>
               {fieldErrors.startDate && (
@@ -447,17 +459,17 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
               )}
             </div>
 
-            <div className="flex items-center justify-center">
-              <span className="bg-white/70 backdrop-blur-md px-4 py-1 rounded-full border border-white/90 text-xs font-bold text-[#035096] shadow-2xs">
+            <div className="flex items-center justify-center py-0.5">
+              <span className="bg-white/80 backdrop-blur-md px-4 py-1 rounded-full border border-white/90 text-xs font-bold text-[#035096] shadow-2xs">
                 至
               </span>
             </div>
 
             <div>
-              <div className={`flex items-center gap-3 liquid-glass-input px-4 h-12 ${
+              <div className={`flex items-center gap-3 liquid-glass-input px-4 min-h-[48px] h-12 ${
                 fieldErrors.endDate ? '!border-red-400 !bg-red-50/30 ring-2 ring-red-400/50' : ''
               }`}>
-                <Calendar size={18} className={fieldErrors.endDate ? "text-red-400" : "text-[#035096]"} />
+                <Calendar size={18} className={`shrink-0 ${fieldErrors.endDate ? "text-red-400" : "text-[#035096]"}`} />
                 <input 
                   type="date" 
                   value={endDate} 
@@ -465,7 +477,7 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
                     setEndDate(e.target.value);
                     if (fieldErrors.endDate) setFieldErrors(prev => ({ ...prev, endDate: false }));
                   }} 
-                  className="flex-1 bg-transparent text-sm font-semibold text-[#2B2B2B] focus:outline-none"
+                  className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-[#2B2B2B] focus:outline-none cursor-pointer"
                 />
               </div>
               {fieldErrors.endDate && (
@@ -476,8 +488,11 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
             </div>
           </div>
 
-          <div className="flex items-center gap-3 pt-1 cursor-pointer" onClick={() => setIsAdjustable(!isAdjustable)}>
-            <div className={`w-6 h-6 rounded-lg transition-all duration-300 flex items-center justify-center border ${
+          <div 
+            className="flex items-center gap-3 pt-1 cursor-pointer min-h-[40px]" 
+            onClick={() => setIsAdjustable(!isAdjustable)}
+          >
+            <div className={`w-6 h-6 rounded-lg transition-all duration-200 flex items-center justify-center border shrink-0 ${
               isAdjustable 
                 ? 'bg-gradient-to-b from-[#0462B7] to-[#035096] border-white/80 shadow-[0_4px_12px_rgba(3,80,150,0.35),inset_0_1px_1px_rgba(255,255,255,0.8)]' 
                 : 'bg-white/60 border-white/90 shadow-inner'
@@ -495,18 +510,21 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
               onChange={e => setIsAdjustable(e.target.checked)}
               className="hidden"
             />
-            <label htmlFor="adjustable" className="text-xs font-bold text-[#2B2B2B] cursor-pointer select-none">可調整時間</label>
+            <label htmlFor="adjustable" className="text-xs font-bold text-[#2B2B2B] cursor-pointer select-none">
+              可調整時間
+            </label>
           </div>
         </section>
 
-        {/* Departure Section */}
-        <section className="liquid-glass-card p-5 sm:p-6 grid grid-cols-2 gap-4">
+        {/* Departure Section (RWD Responsive Grid) */}
+        <section className="liquid-glass-card p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
           <div className="space-y-2">
             <Label icon={PlaneTakeoff}>出發國家</Label>
             <AutocompleteInput 
               value={departureCountry} 
               onChange={setDepartureCountry} 
               suggestions={COUNTRIES}
+              placeholder="例如：台灣"
               icon={PlaneTakeoff}
             />
           </div>
@@ -515,37 +533,38 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
             <AutocompleteInput 
               value={departureCity} 
               onChange={setDepartureCity} 
+              placeholder="例如：台北"
               suggestions={departureCountry ? getCitiesByCountry(departureCountry) : []}
               icon={Navigation}
             />
           </div>
         </section>
 
-        {/* Numbers Section */}
-        <section className="liquid-glass-card p-5 sm:p-6 grid grid-cols-2 gap-4">
+        {/* Numbers Section (RWD Responsive Grid) */}
+        <section className="liquid-glass-card p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
           <div className="space-y-2">
             <Label icon={Users}>旅遊總人數</Label>
-            <Input type="number" min={1} value={totalPeople} onChange={e => setTotalPeople(Number(e.target.value))} icon={Users} />
+            <Input type="number" min={1} value={totalPeople} onChange={e => setTotalPeople(Math.max(1, Number(e.target.value)))} icon={Users} />
           </div>
           <div className="space-y-2">
             <Label icon={UserPlus}>預計徵旅伴人數</Label>
-            <Input type="number" min={1} value={recruitingCount} onChange={e => setRecruitingCount(Number(e.target.value))} icon={UserPlus} />
+            <Input type="number" min={1} value={recruitingCount} onChange={e => setRecruitingCount(Math.max(1, Number(e.target.value)))} icon={UserPlus} />
           </div>
         </section>
 
-        {/* Gender & Budget Section */}
-        <section className="liquid-glass-card p-5 sm:p-6 grid grid-cols-2 gap-4">
+        {/* Gender & Budget Section (RWD Responsive Grid) */}
+        <section className="liquid-glass-card p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
           <div className="space-y-2">
             <Label icon={UserCheck}>徵旅伴性別</Label>
             <div className="relative">
               <select 
                 value={seekingGender} 
                 onChange={e => setSeekingGender(e.target.value as SeekingGender)}
-                className="w-full h-12 liquid-glass-input px-5 text-sm font-semibold text-[#2B2B2B] focus:outline-none appearance-none cursor-pointer pr-10"
+                className="w-full min-h-[48px] h-12 liquid-glass-input px-5 text-sm font-semibold text-[#2B2B2B] focus:outline-none appearance-none cursor-pointer pr-10"
               >
-                <option value="男">男</option>
-                <option value="女">女</option>
-                <option value="男女">男女</option>
+                <option value="男女">男女不限</option>
+                <option value="男">僅限男性</option>
+                <option value="女">僅限女性</option>
               </select>
               <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-[#035096] text-xs">
                 ▼
@@ -558,11 +577,11 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
               <select 
                 value={budgetLevel} 
                 onChange={e => setBudgetLevel(e.target.value as BudgetLevel)}
-                className="w-full h-12 liquid-glass-input px-5 text-sm font-semibold text-[#2B2B2B] focus:outline-none appearance-none cursor-pointer pr-10"
+                className="w-full min-h-[48px] h-12 liquid-glass-input px-5 text-sm font-semibold text-[#2B2B2B] focus:outline-none appearance-none cursor-pointer pr-10"
               >
-                <option value="低價">低價旅遊</option>
-                <option value="中價">中價旅遊</option>
-                <option value="高價">高價旅遊</option>
+                <option value="低價">低價旅遊 (青年旅館/平價美食)</option>
+                <option value="中價">中價旅遊 (標準酒店/休閒體驗)</option>
+                <option value="高價">高價旅遊 (星級酒店/精緻度假)</option>
               </select>
               <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-[#035096] text-xs">
                 ▼
@@ -572,32 +591,34 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
         </section>
 
         {/* Arrival & Transport Section */}
-        <section className="liquid-glass-card p-5 sm:p-6 space-y-4">
+        <section className="liquid-glass-card p-4 sm:p-6 space-y-4">
           <div>
             <Label icon={Compass}>抵達目的地方式</Label>
-            <Input value={arrivalMethod} onChange={e => setArrivalMethod(e.target.value)} placeholder="如：飛機、高鐵" icon={Compass} />
+            <Input value={arrivalMethod} onChange={e => setArrivalMethod(e.target.value)} placeholder="如：飛機直飛、高鐵、自駕" icon={Compass} />
           </div>
           <div>
             <Label icon={Car}>交通資訊</Label>
-            <Input value={transportInfo} onChange={e => setTransportInfo(e.target.value)} placeholder="如：航空公司｜航班號" icon={Car} />
+            <Input value={transportInfo} onChange={e => setTransportInfo(e.target.value)} placeholder="如：長榮航空 BR123｜或租車自駕" icon={Car} />
           </div>
         </section>
 
         {/* Accommodation Section */}
-        <section className="liquid-glass-card p-5 sm:p-6 space-y-4">
+        <section className="liquid-glass-card p-4 sm:p-6 space-y-4">
           <Label icon={Building}>住宿安排</Label>
           <div className="liquid-glass-segmented flex p-1.5 gap-1.5">
             <button 
+              type="button"
               onClick={() => setAccommodationStatus('已定')}
-              className={`flex-1 py-2.5 text-xs font-bold transition-all ${
+              className={`flex-1 py-2.5 text-xs font-bold transition-all min-h-[40px] cursor-pointer ${
                 accommodationStatus === '已定' ? 'liquid-glass-segment-active' : 'text-[#2B2B2B]/70 hover:text-[#2B2B2B]'
               }`}
             >
               已定
             </button>
             <button 
+              type="button"
               onClick={() => setAccommodationStatus('待定')}
-              className={`flex-1 py-2.5 text-xs font-bold transition-all ${
+              className={`flex-1 py-2.5 text-xs font-bold transition-all min-h-[40px] cursor-pointer ${
                 accommodationStatus === '待定' ? 'liquid-glass-segment-active' : 'text-[#2B2B2B]/70 hover:text-[#2B2B2B]'
               }`}
             >
@@ -606,28 +627,33 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
           </div>
 
           {accommodationStatus === '已定' && (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-4 pt-2">
-              {accommodations.map((acc, index) => (
-                <div key={acc.id} className="p-4 bg-white/40 backdrop-blur-md rounded-2xl border border-white/80 shadow-xs relative space-y-3">
-                  <div className="flex gap-2.5">
-                    <div className="flex-[2]">
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-3.5 pt-1">
+              {accommodations.map((acc) => (
+                <div key={acc.id} className="p-3.5 sm:p-4 bg-white/40 backdrop-blur-md rounded-2xl border border-white/80 shadow-xs space-y-2.5">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="flex-1 min-w-0">
                       <input 
                         value={acc.note} 
                         onChange={e => updateAccommodation(acc.id, 'note', e.target.value)} 
                         placeholder="第一天 / 城市" 
-                        className="w-full h-10 liquid-glass-input px-3.5 text-xs font-semibold focus:outline-none"
+                        className="w-full h-10 min-h-[40px] liquid-glass-input px-3.5 text-xs font-semibold focus:outline-none"
                       />
                     </div>
-                    <div className="flex-[3]">
+                    <div className="flex-1 min-w-0">
                       <input 
                         value={acc.hotelName} 
                         onChange={e => updateAccommodation(acc.id, 'hotelName', e.target.value)} 
                         placeholder="酒店名稱" 
-                        className="w-full h-10 liquid-glass-input px-3.5 text-xs font-semibold focus:outline-none"
+                        className="w-full h-10 min-h-[40px] liquid-glass-input px-3.5 text-xs font-semibold focus:outline-none"
                       />
                     </div>
                     {accommodations.length > 1 && (
-                      <button onClick={() => removeAccommodation(acc.id)} className="w-10 h-10 rounded-full liquid-glass-btn-secondary flex items-center justify-center text-red-500 shrink-0">
+                      <button 
+                        type="button"
+                        onClick={() => removeAccommodation(acc.id)} 
+                        className="w-10 h-10 rounded-full liquid-glass-btn-secondary flex items-center justify-center text-red-500 shrink-0 self-end sm:self-auto cursor-pointer"
+                        title="移除住宿"
+                      >
                         <X size={16} />
                       </button>
                     )}
@@ -639,23 +665,24 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
                       placeholder="住宿地址" 
                       icon={Building}
                     />
-                    <div className="relative">
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#035096]">
+                    <div className="relative w-full">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#035096] pointer-events-none">
                         <MapIcon size={16} />
                       </div>
                       <input 
                         value={acc.mapLink} 
                         onChange={e => updateAccommodation(acc.id, 'mapLink', e.target.value)} 
                         placeholder="Google Map 連結" 
-                        className="w-full h-12 liquid-glass-input pl-11 pr-4 text-sm font-semibold focus:outline-none"
+                        className="w-full h-12 min-h-[48px] liquid-glass-input pl-11 pr-4 text-sm font-semibold focus:outline-none"
                       />
                     </div>
                   </div>
                 </div>
               ))}
               <button 
+                type="button"
                 onClick={addAccommodation}
-                className="liquid-glass-btn-secondary w-full py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+                className="liquid-glass-btn-secondary w-full py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-all min-h-[44px] cursor-pointer"
               >
                 <Plus size={16} strokeWidth={2.5} /> 新增住宿
               </button>
@@ -664,33 +691,37 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
         </section>
 
         {/* Notes & Privacy Section */}
-        <section className="liquid-glass-card p-5 sm:p-6 space-y-5">
+        <section className="liquid-glass-card p-4 sm:p-6 space-y-4 sm:space-y-5">
           <div>
             <Label icon={FileText}>備註 (Note)</Label>
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              className="w-full h-32 liquid-glass-input rounded-2xl p-4 text-sm font-medium text-[#2B2B2B] placeholder:text-[#2B2B2B]/40 focus:outline-none resize-none"
-              placeholder="寫下你的要求或期待..."
+              className="w-full h-28 sm:h-32 liquid-glass-input rounded-2xl p-4 text-sm font-medium text-[#2B2B2B] placeholder:text-[#2B2B2B]/40 focus:outline-none resize-none"
+              placeholder="寫下你的要求、行程期待或旅行喜好..."
             />
           </div>
 
-          <div className="flex items-center justify-between p-4 bg-white/50 backdrop-blur-md rounded-2xl border border-white/80 shadow-xs">
-            <div className="flex flex-col pr-3">
-              <span className="text-sm font-bold text-[#2B2B2B] flex items-center gap-1.5">
-                <Lock size={16} className="text-[#035096]" />
+          <div className="flex items-center justify-between p-3.5 sm:p-4 bg-white/50 backdrop-blur-md rounded-2xl border border-white/80 shadow-xs gap-3">
+            <div className="flex flex-col pr-1 min-w-0">
+              <span className="text-sm font-bold text-[#2B2B2B] flex items-center gap-1.5 truncate">
+                <Lock size={16} className="text-[#035096] shrink-0" />
                 僅對好友展示
               </span>
-              <span className="text-xs font-medium text-[#2B2B2B]/60 mt-0.5">開啟後，只有您的好友能看見此徵旅伴訊息</span>
+              <span className="text-xs font-medium text-[#2B2B2B]/60 mt-0.5 leading-relaxed">
+                開啟後，只有您的好友能看見此徵旅伴訊息
+              </span>
             </div>
             <button
               type="button"
               onClick={() => setIsFriendsOnly(!isFriendsOnly)}
-              className={`relative inline-flex h-8 w-14 items-center rounded-full transition-all duration-300 focus:outline-none shrink-0 ${
+              className={`relative inline-flex h-8 w-14 items-center rounded-full transition-all duration-300 focus:outline-none shrink-0 cursor-pointer ${
                 isFriendsOnly 
                   ? 'bg-gradient-to-r from-[#0462B7] to-[#035096] border-1.5 border-white/80 shadow-[0_4px_16px_rgba(3,80,150,0.35),inset_0_1.5px_2px_rgba(255,255,255,0.6)]' 
                   : 'bg-slate-200/80 border-1.5 border-white/80 shadow-inner'
               }`}
+              title="切換隱私狀態"
+              aria-label="僅對好友展示開關"
             >
               <motion.span
                 animate={{ x: isFriendsOnly ? 26 : 3 }}
@@ -700,7 +731,7 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
             </button>
           </div>
         </section>
-      </div>
+      </main>
     </div>
   );
 };

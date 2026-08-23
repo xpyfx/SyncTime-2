@@ -231,20 +231,20 @@ export const TravelBarView: React.FC<{
       <AnimatePresence>
         {isPosting && (
           <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-white pt-12 px-6"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed inset-0 z-[120] bg-white pt-[max(env(safe-area-inset-top,0px),1rem)] px-5 sm:px-6 flex flex-col h-[100dvh]"
           >
-            <div className="flex items-center justify-between mb-8">
-              <button onClick={() => setIsPosting(false)} className="text-apple-gray-400 font-light">取消</button>
-              <h2 className="font-semibold">發佈見聞</h2>
+            <div className="flex items-center justify-between py-3 mb-4 border-b border-apple-gray-100/60">
+              <button onClick={() => setIsPosting(false)} className="text-apple-gray-400 font-bold text-sm px-2 py-1 active:scale-95 transition-transform">取消</button>
+              <h2 className="font-bold text-base text-[#2B2B2B]">發佈見聞</h2>
               <button 
                 onClick={handleCreatePost}
-                disabled={!newPostContent.trim()}
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${newPostContent.trim() ? 'bg-apple-gray-600 text-white' : 'bg-apple-gray-50 text-apple-gray-300'}`}
+                disabled={!newPostContent.trim() || isSubmitting}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold transition-all shadow-sm ${newPostContent.trim() && !isSubmitting ? 'bg-[#035096] text-white active:scale-95' : 'bg-apple-gray-100 text-apple-gray-300'}`}
               >
-                發佈
+                {isSubmitting ? '發佈中...' : '發佈'}
               </button>
             </div>
             <textarea
@@ -252,7 +252,7 @@ export const TravelBarView: React.FC<{
               placeholder="分享你在旅行中遇到的趣事、美食或提醒大家避雷的事..."
               value={newPostContent}
               onChange={(e) => setNewPostContent(e.target.value)}
-              className="w-full h-48 bg-transparent text-lg font-light focus:outline-none resize-none leading-relaxed"
+              className="flex-1 w-full bg-transparent text-base font-normal focus:outline-none resize-none leading-relaxed text-[#2B2B2B] placeholder:text-apple-gray-300 pb-[max(env(safe-area-inset-bottom,0px)+2rem,3rem)]"
             />
           </motion.div>
         )}
