@@ -351,7 +351,7 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
         <CrystalBubbleButton
           onClick={handleSubmit} 
           isLoading={isSubmitting}
-          size="md"
+          size="lg"
           title={editingTrip ? '儲存' : '發布'}
           aria-label={editingTrip ? '儲存' : '發布'}
         />
