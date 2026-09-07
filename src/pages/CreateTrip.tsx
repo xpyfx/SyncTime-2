@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plane, Plus, MapPin, Calendar, Users, Info, Map as MapIcon, X, Search, 
-  Send, Globe, UserPlus, UserCheck, Wallet, Compass, Car, Building, FileText, Lock,
+  Send, ArrowUp, Globe, UserPlus, UserCheck, Wallet, Compass, Car, Building, FileText, Lock,
   PlaneTakeoff, Navigation 
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { BudgetLevel, SeekingGender, Trip, TripStatus, Accommodation } from '../types';
 import { COUNTRIES, getCitiesByCountry } from '../lib/locationData';
+import { CrystalBubbleButton } from '../components/CrystalBubbleButton';
 
 const Label = ({ children, required = false, icon: Icon }: { children: React.ReactNode, required?: boolean, icon?: any }) => (
   <label className="block text-xs font-bold text-[#2B2B2B] tracking-wider mb-2 flex items-center gap-1.5 flex-wrap">
@@ -332,35 +333,28 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
       <div className="fixed bottom-10 left-1/3 w-80 h-80 rounded-full bg-[#035096]/15 blur-3xl pointer-events-none" />
 
       {/* Permanently Pinned Header Bar (Supports Dynamic Island & Safe Area) */}
-      <header className="shrink-0 w-full bg-white/80 backdrop-blur-2xl z-30 pt-[max(env(safe-area-inset-top,0px),0.75rem)] pb-3 px-4 sm:px-6 border-b border-white/80 shadow-[0_4px_24px_rgba(3,80,150,0.06)] flex items-center justify-between gap-3">
+      <header className="shrink-0 w-full bg-white/85 backdrop-blur-2xl z-30 pt-[max(env(safe-area-inset-top,0px),48px)] pb-3 px-5 sm:px-6 border-b border-white/80 shadow-[0_4px_24px_rgba(3,80,150,0.06)] flex items-center justify-between gap-3">
         <button 
           type="button"
           onClick={onCancel} 
-          className="w-10 h-10 rounded-full liquid-glass-btn-secondary flex items-center justify-center transition-transform active:scale-90 shadow-sm shrink-0 cursor-pointer"
+          className="w-11 h-11 rounded-full liquid-glass-btn-secondary flex items-center justify-center transition-transform active:scale-90 shadow-sm shrink-0 cursor-pointer"
           title="關閉"
           aria-label="關閉"
         >
-          <X size={20} className="text-[#035096] stroke-[2.5]" />
+          <X size={22} className="text-[#035096] stroke-[2.5]" />
         </button>
 
         <h1 className="flex-1 text-center text-base sm:text-lg font-bold tracking-tight text-[#2B2B2B] truncate px-1">
           {editingTrip ? '編輯貼文' : '發布徵旅伴'}
         </h1>
 
-        <button 
-          type="button"
+        <CrystalBubbleButton
           onClick={handleSubmit} 
-          disabled={isSubmitting}
-          className="w-10 h-10 rounded-full liquid-glass-btn-primary flex items-center justify-center disabled:opacity-50 transition-transform active:scale-90 shadow-md shrink-0 cursor-pointer"
+          isLoading={isSubmitting}
+          size="md"
           title={editingTrip ? '儲存' : '發布'}
           aria-label={editingTrip ? '儲存' : '發布'}
-        >
-          {isSubmitting ? (
-            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <Send size={18} className="stroke-[2.5] -rotate-12 translate-x-[-1px] translate-y-[1px]" />
-          )}
-        </button>
+        />
       </header>
 
       {/* Scrollable Form Body Container */}
@@ -697,12 +691,12 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              className="w-full h-28 sm:h-32 liquid-glass-input rounded-2xl p-4 text-sm font-medium text-[#2B2B2B] placeholder:text-[#2B2B2B]/40 focus:outline-none resize-none"
+              className="w-full h-28 sm:h-32 liquid-glass-textarea rounded-xl p-3.5 sm:p-4 text-sm font-medium text-[#2B2B2B] placeholder:text-[#2B2B2B]/40 focus:outline-none resize-none"
               placeholder="寫下你的要求、行程期待或旅行喜好..."
             />
           </div>
 
-          <div className="flex items-center justify-between p-3.5 sm:p-4 bg-white/50 backdrop-blur-md rounded-2xl border border-white/80 shadow-xs gap-3">
+          <div className="flex items-center justify-between p-3.5 sm:p-4 bg-white/50 backdrop-blur-md rounded-xl border border-white/80 shadow-xs gap-3">
             <div className="flex flex-col pr-1 min-w-0">
               <span className="text-sm font-bold text-[#2B2B2B] flex items-center gap-1.5 truncate">
                 <Lock size={16} className="text-[#035096] shrink-0" />

@@ -1400,8 +1400,8 @@ const ExpenseCard: React.FC<ExpenseCardProps> = ({ expense, msgTime }) => {
       {/* Top Header Badge */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5 text-[#D97706] font-bold text-xs bg-white/90 px-2.5 py-1 rounded-full border border-[#F59E0B]/20 shadow-2xs">
-          <Wallet size={15} />
-          <span>{isSplit ? '⚖️ 團體分帳' : '💰 個人記帳'}</span>
+          <Users size={15} />
+          <span>⚖️ 團體分帳</span>
         </div>
         <span className="text-[11px] font-bold text-[#B45309] bg-[#F59E0B]/10 px-2.5 py-0.5 rounded-full border border-[#F59E0B]/20">
           💳 {expense.paymentMethod || '現金'}
@@ -2377,8 +2377,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
     }
   };
 
-  // Expense Form States
-  const [expenseMode, setExpenseMode] = useState<'記帳' | '分帳'>('記帳');
+  // Expense Form States (Group Split Billing)
   const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [expensePayerId, setExpensePayerId] = useState('');
   const [expensePaymentMethod, setExpensePaymentMethod] = useState<'現金' | '信用卡' | '記帳卡'>('現金');
@@ -2482,7 +2481,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
     const payerProf = participantProfiles[payerUid] || (payerUid === user?.uid ? profile : null);
     const payerName = payerProf?.displayName || user?.displayName || '成員';
 
-    // Determine Split Names
+    // Determine Split Names (default to all selected members)
     const splitWithNames = expenseSplitWith.map(id => {
       if (id === user?.uid) return profile?.displayName || '我';
       return participantProfiles[id]?.displayName || '成員';
@@ -2490,7 +2489,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
 
     const expensePayload: ExpenseData = {
       id: 'exp_' + Date.now(),
-      mode: expenseMode,
+      mode: '分帳',
       date: expenseDate || new Date().toISOString().split('T')[0],
       payerId: payerUid,
       payerName,
@@ -2500,14 +2499,12 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
       amount: rawAmt,
       currency: expenseCurrency,
       amountTwd: twdAmt,
-      splitWithUserIds: expenseMode === '分帳' ? expenseSplitWith : undefined,
-      splitWithNames: expenseMode === '分帳' ? splitWithNames : undefined,
+      splitWithUserIds: expenseSplitWith,
+      splitWithNames: splitWithNames,
       createdAt: new Date().toISOString()
     };
 
-    const summaryText = expenseMode === '分帳'
-      ? `⚖️ 團體分帳：${expenseTitle} $${rawAmt} ${expenseCurrency} (約 NT$ ${twdAmt}) - 由 ${payerName} 付款，共 ${splitWithNames.length} 人平分`
-      : `💰 個人記帳：${expenseTitle} $${rawAmt} ${expenseCurrency} (約 NT$ ${twdAmt}) - 由 ${payerName} 用 ${expensePaymentMethod} 付款`;
+    const summaryText = `⚖️ 團體分帳：${expenseTitle} $${rawAmt} ${expenseCurrency} (約 NT$ ${twdAmt}) - 由 ${payerName} 付款，共 ${splitWithNames.length} 人平分`;
 
     try {
       await addDoc(collection(db, 'chatRooms', roomId, 'messages'), {
@@ -3499,9 +3496,9 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
 
   return (
     <div className="fixed inset-0 z-[110] bg-white flex flex-col h-[100dvh] w-full overflow-hidden">
-      <div className="px-4 pt-[max(env(safe-area-inset-top,0px),0.75rem)] pb-2.5 border-b border-apple-gray-100 flex items-center justify-between bg-white/95 backdrop-blur-md sticky top-0 z-30 shrink-0">
+      <div className="px-4 sm:px-5 pt-[max(env(safe-area-inset-top,0px),48px)] pb-3 border-b border-apple-gray-100 flex items-center justify-between bg-white/95 backdrop-blur-md sticky top-0 z-30 shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
-          <button onClick={handleBackClick} className="p-1.5 -ml-1 flex items-center justify-center active:scale-95 transition-transform text-apple-gray-600 hover:text-apple-gray-900 cursor-pointer flex-shrink-0">
+          <button onClick={handleBackClick} className="w-10 h-10 -ml-1 flex items-center justify-center active:scale-90 transition-transform text-apple-gray-600 hover:text-apple-gray-900 cursor-pointer flex-shrink-0 rounded-full" aria-label="返回">
             <ArrowLeft size={22} />
           </button>
           
@@ -3886,7 +3883,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                   <span className="text-[12px] font-medium text-apple-gray-600">行程</span>
                 </button>
 
-                {/* 5. 記帳 */}
+                {/* 5. 分帳 */}
                 <button 
                   type="button"
                   onClick={() => {
@@ -3896,9 +3893,9 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                   className="flex flex-col items-center gap-1.5 group"
                 >
                   <div className="w-16 h-12 rounded-[20px] bg-white shadow-2xs border border-black/5 flex items-center justify-center text-[#F59E0B] group-active:scale-95 transition-transform">
-                    <Wallet size={24} className="stroke-[2.2]" />
+                    <Users size={24} className="stroke-[2.2]" />
                   </div>
-                  <span className="text-[12px] font-medium text-apple-gray-600">記帳</span>
+                  <span className="text-[12px] font-medium text-apple-gray-600">分帳</span>
                 </button>
 
                 {/* 6. 投票 */}
@@ -4341,7 +4338,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
         )}
       </AnimatePresence>
 
-      {/* 5. 記帳 / 分帳 Modal */}
+      {/* 5. 團體分帳 Modal */}
       <AnimatePresence>
         {showExpenseModal && (
           <div className="fixed inset-0 z-[115] flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4 bg-black/40 backdrop-blur-xs">
@@ -4355,15 +4352,15 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
               {/* Header */}
               <div className="flex justify-between items-center mb-4 pb-3 border-b border-apple-gray-100">
                 <div className="flex items-center gap-2 text-[#D97706]">
-                  <Wallet size={22} className="stroke-[2.2]" />
-                  <h3 className="font-bold text-apple-gray-800 text-base">新增記帳紀錄</h3>
+                  <Users size={22} className="stroke-[2.2]" />
+                  <h3 className="font-bold text-apple-gray-800 text-base">新增分帳紀錄</h3>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={handleCalculateAndSendSettlement}
-                    className="px-3 py-1.5 rounded-full bg-gradient-to-r from-[#10B981] to-[#059669] text-white font-extrabold text-xs shadow-xs hover:opacity-95 active:scale-95 flex items-center gap-1.5 transition-all cursor-pointer"
+                    className="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-[#10B981] to-[#059669] text-white font-extrabold text-xs shadow-xs hover:opacity-95 active:scale-95 flex items-center gap-1.5 transition-all cursor-pointer"
                     title="一鍵計算這趟旅程的分帳結果並發送結算卡片"
                   >
                     <Calculator size={14} className="stroke-[2.5]" />
@@ -4380,36 +4377,8 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                 </div>
               </div>
 
-              {/* 1. Mode Selector Pills: 記帳 vs 分帳 */}
-              <div className="mb-4 bg-apple-gray-100 p-1 rounded-2xl flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setExpenseMode('記帳')}
-                  className={`flex-1 py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all ${
-                    expenseMode === '記帳'
-                      ? 'bg-white text-[#D97706] shadow-2xs'
-                      : 'text-apple-gray-500 hover:text-apple-gray-800'
-                  }`}
-                >
-                  <Wallet size={15} />
-                  <span>個人記帳</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExpenseMode('分帳')}
-                  className={`flex-1 py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all ${
-                    expenseMode === '分帳'
-                      ? 'bg-[#F59E0B] text-white shadow-2xs'
-                      : 'text-apple-gray-500 hover:text-apple-gray-800'
-                  }`}
-                >
-                  <Users size={15} />
-                  <span>團體分帳</span>
-                </button>
-              </div>
-
               <div className="space-y-4 mb-5">
-                {/* 2. Date Picker & Payment Method */}
+                {/* 1. Date Picker & Payment Method */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[11px] font-bold text-apple-gray-500 block mb-1">
@@ -4439,7 +4408,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                   </div>
                 </div>
 
-                {/* 3. Who Paid (誰付款) */}
+                {/* 2. Who Paid (誰付款) */}
                 <div>
                   <label className="text-[11px] font-bold text-apple-gray-500 block mb-1">
                     👤 誰先付款 (Payer)
@@ -4460,7 +4429,56 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                   </select>
                 </div>
 
-                {/* 4. Category Selector (記帳類別) + Custom Addition */}
+                {/* 3. 跟誰分 (平分成員) */}
+                <div className="bg-[#FEF3C7]/60 rounded-2xl p-3 border border-[#F59E0B]/30">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-bold text-[#B45309] flex items-center gap-1">
+                      <Users size={14} />
+                      <span>跟誰分 (平分成員)</span>
+                    </span>
+                    <span className="text-[10px] text-apple-gray-500">
+                      已選 {expenseSplitWith.length} 人
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                    {room?.participants?.map(uid => {
+                      const prof = participantProfiles[uid] || (uid === user?.uid ? profile : null);
+                      const isChecked = expenseSplitWith.includes(uid);
+                      return (
+                        <label key={uid} className="flex items-center justify-between bg-white p-2 rounded-xl border border-apple-gray-100 cursor-pointer hover:bg-apple-gray-50">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-apple-gray-100 flex items-center justify-center text-[10px] font-bold text-apple-gray-600 overflow-hidden">
+                              {prof?.avatarUrl ? (
+                                <img src={prof.avatarUrl} className="w-full h-full object-cover" />
+                              ) : (
+                                prof?.displayName?.[0] || '?'
+                              )}
+                            </div>
+                            <span className="text-xs font-bold text-apple-gray-800">
+                              {prof?.displayName || (uid === user?.uid ? '我' : uid.slice(0, 6))}
+                            </span>
+                          </div>
+                          <input 
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setExpenseSplitWith(prev => [...prev, uid]);
+                              } else {
+                                if (expenseSplitWith.length <= 1) return; // Keep at least one
+                                setExpenseSplitWith(prev => prev.filter(id => id !== uid));
+                              }
+                            }}
+                            className="w-4 h-4 rounded text-[#F59E0B] focus:ring-[#F59E0B]"
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 4. Category Selector (消費類別) + Custom Addition */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-[11px] font-bold text-apple-gray-500">
@@ -4517,7 +4535,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                 {/* 5. Item Content / Description */}
                 <div>
                   <label className="text-[11px] font-bold text-apple-gray-500 block mb-1">
-                  記帳內容 (Description)
+                    消費內容 (Description)
                   </label>
                   <input 
                     value={expenseTitle}
@@ -4527,58 +4545,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                   />
                 </div>
 
-                {/* 6. If "分帳" is selected: 跟誰分 (Split with whom) */}
-                {expenseMode === '分帳' && (
-                  <div className="bg-[#FEF3C7]/60 rounded-2xl p-3 border border-[#F59E0B]/30">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-bold text-[#B45309] flex items-center gap-1">
-                        <Users size={14} />
-                        <span>跟誰分 (平分成員)</span>
-                      </span>
-                      <span className="text-[10px] text-apple-gray-500">
-                        已選 {expenseSplitWith.length} 人
-                      </span>
-                    </div>
-
-                    <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
-                      {room?.participants?.map(uid => {
-                        const prof = participantProfiles[uid] || (uid === user?.uid ? profile : null);
-                        const isChecked = expenseSplitWith.includes(uid);
-                        return (
-                          <label key={uid} className="flex items-center justify-between bg-white p-2 rounded-xl border border-apple-gray-100 cursor-pointer hover:bg-apple-gray-50">
-                            <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-apple-gray-100 flex items-center justify-center text-[10px] font-bold text-apple-gray-600 overflow-hidden">
-                                {prof?.avatarUrl ? (
-                                  <img src={prof.avatarUrl} className="w-full h-full object-cover" />
-                                ) : (
-                                  prof?.displayName?.[0] || '?'
-                                )}
-                              </div>
-                              <span className="text-xs font-bold text-apple-gray-800">
-                                {prof?.displayName || (uid === user?.uid ? '我' : uid.slice(0, 6))}
-                              </span>
-                            </div>
-                            <input 
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setExpenseSplitWith(prev => [...prev, uid]);
-                                } else {
-                                  if (expenseSplitWith.length <= 1) return; // Keep at least one
-                                  setExpenseSplitWith(prev => prev.filter(id => id !== uid));
-                                }
-                              }}
-                              className="w-4 h-4 rounded text-[#F59E0B] focus:ring-[#F59E0B]"
-                            />
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* 7. Three Amount Boxes (金額、幣別、換算台幣) */}
+                {/* 6. Three Amount Boxes (金額、幣別、換算台幣) */}
                 <div className="bg-apple-gray-50 rounded-2xl p-3 border border-apple-gray-200/80 space-y-2">
                   <div className="text-[11px] font-bold text-apple-gray-600 mb-1 flex items-center justify-between">
                     <span>金額資訊</span>
@@ -4677,10 +4644,10 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
                 type="button"
                 onClick={handleCreateAndSendExpense}
                 disabled={!expenseTitle.trim() || !expenseAmount}
-                className="w-full h-11 rounded-2xl bg-[#F59E0B] text-white font-bold text-sm hover:bg-[#D97706] active:scale-98 disabled:opacity-40 transition-all shadow-xs flex items-center justify-center gap-2"
+                className="w-full h-11 rounded-2xl bg-[#F59E0B] text-white font-bold text-sm hover:bg-[#D97706] active:scale-98 disabled:opacity-40 transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Check size={18} />
-                <span>新增並發送記帳卡片</span>
+                <span>新增並發送分帳卡片</span>
               </button>
             </motion.div>
           </div>
@@ -5857,10 +5824,10 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
       {/* Search Modal */}
       <AnimatePresence>
         {showSearch && (
-          <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} className="fixed inset-0 z-[100] bg-white pt-12">
-            <div className="px-6 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4">
+          <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} className="fixed inset-0 z-[100] bg-white pt-[max(env(safe-area-inset-top,0px),48px)]">
+            <div className="px-5 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4">
               <h2 className="text-lg font-bold">尋找好友</h2>
-              <button onClick={() => setShowSearch(false)} className="text-apple-gray-600 font-medium">關閉</button>
+              <button onClick={() => setShowSearch(false)} className="text-apple-gray-600 font-medium px-2 py-1">關閉</button>
             </div>
             <div className="p-4 space-y-4">
               <div className="w-full">
@@ -5904,13 +5871,14 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
       </AnimatePresence>
 
       {/* Header and Capsule Pill Switcher */}
-      <div className="sticky top-0 bg-white/95 backdrop-blur-md z-10 px-4 pt-12 pb-3 border-b border-apple-gray-50">
+      <div className="sticky top-0 bg-white/95 backdrop-blur-md z-10 px-5 pt-[max(env(safe-area-inset-top,0px),48px)] pb-3 border-b border-apple-gray-50">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-2xl font-black tracking-tight text-apple-gray-900">聊天室</h1>
           <button 
             onClick={() => setShowSearch(true)} 
-            className="text-apple-blue p-2 rounded-full hover:bg-apple-blue/5 active:scale-90 transition-transform"
+            className="w-11 h-11 rounded-full flex items-center justify-center text-apple-blue hover:bg-apple-blue/5 active:scale-90 transition-transform cursor-pointer"
             title="新增好友"
+            aria-label="新增好友"
           >
             <UserPlus size={22} strokeWidth={2.5} />
           </button>

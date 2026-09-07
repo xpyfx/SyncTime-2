@@ -54,9 +54,15 @@ export const UserPostsView: React.FC<UserPostsViewProps> = ({ userId, onBack, on
 
   return (
     <div className="bg-white fixed inset-0 z-50 overflow-y-auto pb-40">
-      <div className="sticky top-0 bg-white/90 backdrop-blur-xl z-20 px-6 pt-12 pb-4 flex items-center justify-between border-b border-apple-gray-100/50">
-        <button onClick={onBack} className="text-apple-gray-400 p-1 active:scale-90 transition-transform"><ArrowLeft size={24} /></button>
-        <h1 className="text-lg font-bold tracking-tight">發佈記錄</h1>
+      <div className="sticky top-0 bg-white/90 backdrop-blur-xl z-20 px-5 pt-[max(env(safe-area-inset-top,0px),48px)] pb-3 flex items-center justify-between border-b border-apple-gray-100/50">
+        <button 
+          onClick={onBack} 
+          className="w-10 h-10 -ml-1 flex items-center justify-center rounded-full text-apple-gray-600 hover:text-apple-gray-900 active:scale-90 transition-transform cursor-pointer"
+          aria-label="返回"
+        >
+          <ArrowLeft size={22} />
+        </button>
+        <h1 className="text-lg font-bold tracking-tight text-apple-gray-900">發佈記錄</h1>
         <div className="w-10"></div>
       </div>
 

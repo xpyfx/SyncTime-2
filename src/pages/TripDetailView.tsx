@@ -989,22 +989,35 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
     <div className="fixed inset-0 z-50 bg-white flex flex-col">
       <div className={`flex-1 overflow-y-auto pb-32 ${isInactive ? 'grayscale-[0.2]' : ''}`}>
         {/* Header */}
-        <div className="sticky top-0 bg-white/80 backdrop-blur-xl z-20 px-6 pt-12 pb-4 flex items-center justify-between border-b border-apple-gray-100/50">
-        <button onClick={onBack} className="text-apple-gray-400 p-1"><ArrowLeft size={24} /></button>
-        <h1 className="text-lg font-bold tracking-tight">旅伴詳情</h1>
-        <div className="flex items-center gap-1">
-          {(isMember || isAuthor) && !getTripDeletionInfo(trip?.endDate)?.isExpired && chatRoomExists && (
-            <button 
-              onClick={handleOpenGroupChat} 
-              className="text-apple-gray-400 p-2 hover:bg-apple-gray-50 rounded-full transition-colors relative"
-              title="旅伴群聊"
-            >
-              <MessageCircle size={24} />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 border border-white rounded-full"></span>
-            </button>
-          )}
-          <div className="relative">
-            <button onClick={() => setShowMenu(!showMenu)} className="text-apple-gray-400 p-1"><MoreVertical size={24} /></button>
+        <div className="sticky top-0 bg-white/85 backdrop-blur-xl z-20 px-5 pt-[max(env(safe-area-inset-top,0px),48px)] pb-3 flex items-center justify-between border-b border-apple-gray-100/50">
+          <button 
+            onClick={onBack} 
+            className="w-10 h-10 -ml-1 flex items-center justify-center rounded-full text-apple-gray-600 hover:text-apple-gray-900 active:scale-90 transition-transform cursor-pointer"
+            aria-label="返回"
+          >
+            <ArrowLeft size={22} />
+          </button>
+          <h1 className="text-lg font-bold tracking-tight text-apple-gray-900">旅伴詳情</h1>
+          <div className="flex items-center gap-1">
+            {(isMember || isAuthor) && !getTripDeletionInfo(trip?.endDate)?.isExpired && chatRoomExists && (
+              <button 
+                onClick={handleOpenGroupChat} 
+                className="w-10 h-10 flex items-center justify-center rounded-full text-apple-gray-600 hover:bg-apple-gray-50 active:scale-90 transition-all relative cursor-pointer"
+                title="旅伴群聊"
+                aria-label="旅伴群聊"
+              >
+                <MessageCircle size={22} />
+                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 border border-white rounded-full"></span>
+              </button>
+            )}
+            <div className="relative">
+              <button 
+                onClick={() => setShowMenu(!showMenu)} 
+                className="w-10 h-10 flex items-center justify-center rounded-full text-apple-gray-600 hover:bg-apple-gray-50 active:scale-90 transition-all cursor-pointer"
+                aria-label="更多選項"
+              >
+                <MoreVertical size={22} />
+              </button>
           <AnimatePresence>
             {showMenu && (
               <motion.div 
@@ -1388,9 +1401,9 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
         {showMemberManager && (
           <motion.div 
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-            className="fixed inset-0 z-[100] bg-white pt-12 overflow-y-auto"
+            className="fixed inset-0 z-[100] bg-white pt-[max(env(safe-area-inset-top,0px),48px)] overflow-y-auto"
           >
-            <div className="px-6 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4 bg-white sticky top-0">
+            <div className="px-5 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4 bg-white sticky top-0">
               <h2 className="text-lg font-bold">旅程成員</h2>
               <div className="flex items-center gap-2">
                 {isAuthor && (
@@ -1561,7 +1574,7 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 50 }}
-            className="fixed inset-0 z-[300] bg-white overflow-y-auto pt-12 pb-10 px-6 max-w-2xl mx-auto flex flex-col"
+            className="fixed inset-0 z-[300] bg-white overflow-y-auto pt-[max(env(safe-area-inset-top,0px),48px)] pb-10 px-5 sm:px-6 max-w-2xl mx-auto flex flex-col"
           >
             {/* Header */}
             <div className="flex items-center justify-between border-b border-apple-gray-100 pb-4 sticky top-0 bg-white/90 backdrop-blur-md z-10">
@@ -1839,9 +1852,9 @@ const ItineraryManager: React.FC<ItineraryManagerProps> = ({ isOpen, onClose, tr
   return (
     <motion.div 
       initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-      className="fixed inset-0 z-[110] bg-white pt-12 overflow-y-auto"
+      className="fixed inset-0 z-[110] bg-white pt-[max(env(safe-area-inset-top,0px),48px)] overflow-y-auto"
     >
-      <div className="px-6 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4 bg-white sticky top-0 z-10">
+      <div className="px-5 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4 bg-white sticky top-0 z-10">
         <h2 className="text-lg font-bold">行程安排設定</h2>
         <div className="flex items-center gap-3">
           <button onClick={onClose} className="text-apple-gray-400 font-medium">取消</button>

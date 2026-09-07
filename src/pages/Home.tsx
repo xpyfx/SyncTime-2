@@ -133,14 +133,15 @@ export const HomeView: React.FC<HomeViewProps> = ({ onAvatarClick, onTripClick, 
       />
 
       {/* Header / Search */}
-      <div className="sticky top-0 bg-[#8AD2FF]/20 backdrop-blur-md z-10 px-5 pt-12 pb-2 transition-all">
-        <div className="flex justify-between items-center mb-6">
+      <div className="sticky top-0 bg-[#8AD2FF]/20 backdrop-blur-md z-10 px-5 pt-[max(env(safe-area-inset-top,0px),48px)] pb-2 transition-all">
+        <div className="flex justify-between items-center mb-5">
           <h1 className="text-2xl font-bold tracking-tight text-apple-gray-900">為您推薦</h1>
           <button 
             onClick={onAddClick}
-            className="w-10 h-10 bg-white/90 hover:bg-white text-apple-gray-800 rounded-full flex items-center justify-center shadow-2xs active:scale-95 transition-all"
+            className="w-11 h-11 bg-white/95 hover:bg-white text-apple-gray-800 rounded-full flex items-center justify-center shadow-apple-sm active:scale-90 transition-transform cursor-pointer"
+            aria-label="新增貼文"
           >
-            <Plus size={20} />
+            <Plus size={22} strokeWidth={2.5} />
           </button>
         </div>
         <div className="mb-4">

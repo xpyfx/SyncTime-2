@@ -1261,37 +1261,40 @@ export const ProfilePage: React.FC<{
 
   return (
     <div className="flex flex-col min-h-screen bg-apple-gray-50">
-      {/* Top Action Icons - Sticky instead of Fixed to respect stacking context */}
-      <div className="sticky top-0 left-0 right-0 z-10 px-6 pt-6 pb-4 flex items-center justify-between pointer-events-none bg-apple-gray-50/80 backdrop-blur-md">
+      {/* Top Action Icons - Sticky with iPhone Safe Area Inset and Comfort Margin */}
+      <div className="sticky top-0 left-0 right-0 z-20 px-5 pt-[max(env(safe-area-inset-top,0px),48px)] pb-2 flex items-center justify-between pointer-events-none bg-apple-gray-50/90 backdrop-blur-md transition-all">
         {onBack ? (
           <button 
             onClick={onBack}
-            className="p-2 text-apple-gray-900 pointer-events-auto active:scale-90 transition-transform"
+            className="w-11 h-11 rounded-full bg-white/70 border border-apple-gray-100 flex items-center justify-center text-apple-gray-900 pointer-events-auto active:scale-90 transition-transform shadow-2xs"
+            aria-label="返回"
           >
-            <ArrowLeft size={28} />
+            <ArrowLeft size={24} />
           </button>
         ) : (
-          isOwnProfile && (
+          isOwnProfile ? (
             <button 
               onClick={() => setShowRequests(true)}
-              className="p-2 text-apple-gray-900 pointer-events-auto active:scale-90 transition-transform relative"
+              className="w-11 h-11 rounded-full bg-white/70 border border-apple-gray-100 flex items-center justify-center text-apple-gray-900 pointer-events-auto active:scale-90 transition-transform relative shadow-2xs"
+              aria-label="好友邀請"
             >
-              <UserPlus size={28} />
+              <UserPlus size={22} />
               {pendingRequests.length > 0 && (
-                <span className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white shadow-sm">
                   {pendingRequests.length}
                 </span>
               )}
             </button>
-          )
+          ) : <div className="w-11 h-11" />
         )}
         
         {!onBack && isOwnProfile && (
           <button 
             onClick={() => setShowSettings(true)}
-            className="p-2 text-apple-gray-900 pointer-events-auto active:scale-90 transition-transform"
+            className="w-11 h-11 rounded-full bg-white/70 border border-apple-gray-100 flex items-center justify-center text-apple-gray-900 pointer-events-auto active:scale-90 transition-transform shadow-2xs"
+            aria-label="設定"
           >
-            <Settings size={28} />
+            <Settings size={22} />
           </button>
         )}
       </div>
@@ -1301,9 +1304,9 @@ export const ProfilePage: React.FC<{
         {showSettings && (
           <motion.div 
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-            className="fixed inset-0 z-[200] bg-white pt-12 overflow-y-auto"
+            className="fixed inset-0 z-[200] bg-white pt-[max(env(safe-area-inset-top,0px),48px)] overflow-y-auto"
           >
-            <div className="px-6 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4 bg-white sticky top-0">
+            <div className="px-5 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4 bg-white sticky top-0">
               <h2 className="text-lg font-bold">設定</h2>
               <button onClick={() => setShowSettings(false)} className="text-apple-gray-600 font-medium">完成</button>
             </div>
@@ -1416,16 +1419,16 @@ export const ProfilePage: React.FC<{
         {showGestureSettings && (
           <motion.div 
             initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-            className="fixed inset-0 z-[210] bg-white pt-12 overflow-y-auto"
+            className="fixed inset-0 z-[210] bg-white pt-[max(env(safe-area-inset-top,0px),48px)] overflow-y-auto"
           >
-            <div className="px-6 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4 bg-white sticky top-0">
+            <div className="px-5 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4 bg-white sticky top-0">
               <div className="flex items-center gap-3">
-                <button onClick={() => setShowGestureSettings(false)} className="p-1 -ml-1 text-apple-gray-400">
+                <button onClick={() => setShowGestureSettings(false)} className="p-2 -ml-2 text-apple-gray-400 active:scale-95 transition-transform" aria-label="返回">
                   <ChevronRight size={24} className="rotate-180" />
                 </button>
                 <h2 className="text-lg font-bold">手勢設定</h2>
               </div>
-              <button onClick={() => setShowGestureSettings(false)} className="text-apple-blue font-bold">完成</button>
+              <button onClick={() => setShowGestureSettings(false)} className="text-apple-blue font-bold px-2 py-1">完成</button>
             </div>
 
             <div className="px-4 space-y-6">
@@ -1489,11 +1492,11 @@ export const ProfilePage: React.FC<{
               {gestureSubMenu && (
                 <motion.div 
                   initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-                  className="fixed inset-0 z-[220] bg-white pt-12"
+                  className="fixed inset-0 z-[220] bg-white pt-[max(env(safe-area-inset-top,0px),48px)]"
                 >
-                  <div className="px-6 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4 bg-white">
+                  <div className="px-5 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4 bg-white">
                     <div className="flex items-center gap-3">
-                      <button onClick={() => setGestureSubMenu(null)} className="p-1 -ml-1 text-apple-gray-400">
+                      <button onClick={() => setGestureSubMenu(null)} className="p-2 -ml-2 text-apple-gray-400 active:scale-95 transition-transform" aria-label="返回">
                         <ChevronRight size={24} className="rotate-180" />
                       </button>
                       <h2 className="text-lg font-bold">
@@ -1541,9 +1544,9 @@ export const ProfilePage: React.FC<{
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
             className="fixed inset-0 z-[200] bg-white flex flex-col"
           >
-            <div className="px-6 pt-12 pb-4 flex items-center justify-between border-b border-apple-gray-50 bg-white shrink-0">
+            <div className="px-5 pt-[max(env(safe-area-inset-top,0px),48px)] pb-4 flex items-center justify-between border-b border-apple-gray-50 bg-white shrink-0">
               <h2 className="text-lg font-bold">修改護照資料</h2>
-              <button onClick={() => setShowEditPassport(false)} className="text-apple-gray-400">取消</button>
+              <button onClick={() => setShowEditPassport(false)} className="text-apple-gray-400 px-2 py-1">取消</button>
             </div>
             
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
@@ -1755,9 +1758,9 @@ export const ProfilePage: React.FC<{
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
             className="fixed inset-0 z-[200] bg-white flex flex-col"
           >
-            <div className="px-6 pt-12 pb-4 flex items-center justify-between border-b border-apple-gray-50 bg-white shrink-0">
+            <div className="px-5 pt-[max(env(safe-area-inset-top,0px),48px)] pb-4 flex items-center justify-between border-b border-apple-gray-50 bg-white shrink-0">
               <h2 className="text-lg font-bold">好友申請</h2>
-              <button onClick={() => setShowRequests(false)} className="text-apple-gray-600 font-medium">關閉</button>
+              <button onClick={() => setShowRequests(false)} className="text-apple-gray-600 font-medium px-2 py-1">關閉</button>
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -1881,11 +1884,11 @@ export const ProfilePage: React.FC<{
         {showFriends && (
           <motion.div 
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-            className="fixed inset-0 z-[200] bg-white pt-12"
+            className="fixed inset-0 z-[200] bg-white pt-[max(env(safe-area-inset-top,0px),48px)]"
           >
-            <div className="px-6 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4 bg-white">
+            <div className="px-5 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4 bg-white">
               <h2 className="text-lg font-bold">我的好友</h2>
-              <button onClick={() => setShowFriends(false)} className="text-apple-gray-600 font-medium">完成</button>
+              <button onClick={() => setShowFriends(false)} className="text-apple-gray-600 font-medium px-2 py-1">完成</button>
             </div>
             <div className="p-4 space-y-4">
               {firendsList.length ? firendsList.map(f => (
@@ -1919,11 +1922,11 @@ export const ProfilePage: React.FC<{
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
-            className="fixed inset-0 z-[200] bg-white pt-12"
+            className="fixed inset-0 z-[200] bg-white pt-[max(env(safe-area-inset-top,0px),48px)]"
           >
-            <div className="px-6 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4 bg-white">
+            <div className="px-5 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4 bg-white">
               <h2 className="text-lg font-bold">封鎖名單</h2>
-              <button onClick={() => setShowBlocklist(false)} className="text-apple-gray-600 font-medium font-bold">完成</button>
+              <button onClick={() => setShowBlocklist(false)} className="text-apple-gray-600 font-medium font-bold px-2 py-1">完成</button>
             </div>
             <div className="p-6">
               {profile?.blockedUsers?.length ? (
@@ -1960,7 +1963,9 @@ export const ProfilePage: React.FC<{
                 e.stopPropagation();
                 setShowEditPassport(true);
               }} 
-              className="absolute right-3.5 top-3.5 p-2 rounded-full bg-white/40 shadow-sm border border-white/50 text-[#cc9673] backdrop-blur-xl active:scale-90 transition-transform z-10"
+              className="absolute right-4 top-4 w-9 h-9 rounded-full bg-white/60 shadow-sm border border-white/80 text-[#cc9673] backdrop-blur-xl active:scale-90 transition-transform z-10 flex items-center justify-center cursor-pointer"
+              title="修改護照資料"
+              aria-label="修改護照資料"
             >
               <Edit2 size={14} />
             </button>
@@ -3124,14 +3129,14 @@ export const ProfilePage: React.FC<{
         {showFootprintDetail && (
           <motion.div 
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-            className="fixed inset-0 z-[250] bg-white pt-12 overflow-y-auto"
+            className="fixed inset-0 z-[250] bg-white pt-[max(env(safe-area-inset-top,0px),48px)] overflow-y-auto"
           >
-            <div className="px-6 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4 bg-white sticky top-0">
+            <div className="px-5 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4 bg-white sticky top-0">
               <div className="flex items-center gap-2">
                 <Globe size={20} className="text-apple-blue" />
                 <h2 className="text-lg font-bold">旅遊足跡</h2>
               </div>
-              <button onClick={() => setShowFootprintDetail(false)} className="text-apple-gray-600 font-medium font-bold">關閉</button>
+              <button onClick={() => setShowFootprintDetail(false)} className="text-apple-gray-600 font-medium font-bold px-2 py-1">關閉</button>
             </div>
             
             <div className="p-6">
@@ -3271,11 +3276,11 @@ export const ProfilePage: React.FC<{
         {showMyTrips && (
           <motion.div 
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-            className="fixed inset-0 z-[200] bg-white pt-12 overflow-y-auto"
+            className="fixed inset-0 z-[200] bg-white pt-[max(env(safe-area-inset-top,0px),48px)] overflow-y-auto"
           >
-            <div className="px-6 flex items-center justify-between mb-4 bg-white sticky top-0 border-b border-apple-gray-50 pb-2">
+            <div className="px-5 flex items-center justify-between mb-4 bg-white sticky top-0 border-b border-apple-gray-50 pb-2">
               <h2 className="text-lg font-bold">我的旅程</h2>
-              <button onClick={() => setShowMyTrips(false)} className="text-apple-gray-600 font-medium">完成</button>
+              <button onClick={() => setShowMyTrips(false)} className="text-apple-gray-600 font-medium px-2 py-1">完成</button>
             </div>
 
             <div className="px-4 mb-4">
@@ -3331,11 +3336,11 @@ export const ProfilePage: React.FC<{
         {showSaved && (
           <motion.div 
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-            className="fixed inset-0 z-[200] bg-white pt-12 overflow-y-auto"
+            className="fixed inset-0 z-[200] bg-white pt-[max(env(safe-area-inset-top,0px),48px)] overflow-y-auto"
           >
-            <div className="px-6 flex items-center justify-between mb-4 bg-white sticky top-0 border-b border-apple-gray-50 pb-2 z-10">
+            <div className="px-5 flex items-center justify-between mb-4 bg-white sticky top-0 border-b border-apple-gray-50 pb-2 z-10">
               <h2 className="text-lg font-bold text-apple-gray-900 border-none">收藏</h2>
-              <button onClick={() => setShowSaved(false)} className="text-apple-gray-600 font-medium">完成</button>
+              <button onClick={() => setShowSaved(false)} className="text-apple-gray-600 font-medium px-2 py-1">完成</button>
             </div>
 
             <div className="px-5 mb-4">
@@ -3382,11 +3387,11 @@ export const ProfilePage: React.FC<{
         {showHiddenPosts && (
           <motion.div 
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-            className="fixed inset-0 z-[200] bg-white pt-12 overflow-y-auto"
+            className="fixed inset-0 z-[200] bg-white pt-[max(env(safe-area-inset-top,0px),48px)] overflow-y-auto"
           >
-            <div className="px-6 flex items-center justify-between mb-4 bg-white sticky top-0 border-b border-apple-gray-50 pb-2 z-10">
+            <div className="px-5 flex items-center justify-between mb-4 bg-white sticky top-0 border-b border-apple-gray-50 pb-2 z-10">
               <h2 className="text-lg font-bold text-apple-gray-900 border-none">隱藏的貼文</h2>
-              <button onClick={() => setShowHiddenPosts(false)} className="text-apple-gray-600 font-medium">完成</button>
+              <button onClick={() => setShowHiddenPosts(false)} className="text-apple-gray-600 font-medium px-2 py-1">完成</button>
             </div>
 
             <div className="px-5 mb-4">

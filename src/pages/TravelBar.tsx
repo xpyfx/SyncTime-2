@@ -145,14 +145,15 @@ export const TravelBarView: React.FC<{
   return (
     <div className="flex flex-col min-h-screen bg-apple-gray-50">
       {/* Header */}
-      <div className="sticky top-0 bg-apple-gray-50/80 backdrop-blur-xl z-20 px-5 pt-12 pb-2 border-b border-apple-gray-100/50">
+      <div className="sticky top-0 bg-apple-gray-50/80 backdrop-blur-xl z-20 px-5 pt-[max(env(safe-area-inset-top,0px),48px)] pb-2 border-b border-apple-gray-100/50">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-bold tracking-tight text-apple-gray-900">旅吧</h1>
           <button 
             onClick={() => setIsPosting(true)}
-            className="w-10 h-10 rounded-full bg-white border border-apple-gray-100 flex items-center justify-center text-apple-gray-600 active:scale-95 transition-transform shadow-apple-sm"
+            className="w-11 h-11 rounded-full bg-white border border-apple-gray-100 flex items-center justify-center text-apple-gray-600 active:scale-90 transition-transform shadow-apple-sm cursor-pointer"
+            aria-label="新增貼文"
           >
-            <Plus size={20} className="text-apple-blue" strokeWidth={3} />
+            <Plus size={22} className="text-apple-blue" strokeWidth={2.5} />
           </button>
         </div>
         

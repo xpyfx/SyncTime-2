@@ -18,7 +18,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, hasUnre
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none flex justify-center pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] pt-1 px-4 max-w-md mx-auto">
+    <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none flex justify-center pb-[max(env(safe-area-inset-bottom,0px),1rem)] pt-1 px-5 max-w-md mx-auto">
       <nav 
         className="pointer-events-auto w-full max-w-[400px] rounded-full p-1.5 bg-white/75 backdrop-blur-2xl border border-white/90 shadow-[0_4px_20px_rgba(0,0,0,0.06),inset_0_1.5px_1px_rgba(255,255,255,0.95),inset_0_-1px_1px_rgba(255,255,255,0.4)] flex items-center justify-between relative overflow-hidden"
         aria-label="Main Navigation"

@@ -146,12 +146,12 @@ export const NotificationsPage: React.FC<{
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-apple-gray-50 pt-16 pb-32">
-      <div className="px-6 mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">通知</h1>
+    <div className="flex flex-col min-h-screen bg-apple-gray-50 pt-[max(env(safe-area-inset-top,0px),48px)] pb-32">
+      <div className="px-5 mb-5">
+        <h1 className="text-2xl font-bold tracking-tight text-apple-gray-900">通知</h1>
       </div>
       
-      <div className="flex-1 px-4 space-y-4">
+      <div className="flex-1 px-5 space-y-4">
         {loading ? (
           <div className="space-y-4">
             {[1, 2, 3].map(i => (

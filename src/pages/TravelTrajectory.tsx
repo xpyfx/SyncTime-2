@@ -909,13 +909,14 @@ export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUser
     <div className="fixed inset-0 z-50 bg-[#f4f3eb] flex flex-col overflow-hidden text-apple-gray-800">
       
       {/* 1. Header Navigation Bar */}
-      <div className="h-14 bg-white border-b border-apple-gray-100 px-4 flex items-center justify-between relative shadow-sm">
+      <div className="pt-[max(env(safe-area-inset-top,0px),48px)] pb-2.5 bg-white border-b border-apple-gray-100 px-4 sm:px-5 flex items-center justify-between relative shadow-sm shrink-0">
         <button 
           onClick={onClose}
-          className="w-9 h-9 flex items-center justify-center rounded-full text-apple-gray-600 hover:bg-apple-gray-50 active:scale-95 transition-all outline-none"
+          className="w-10 h-10 flex items-center justify-center rounded-full text-apple-gray-600 hover:bg-apple-gray-50 active:scale-90 transition-all outline-none cursor-pointer"
           title="返回"
+          aria-label="返回"
         >
-          <ChevronLeft size={22} />
+          <ChevronLeft size={24} />
         </button>
 
         <div className="flex gap-1.5 p-0.5 bg-apple-gray-50 rounded-full border border-apple-gray-100">
