@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Search, UserPlus, Send, ArrowLeft, Users, Plane, Image as ImageIcon, Video, Plus, X, Lock, Play, Camera, ShieldCheck, Download, ChevronLeft, ChevronRight, ArrowUp, FileText, MapPin, Calendar, Wallet, BarChart2, Dices, Sparkles, Navigation, DollarSign, Vote, CheckCircle2, Trash2, Clock, Check, MessageCircle, CreditCard, Tag, Calculator, Folder, Link as LinkIcon, ExternalLink, FileDown, Eye, Menu } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where, doc, getDoc, getDocs, updateDoc, arrayUnion, arrayRemove, limit, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where, doc, getDoc, getDocs, updateDoc, arrayUnion, arrayRemove, limit, deleteDoc, increment } from 'firebase/firestore';
 import { ChatRoom, Message, UserProfile, PollData, PollOption, LuckyDrawData, ExpenseData, SettlementData, SettlementItem, SettlementExpenseDetail, SettlementPayerTotal, Trip, ItineraryCardData, ItineraryCardDay, ItineraryCardActivity, LocationData } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
@@ -208,8 +208,26 @@ const ChatRoomItem: React.FC<ChatRoomItemProps> = ({ room, onClick }) => {
   const { user } = useAuth();
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [tripEndDate, setTripEndDate] = useState<string | undefined>(undefined);
+  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
   const isGroup = room.type === 'group';
   const otherId = room.participants.find(id => id !== user?.uid);
+
+  // Listen to pending chat notifications for this room to ensure real-time accuracy
+  useEffect(() => {
+    if (!user?.uid || !room.id) return;
+    const q = query(
+      collection(db, 'notifications'),
+      where('toId', '==', user.uid),
+      where('roomId', '==', room.id),
+      where('status', '==', 'pending')
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      setUnreadNotifCount(snap.size);
+    }, (err) => {
+      console.warn('Error listening to room pending notifications:', err);
+    });
+    return () => unsub();
+  }, [user?.uid, room.id]);
 
   useEffect(() => {
     if (!isGroup && otherId) {
@@ -248,6 +266,14 @@ const ChatRoomItem: React.FC<ChatRoomItemProps> = ({ room, onClick }) => {
     }
   };
 
+  const rawRoomUnread = user?.uid
+    ? ((room.unreadCounts && typeof room.unreadCounts[user.uid] === 'number')
+        ? room.unreadCounts[user.uid]
+        : (room.unreadBy?.includes(user.uid) ? 1 : 0))
+    : 0;
+
+  const effectiveUnread = Math.max(rawRoomUnread, unreadNotifCount);
+
   return (
     <div onClick={onClick} className="flex gap-3.5 p-4 active:bg-apple-gray-50 transition-colors cursor-pointer border-b border-apple-gray-100/70 items-center">
       <div className="w-13 h-13 rounded-full bg-apple-gray-100 flex-shrink-0 overflow-hidden flex items-center justify-center border border-apple-gray-200/50">
@@ -264,25 +290,37 @@ const ChatRoomItem: React.FC<ChatRoomItemProps> = ({ room, onClick }) => {
         )}
       </div>
 
+      {/* Middle: Title & Snippet */}
       <div className="flex-1 min-w-0 flex flex-col justify-center">
-        <div className="flex justify-between items-center gap-2 mb-1">
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <h3 className="font-semibold text-sm text-apple-gray-900 truncate min-w-0">
-              {isGroup ? room.name : (otherUser?.displayName || '載入中...')}
-            </h3>
-            {isGroup && tripEndDate && (
-              <CountdownBadge 
-                endDate={tripEndDate} 
-                onExpire={() => deleteChatRoomAndMessages(room.id, room.tripId)} 
-                size="sm" 
-              />
-            )}
-          </div>
-          <span className="text-[10px] text-apple-gray-400 font-medium ml-1 flex-shrink-0 whitespace-nowrap">
-            {formatTime(room.lastUpdatedAt)}
-          </span>
+        <div className="flex items-center gap-1.5 min-w-0 mb-1">
+          <h3 className="font-semibold text-sm text-apple-gray-900 truncate min-w-0">
+            {isGroup ? room.name : (otherUser?.displayName || '載入中...')}
+          </h3>
+          {isGroup && tripEndDate && (
+            <CountdownBadge 
+              endDate={tripEndDate} 
+              onExpire={() => deleteChatRoomAndMessages(room.id, room.tripId)} 
+              size="sm" 
+            />
+          )}
         </div>
         <p className="text-xs text-apple-gray-400 truncate font-light leading-snug">{room.lastMessage || '尚無訊息'}</p>
+      </div>
+
+      {/* Right: Timestamp & Unread Count Badge */}
+      <div className="flex flex-col items-end justify-between self-stretch py-0.5 shrink-0 ml-2">
+        <span className="text-[10px] text-apple-gray-400 font-medium whitespace-nowrap">
+          {formatTime(room.lastUpdatedAt)}
+        </span>
+        {effectiveUnread > 0 ? (
+          <div className="min-w-[19px] h-[19px] px-1.5 rounded-full bg-[#035096] flex items-center justify-center shadow-2xs mt-1">
+            <span className="text-[11px] font-bold text-[#b6cada] leading-none select-none">
+              {effectiveUnread > 99 ? '99+' : effectiveUnread}
+            </span>
+          </div>
+        ) : (
+          <div className="h-[19px] mt-1" />
+        )}
       </div>
     </div>
   );
@@ -2265,16 +2303,20 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
       }
     }
 
-    // 1. Update room document with lastMessage, lastSenderId, lastUpdatedAt, unreadBy
+    // 1. Update room document with lastMessage, lastSenderId, lastUpdatedAt, unreadBy, unreadCounts
     try {
       const roomRef = doc(db, 'chatRooms', targetRoomId);
       if (recipientIds.length > 0) {
-        await updateDoc(roomRef, {
+        const updateData: any = {
           lastMessage: lastMsgText,
           lastSenderId: sId,
           lastUpdatedAt: serverTimestamp(),
           unreadBy: arrayUnion(...recipientIds)
+        };
+        recipientIds.forEach(toId => {
+          updateData[`unreadCounts.${toId}`] = increment(1);
         });
+        await updateDoc(roomRef, updateData);
       } else {
         await updateDoc(roomRef, {
           lastMessage: lastMsgText,
@@ -3288,9 +3330,10 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
   useEffect(() => {
     if (!roomId || !user?.uid) return;
 
-    // Clear unread flag for current user in this room
+    // Clear unread flag and reset unreadCount for current user in this room
     updateDoc(doc(db, 'chatRooms', roomId), {
-      unreadBy: arrayRemove(user.uid)
+      unreadBy: arrayRemove(user.uid),
+      [`unreadCounts.${user.uid}`]: 0
     }).catch(() => {});
 
     // Mark pending chat notifications for this room and user as read

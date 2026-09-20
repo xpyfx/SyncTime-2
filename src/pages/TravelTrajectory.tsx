@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Plus, X, ChevronLeft, Globe, Calendar, MapPin, 
+  Plus, X, ChevronLeft, ChevronRight, Globe, Calendar, MapPin, 
   Trash2, Shield, Heart, Sparkles, AlertCircle, FileText, BarChart3, Image,
   Compass, MessageSquare, Luggage, ArrowUpDown, Share2, Download, CheckCircle,
   Edit2, Users, Lock
@@ -1842,185 +1842,158 @@ export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUser
         )}
       </AnimatePresence>
 
-      {/* 5. GORGEOUS SHARING MODAL DESIGN (IMAGE & FILE SHARING HUD) */}
+      {/* 5. GORGEOUS SHARING MODAL DESIGN (CLEAN & MINIMAL SHARING SHEET) */}
       <AnimatePresence>
         {showShareModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
             <motion.div 
-              initial={{ scale: 0.94, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.94, opacity: 0 }}
-              className="bg-[#fcfcf9] rounded-[28px] max-w-md w-full overflow-hidden shadow-2xl relative border border-apple-gray-100 flex flex-col"
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="bg-white rounded-[24px] max-w-sm w-full overflow-hidden shadow-2xl relative border border-apple-gray-100 flex flex-col"
               style={{ maxHeight: '90vh' }}
             >
               {/* Header */}
-              <div className="p-5 border-b border-apple-gray-100/75 bg-white flex justify-between items-center shrink-0">
+              <div className="px-5 py-4 border-b border-apple-gray-100 bg-white flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-apple-blue/10 flex items-center justify-center text-apple-blue shadow-apple-sm">
-                    <Share2 size={16} />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-black text-apple-gray-800 leading-none">漫空旅居軌跡共享中心</h4>
-                    <span className="text-[10px] font-bold text-apple-gray-400 mt-1 block">
-                      目前頁面: {activeTab === 'stays' ? '👣 軌跡足跡' : '📊 軌跡數據統計'}
-                    </span>
-                  </div>
+                  {shareFormat !== null && (
+                    <button 
+                      onClick={() => setShareFormat(null)}
+                      className="w-7 h-7 -ml-1 rounded-full flex items-center justify-center text-apple-gray-600 hover:bg-apple-gray-100 active:scale-90 transition-all cursor-pointer mr-1"
+                      aria-label="返回"
+                    >
+                      <ChevronLeft size={20} />
+                    </button>
+                  )}
+                  <h4 className="text-base font-bold text-apple-gray-900 tracking-tight">
+                    {shareFormat === 'image' ? '儲存至相簿' : shareFormat === 'file' ? '儲存至檔案' : '分享軌跡'}
+                  </h4>
                 </div>
                 <button 
-                  onClick={() => setShowShareModal(false)}
-                  className="w-7 h-7 rounded-full bg-apple-gray-100 flex items-center justify-center text-apple-gray-500 active:scale-90 transition-transform"
+                  onClick={() => {
+                    setShowShareModal(false);
+                    setShareFormat(null);
+                  }}
+                  className="w-8 h-8 rounded-full bg-apple-gray-100 hover:bg-apple-gray-200/80 flex items-center justify-center text-apple-gray-500 active:scale-90 transition-all cursor-pointer"
+                  aria-label="關閉"
                 >
-                  <X size={14} />
+                  <X size={16} />
                 </button>
               </div>
 
-              {/* Main Scrolling Container */}
-              <div className="flex-grow overflow-y-auto p-5 space-y-5">
+              {/* Main Container */}
+              <div className="flex-grow overflow-y-auto p-5">
                 {shareFormat === null ? (
-                  <>
-                    <p className="text-xs text-apple-gray-500 leading-relaxed text-center font-medium max-w-sm mx-auto">
-                      我們為您準備了兩種獨特的分享格式。不論是極具美感的印刷風海報圖片，還是可以離線互動的網頁護照，都能完美淬鍊您的世界足跡。
-                    </p>
+                  <div className="space-y-3">
+                    {/* Option 1: 儲存至相簿 */}
+                    <button
+                      onClick={handleGeneratePosterImage}
+                      className="w-full flex items-center justify-between p-4 rounded-2xl bg-white border border-apple-gray-100 hover:border-apple-gray-200 hover:bg-apple-gray-50/70 active:scale-[0.98] transition-all group cursor-pointer shadow-2xs"
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-11 h-11 rounded-xl bg-apple-gray-100 text-apple-gray-700 flex items-center justify-center shrink-0 group-hover:bg-apple-blue/10 group-hover:text-apple-blue transition-colors">
+                          <Image size={22} strokeWidth={1.8} />
+                        </div>
+                        <span className="text-[15px] font-semibold text-apple-gray-900 tracking-tight">
+                          儲存至相簿
+                        </span>
+                      </div>
+                      <ChevronRight size={18} className="text-apple-gray-300 group-hover:text-apple-gray-600 group-hover:translate-x-0.5 transition-all" />
+                    </button>
 
-                    <div className="grid grid-cols-1 gap-4 pt-2">
-                      {/* Option 1: Image Design Poster */}
-                      <button
-                        onClick={handleGeneratePosterImage}
-                        className="text-left p-4 rounded-2xl bg-white border border-apple-gray-100 hover:border-apple-blue/50 hover:bg-apple-blue/5 active:scale-98 transition-all flex items-start gap-4 group"
-                      >
-                        <div className="w-12 h-12 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                          <Sparkles size={24} />
+                    {/* Option 2: 儲存至檔案 */}
+                    <button
+                      onClick={handleGeneratePassportFile}
+                      className="w-full flex items-center justify-between p-4 rounded-2xl bg-white border border-apple-gray-100 hover:border-apple-gray-200 hover:bg-apple-gray-50/70 active:scale-[0.98] transition-all group cursor-pointer shadow-2xs"
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-11 h-11 rounded-xl bg-apple-gray-100 text-apple-gray-700 flex items-center justify-center shrink-0 group-hover:bg-apple-blue/10 group-hover:text-apple-blue transition-colors">
+                          <FileText size={22} strokeWidth={1.8} />
                         </div>
-                        <div className="flex-1">
-                          <span className="text-[9px] font-black text-[#f62d85] uppercase tracking-wider bg-[#f62d85]/5 px-2 py-0.5 rounded">
-                            {activeTab === 'stays' ? '復古極簡地圖風格' : '深色霓虹數據面板'}
-                          </span>
-                          <h5 className="text-sm font-black text-apple-gray-800 mt-1.5 flex items-center gap-1">
-                            <span>以「設計感海報圖片」分享</span>
-                            <span className="text-xs text-apple-gray-400 font-normal">(.png)</span>
-                          </h5>
-                          <p className="text-[11px] text-apple-gray-400 mt-1 leading-normal font-medium">
-                            將您的 {activeTab === 'stays' ? '出入境足跡與航網地圖' : '極致統計分析圖表'} 繪製成一幅極富藝術氣息的文青印刷海報，可直接儲存或貼到社群！
-                          </p>
-                        </div>
-                      </button>
-
-                      {/* Option 2: High Resolution PDF Booklet */}
-                      <button
-                        onClick={handleGeneratePassportFile}
-                        className="text-left p-4 rounded-2xl bg-white border border-apple-gray-100 hover:border-emerald-500/50 hover:bg-emerald-50/30 active:scale-98 transition-all flex items-start gap-4 group"
-                      >
-                        <div className="w-12 h-12 rounded-xl bg-cyan-100 text-cyan-600 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                          <Luggage size={24} />
-                        </div>
-                        <div className="flex-grow">
-                          <span className="text-[9px] font-black text-cyan-600 uppercase tracking-wider bg-cyan-500/5 px-2 py-0.5 rounded">
-                            精裝世界軌跡電子護照冊 / 數據報告
-                          </span>
-                          <h5 className="text-sm font-black text-apple-gray-800 mt-1.5 flex items-center gap-1">
-                            <span>以「設計感智慧 PDF 報告建檔」</span>
-                            <span className="text-xs text-apple-blue font-bold">(.pdf)</span>
-                          </h5>
-                          <p className="text-[11px] text-apple-gray-400 mt-1 leading-normal font-medium flex flex-col gap-1">
-                            <span>生成一本高解析度、多頁設計感的精裝世界軌跡電子護照冊與數據分析研究報告 (.pdf)！</span>
-                            <span className="text-[10px] text-orange-500">（包含精緻護照封套、照片資訊頁、簽證海關印章、最新雷達足跡與航網地圖）</span>
-                          </p>
-                        </div>
-                      </button>
-                    </div>
-                  </>
+                        <span className="text-[15px] font-semibold text-apple-gray-900 tracking-tight">
+                          儲存至檔案
+                        </span>
+                      </div>
+                      <ChevronRight size={18} className="text-apple-gray-300 group-hover:text-apple-gray-600 group-hover:translate-x-0.5 transition-all" />
+                    </button>
+                  </div>
                 ) : shareFormat === 'image' ? (
                   <div className="flex flex-col items-center">
                     {/* Poster Preview */}
                     {isGeneratingPoster ? (
-                      <div className="w-full aspect-[2/3] bg-apple-gray-50 rounded-2xl border border-dashed border-apple-gray-200 flex flex-col items-center justify-center py-20 animate-pulse">
-                        <div className="w-10 h-10 border-4 border-apple-blue border-t-transparent rounded-full animate-spin mb-4" />
-                        <p className="text-sm font-black text-apple-gray-800 font-sans">正在解算數據與繪製海報...</p>
-                        <p className="text-xs text-apple-gray-400 mt-1 font-sans">智慧插值世界航圖中</p>
+                      <div className="w-full aspect-[2/3] bg-apple-gray-50/80 rounded-2xl border border-apple-gray-100 flex flex-col items-center justify-center py-20">
+                        <div className="w-9 h-9 border-3 border-apple-blue border-t-transparent rounded-full animate-spin mb-3" />
+                        <p className="text-sm font-semibold text-apple-gray-800">正在製作海報圖片...</p>
                       </div>
                     ) : (
                       <div className="w-full flex flex-col items-center">
-                        <div className="relative group w-[240px] aspect-[2/3] transform hover:scale-102 transition-transform shadow-2xl rounded-2xl overflow-hidden border border-apple-gray-100/60 bg-white">
+                        <div className="relative group w-[220px] aspect-[2/3] shadow-lg rounded-2xl overflow-hidden border border-apple-gray-100 bg-white">
                           {generatedImageUrl && (
                             <img 
                               src={generatedImageUrl} 
-                              alt="World Tour Poster" 
+                              alt="Poster" 
                               referrerPolicy="no-referrer"
                               className="w-full h-full object-cover"
                             />
                           )}
-                          <div className="absolute inset-x-0 bottom-0 bg-black/60 backdrop-blur-xs py-2 px-3 text-center">
-                            <span className="text-[9px] text-white/90 font-bold">💡 手機用戶長按上方圖片可直接儲存</span>
-                          </div>
                         </div>
+                        <p className="text-[11px] text-apple-gray-400 mt-2 font-medium">長按圖片可儲存，或點擊下方按鈕</p>
 
                         {/* Actions for generated image */}
-                        <div className="w-full mt-5 space-y-2.5 bg-transparent">
+                        <div className="w-full mt-4 space-y-2">
                           {generatedImageUrl && (
                             <a 
                               href={generatedImageUrl} 
                               download={`漫空旅人_${activeTab === 'stays' ? '世界軌跡' : '數據分析'}_${new Date().toISOString().substring(0, 10)}.png`}
-                              className="w-full h-11 bg-apple-blue hover:bg-apple-blue/90 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-apple"
+                              className="w-full h-11 bg-apple-blue hover:bg-apple-blue/95 text-white font-medium text-sm rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-apple cursor-pointer"
                             >
-                              <Download size={14} /> 儲存並下載高畫質海報 (.png)
+                              <Download size={16} /> 下載圖片
                             </a>
                           )}
                           <button
                             onClick={() => setShareFormat(null)}
-                            className="w-full h-11 bg-white hover:bg-apple-gray-50 border border-apple-gray-100 text-apple-gray-600 font-bold text-xs rounded-xl flex items-center justify-center gap-1"
+                            className="w-full h-10 bg-apple-gray-100 hover:bg-apple-gray-200/70 text-apple-gray-700 font-medium text-sm rounded-xl flex items-center justify-center active:scale-[0.98] transition-all cursor-pointer"
                           >
-                            返回選擇其他格式
+                            返回
                           </button>
                         </div>
                       </div>
                     )}
                   </div>
                 ) : shareFormat === 'file' && isGeneratingFile ? (
-                  <div className="w-full flex flex-col items-center text-center py-10 space-y-4">
-                    <div className="w-12 h-12 border-4 border-apple-blue border-t-transparent rounded-full animate-spin mb-2" />
-                    <div>
-                      <h4 className="text-base font-black text-apple-gray-800">正在編譯精裝 PDF 護照報告...</h4>
-                      <p className="text-xs text-apple-gray-400 mt-2 px-4 leading-relaxed">
-                        系統正在對您的旅遊歷史進行高解析度插值，繪製精裝護照封套、出入境海關章與足跡航網投影地圖，請稍候 3~5 秒鐘...
-                      </p>
-                    </div>
+                  <div className="w-full flex flex-col items-center text-center py-12 space-y-3">
+                    <div className="w-9 h-9 border-3 border-apple-blue border-t-transparent rounded-full animate-spin mb-1" />
+                    <h4 className="text-sm font-semibold text-apple-gray-800">正在產生 PDF 檔案...</h4>
+                    <p className="text-xs text-apple-gray-400">請稍候片刻</p>
                   </div>
                 ) : (
                   // File Export Success Tab
-                  <div className="flex flex-col items-center text-center py-4 space-y-4">
-                    <div className="w-16 h-16 bg-emerald-100 rounded-3xl flex items-center justify-center text-emerald-600 animate-bounce">
-                      <CheckCircle size={36} />
+                  <div className="flex flex-col items-center text-center py-6 space-y-4">
+                    <div className="w-14 h-14 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600">
+                      <CheckCircle size={32} />
                     </div>
                     <div>
-                      <h4 className="text-base font-black text-apple-gray-800">智慧 PDF 航網手記導出成功！</h4>
-                      <p className="text-xs text-apple-gray-400 mt-2 px-2 leading-relaxed">
-                        您的高解析度多頁 PDF 電子護照暨統計研究報告已成功編譯並儲存於您的下載目錄中！
-                      </p>
-                    </div>
-
-                    <div className="w-full bg-apple-gray-50 rounded-2xl p-4 border border-apple-gray-100 text-[11px] text-apple-gray-500 text-left space-y-2.5 font-medium leading-relaxed">
-                      <p className="flex items-start gap-1.5">
-                        <span className="text-apple-blue font-bold">✔</span>
-                        <span>智慧彙整：自動根據您在「{activeTab === 'stays' ? '軌跡足跡' : '軌跡分析'}」面板的數據，進行精裝封套、個人護照證件頁與出入境章的立體封存。</span>
-                      </p>
-                      <p className="flex items-start gap-1.5">
-                        <span className="text-apple-blue font-bold">✔</span>
-                        <span>離線友善與高硬度印刷：這是一個真實的 PDF 實體檔案，可直接進行紙本彩色雙面列印，製作出極具收藏價值的漫旅紙質手冊！</span>
+                      <h4 className="text-base font-bold text-apple-gray-900">檔案已成功下載</h4>
+                      <p className="text-xs text-apple-gray-400 mt-1">
+                        PDF 報告已儲存至您的裝置下載項目
                       </p>
                     </div>
 
                     <div className="w-full pt-4 flex gap-2.5">
                       <button
                         onClick={handleGeneratePassportFile}
-                        className="flex-1 h-11 bg-white hover:bg-apple-gray-50 border border-apple-gray-100 text-apple-gray-600 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                        className="flex-1 h-11 bg-apple-gray-100 hover:bg-apple-gray-200/70 text-apple-gray-800 font-medium text-sm rounded-xl flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all cursor-pointer"
                       >
-                        <Download size={13} /> 再次下載 (.pdf)
+                        <Download size={15} /> 再次下載
                       </button>
                       <button
-                        onClick={() => setShareFormat(null)}
-                        className="flex-1 h-11 bg-apple-blue hover:bg-apple-blue/90 text-white font-black text-xs rounded-xl flex items-center justify-center active:scale-95 transition-all"
+                        onClick={() => {
+                          setShowShareModal(false);
+                          setShareFormat(null);
+                        }}
+                        className="flex-1 h-11 bg-apple-blue hover:bg-apple-blue/95 text-white font-medium text-sm rounded-xl flex items-center justify-center active:scale-[0.98] transition-all cursor-pointer"
                       >
-                        返回選擇其他格式
+                        完成
                       </button>
                     </div>
                   </div>

@@ -21,6 +21,7 @@ const AppContent = () => {
   const [activeTab, setActiveTab] = useState('home');
   const [selectedChatRoomId, setSelectedChatRoomId] = useState<string | null>(null);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
   
   // Detail views stack
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
@@ -31,21 +32,55 @@ const AppContent = () => {
   useEffect(() => {
     if (!user?.uid) {
       setHasUnreadChat(false);
+      setUnreadChatCount(0);
       return;
     }
 
-    const q = query(
+    const qRooms = query(
       collection(db, 'chatRooms'),
       where('unreadBy', 'array-contains', user.uid)
     );
 
-    const unsub = onSnapshot(q, (snapshot) => {
-      setHasUnreadChat(!snapshot.empty);
+    const qNotifs = query(
+      collection(db, 'notifications'),
+      where('toId', '==', user.uid),
+      where('type', '==', 'chat_message'),
+      where('status', '==', 'pending')
+    );
+
+    let roomsCount = 0;
+    let notifsCount = 0;
+
+    const syncCount = () => {
+      const count = Math.max(roomsCount, notifsCount);
+      setUnreadChatCount(count);
+      setHasUnreadChat(count > 0);
+    };
+
+    const unsubRooms = onSnapshot(qRooms, (snapshot) => {
+      let sum = 0;
+      snapshot.docs.forEach(d => {
+        const data = d.data();
+        const c = data.unreadCounts?.[user.uid];
+        sum += (typeof c === 'number' && c > 0) ? c : 1;
+      });
+      roomsCount = sum;
+      syncCount();
     }, (err) => {
       console.warn('Unread chat rooms listener warning:', err);
     });
 
-    return () => unsub();
+    const unsubNotifs = onSnapshot(qNotifs, (snapshot) => {
+      notifsCount = snapshot.size;
+      syncCount();
+    }, (err) => {
+      console.warn('Pending chat notifications listener warning:', err);
+    });
+
+    return () => {
+      unsubRooms();
+      unsubNotifs();
+    };
   }, [user?.uid]);
 
   const handleOpenChat = (roomId: string) => {
@@ -148,7 +183,7 @@ const AppContent = () => {
           </motion.div>
         </AnimatePresence>
       </div>
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} hasUnreadChat={hasUnreadChat} />
+      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} hasUnreadChat={hasUnreadChat} unreadChatCount={unreadChatCount} />
 
       {/* Full screen overlays with layered Z-indices */}
       <AnimatePresence>

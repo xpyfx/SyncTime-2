@@ -152,6 +152,8 @@ export interface ChatRoom {
   name?: string;
   tripId?: string;
   avatarUrl?: string;
+  unreadBy?: string[];
+  unreadCounts?: Record<string, number>;
 }
 
 export interface PollOption {

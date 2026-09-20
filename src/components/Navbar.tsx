@@ -6,9 +6,10 @@ interface NavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   hasUnreadChat?: boolean;
+  unreadChatCount?: number;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, hasUnreadChat }) => {
+export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, hasUnreadChat, unreadChatCount = 0 }) => {
   const tabs = [
     { id: 'home', icon: Home, label: '主頁' },
     { id: 'bar', icon: Beer, label: '旅吧' },
@@ -16,6 +17,10 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, hasUnre
     { id: 'notifications', icon: Bell, label: '通知' },
     { id: 'profile', icon: User, label: '個人' }
   ];
+
+  const effectiveChatUnread = unreadChatCount > 0 ? unreadChatCount : (hasUnreadChat ? 1 : 0);
+  const chatCountText = effectiveChatUnread > 99 ? '99+' : String(effectiveChatUnread);
+  const chatFontSize = chatCountText.length >= 3 ? 'text-[7.5px]' : chatCountText.length === 2 ? 'text-[9px]' : 'text-[10.5px]';
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none flex justify-center pb-[max(env(safe-area-inset-bottom,0px),1rem)] pt-1 px-5 max-w-md mx-auto">
@@ -45,16 +50,26 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, hasUnre
 
               <span className={`relative z-10 flex flex-col items-center gap-0.5 transition-transform duration-200 ${isActive ? 'scale-105' : 'group-hover:scale-100 active:scale-95'}`}>
                 <div className="relative flex items-center justify-center">
-                  <tab.icon 
-                    size={20} 
-                    strokeWidth={isActive ? 2.5 : 1.8} 
-                    className={`transition-colors duration-200 ${
-                      isActive ? 'text-[#0081d1]' : 'text-apple-gray-600 group-hover:text-apple-gray-900'
-                    }`}
-                    fill={isActive && tab.id === 'home' ? 'currentColor' : 'none'}
-                  />
-                  {tab.id === 'chat' && hasUnreadChat && (
-                    <span className="absolute -top-1 -right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white shadow-sm animate-pulse" />
+                  {tab.id === 'chat' && effectiveChatUnread > 0 ? (
+                    <div className="relative flex items-center justify-center w-5 h-5">
+                      <MessageCircle 
+                        size={21} 
+                        className="text-[#035096]" 
+                        fill="#035096"
+                      />
+                      <span className={`absolute inset-0 flex items-center justify-center ${chatFontSize} font-black text-[#b6cada] leading-none -translate-y-[1px] select-none`}>
+                        {chatCountText}
+                      </span>
+                    </div>
+                  ) : (
+                    <tab.icon 
+                      size={20} 
+                      strokeWidth={isActive ? 2.5 : 1.8} 
+                      className={`transition-colors duration-200 ${
+                        isActive ? 'text-[#0081d1]' : 'text-apple-gray-600 group-hover:text-apple-gray-900'
+                      }`}
+                      fill={isActive && tab.id === 'home' ? 'currentColor' : 'none'}
+                    />
                   )}
                 </div>
                 <span className={`text-[10px] tracking-tight transition-colors duration-200 ${
