@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
 import { AnimatePresence, motion } from 'motion/react';
-import { LogIn } from 'lucide-react';
+import { SyncTimeLogo, OfficialAppleLogo, OfficialGoogleLogo } from './components/SyncTimeLogo';
 import { db } from './lib/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
@@ -18,7 +18,7 @@ import { UserPostsView } from './pages/UserPostsView';
 import { getRoomUnreadCount, ChatRoom } from './types';
 
 const AppContent = () => {
-  const { user, loading, login } = useAuth();
+  const { user, loading, login, loginWithApple, authModal, closeAuthModal } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
   const [selectedChatRoomId, setSelectedChatRoomId] = useState<string | null>(null);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
@@ -105,24 +105,80 @@ const AppContent = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="space-y-8 max-w-sm"
+          className="space-y-8 max-w-sm w-full"
         >
-          <div className="w-20 h-20 bg-apple-gray-600 rounded-2xl mx-auto flex items-center justify-center text-white">
-             {/* Logo Placeholder */}
-             <div className="text-3xl font-bold font-mono">S</div>
+          <div className="flex justify-center -mb-2">
+            <SyncTimeLogo size={170} />
           </div>
           <div className="space-y-2">
             <h1 className="text-3xl font-bold tracking-tight">SyncTime 共時</h1>
             <p className="text-apple-gray-400 font-light px-4">探索世界，找尋最合適的旅伴，精彩生活，與君共時。</p>
           </div>
-          <button
-            onClick={login}
-            className="w-full h-14 bg-apple-gray-600 text-white rounded-2xl flex items-center justify-center gap-3 font-medium hover:bg-apple-gray-500 transition-colors shadow-sm"
-          >
-            <LogIn size={20} />
-            使用 Google 登入
-          </button>
+          <div className="space-y-3 w-full">
+            <button
+              id="google-login-button"
+              type="button"
+              onClick={login}
+              className="w-full h-14 bg-apple-gray-600 text-white rounded-2xl flex items-center justify-center gap-3 font-medium hover:bg-apple-gray-500 active:scale-[0.98] transition-all shadow-sm cursor-pointer"
+            >
+              <OfficialGoogleLogo className="w-5 h-5" />
+              <span>使用 Google 登入</span>
+            </button>
+            <button
+              id="apple-login-button"
+              type="button"
+              onClick={loginWithApple}
+              className="w-full h-14 bg-black text-white rounded-2xl flex items-center justify-center gap-3 font-medium hover:bg-zinc-900 active:scale-[0.98] transition-all shadow-sm cursor-pointer"
+            >
+              <OfficialAppleLogo className="w-5 h-5 fill-current" />
+              <span>使用 Apple 帳號登入</span>
+            </button>
+          </div>
         </motion.div>
+
+        {/* Apple Login / Auth Notice Dialog */}
+        {authModal?.isOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 border border-zinc-100 text-left"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center text-zinc-800">
+                <OfficialAppleLogo className="w-6 h-6 fill-current" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-lg font-bold text-zinc-900">{authModal.title}</h3>
+                <p className="text-sm text-zinc-500 whitespace-pre-line leading-relaxed">
+                  {authModal.message}
+                </p>
+              </div>
+              <div className="space-y-2 pt-2">
+                {authModal.actionType === 'switch-google' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeAuthModal();
+                      login();
+                    }}
+                    className="w-full h-12 bg-apple-gray-600 text-white rounded-xl flex items-center justify-center gap-2 font-medium hover:bg-apple-gray-500 active:scale-[0.98] transition-all cursor-pointer"
+                  >
+                    <OfficialGoogleLogo className="w-4 h-4" />
+                    <span>立即改用 Google 登入</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={closeAuthModal}
+                  className="w-full h-12 bg-zinc-100 text-zinc-700 rounded-xl flex items-center justify-center font-medium hover:bg-zinc-200 active:scale-[0.98] transition-all cursor-pointer"
+                >
+                  我知道了
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </div>
     );
   }

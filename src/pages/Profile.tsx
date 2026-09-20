@@ -195,7 +195,7 @@ export const ProfilePage: React.FC<{
   onChatClick: (roomId: string) => void,
   onUserClick?: (uid: string) => void
 }> = ({ targetUserId, onBack, onMyPostsClick, onTripClick, onChatClick, onUserClick }) => {
-  const { user, profile: myProfile, logout } = useAuth();
+  const { user, profile: myProfile, logout, deleteAccount } = useAuth();
   const effectiveUserId = targetUserId || user?.uid;
   const isOwnProfile = !targetUserId || targetUserId === user?.uid;
 
@@ -223,6 +223,9 @@ export const ProfilePage: React.FC<{
   const [firendsList, setFriendsList] = useState<UserProfile[]>([]);
   const [showBlocklist, setShowBlocklist] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
   const [showGestureSettings, setShowGestureSettings] = useState(false);
   const [gestureSubMenu, setGestureSubMenu] = useState<keyof GestureSettings | null>(null);
   const [showEditPassport, setShowEditPassport] = useState(false);
@@ -1430,15 +1433,101 @@ export const ProfilePage: React.FC<{
                 <ProfileItem 
                   icon={LogOut} 
                   label="登出帳號" 
-                  color="text-red-400" 
+                  color="text-apple-gray-600" 
                   onClick={() => {
                     logout();
                     setShowSettings(false);
                   }} 
                 />
+                <ProfileItem 
+                  icon={Trash2} 
+                  label="損毀護照（註銷帳號）" 
+                  color="text-red-500" 
+                  onClick={() => {
+                    setDeleteAccountError(null);
+                    setShowDeleteAccountModal(true);
+                  }} 
+                />
               </div>
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 損毀護照（註銷帳號）確認視窗 */}
+      <AnimatePresence>
+        {showDeleteAccountModal && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 border border-apple-gray-100 text-center"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-500 mx-auto flex items-center justify-center shadow-xs">
+                <Trash2 size={26} />
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-lg font-bold text-apple-gray-900">
+                  是否確定要住註銷帳號？
+                </h3>
+                <div className="p-3.5 bg-red-50/70 rounded-2xl border border-red-100/80 text-left">
+                  <p className="text-xs text-red-700 leading-relaxed font-medium">
+                    這意味著你講失去所有該帳號原先擁有的資料，即便你重新註冊，該帳號的過往內容也不會復原。
+                  </p>
+                </div>
+              </div>
+
+              {deleteAccountError && (
+                <div className="p-3 bg-amber-50 rounded-xl text-xs text-amber-800 text-left border border-amber-200">
+                  {deleteAccountError}
+                </div>
+              )}
+
+              <div className="space-y-2 pt-2">
+                <button
+                  type="button"
+                  disabled={isDeletingAccount}
+                  onClick={async () => {
+                    setIsDeletingAccount(true);
+                    setDeleteAccountError(null);
+                    try {
+                      await deleteAccount();
+                      setShowDeleteAccountModal(false);
+                      setShowSettings(false);
+                    } catch (err: any) {
+                      console.error('Delete account failed:', err);
+                      setIsDeletingAccount(false);
+                      if (err.message === 'REQUIRES_RECENT_LOGIN') {
+                        setDeleteAccountError('為了保障您的帳號安全，註銷帳號需要您最近驗證過身分。請重新登入後再次嘗試註銷。');
+                      } else {
+                        setDeleteAccountError(`註銷失敗：${err.message || '請稍後再試'}`);
+                      }
+                    }
+                  }}
+                  className="w-full h-12 bg-red-500 hover:bg-red-600 active:scale-[0.98] text-white rounded-xl font-bold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isDeletingAccount ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>正在註銷帳號...</span>
+                    </>
+                  ) : (
+                    <span>確定註銷</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeletingAccount}
+                  onClick={() => setShowDeleteAccountModal(false)}
+                  className="w-full h-12 bg-apple-gray-100 hover:bg-apple-gray-200 active:scale-[0.98] text-apple-gray-700 rounded-xl font-medium transition-all cursor-pointer disabled:opacity-50"
+                >
+                  取消
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
