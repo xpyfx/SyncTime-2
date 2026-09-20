@@ -1,8 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: "Fredoka", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
   
   /* Primary Dark / Text color from user image */
   --color-apple-blue: #2A2B2A;
@@ -31,13 +31,50 @@
   --shadow-apple-md: 0 8px 24px rgba(42, 43, 42, 0.1);
 }
 
+:root {
+  font-family: "Fredoka", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  font-weight: 300;
+}
+
 body {
+  font-family: "Fredoka", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  font-weight: 300;
   @apply font-sans bg-white text-[#2A2B2A] antialiased;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #FFFFFF;
   color: #2A2B2A;
   touch-action: manipulation;
+}
+
+/* Ensure headings and common elements inherit a lighter, cleaner Fredoka weight */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 400;
+}
+
+/* Ensure strong/bold text uses medium or regular instead of overly heavy weights */
+strong, b, .font-bold {
+  font-weight: 500 !important;
+}
+
+.font-semibold {
+  font-weight: 400 !important;
+}
+
+.font-medium {
+  font-weight: 350 !important;
+}
+
+.font-normal {
+  font-weight: 300 !important;
+}
+
+.font-light {
+  font-weight: 300 !important;
+}
+
+input, textarea, select, button {
+  font-family: inherit;
 }
 
 /* Prevent iOS Safari / mobile auto-zooming on focus by forcing 16px min size on inputs */

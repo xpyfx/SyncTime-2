@@ -293,7 +293,7 @@ export function drawWorldTrajectoryMap(
       hasLeaderLine: boolean;
     }
 
-    ctx.font = `bold ${fontSize}px "Space Grotesk", sans-serif`;
+    ctx.font = `500 ${fontSize}px "Fredoka", "Space Grotesk", sans-serif`;
     const padH = Math.round(6 * scale);
     const margin = Math.max(3, Math.round(3 * scale));
 
@@ -556,7 +556,7 @@ export function drawWorldTrajectoryMap(
 
       // Text label
       ctx.fillStyle = colors.textColor;
-      ctx.font = `bold ${fontSize}px "Space Grotesk", sans-serif`;
+      ctx.font = `500 ${fontSize}px "Fredoka", "Space Grotesk", sans-serif`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillText(item.node.labelText, item.x + 6 * scale, item.y + item.h / 2);

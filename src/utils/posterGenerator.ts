@@ -189,7 +189,7 @@ export function drawStaysPoster(
 
     // 2. TOP HEADER SECTION: PASSPORT AUTHENTICATION BADGE
     ctx.fillStyle = '#4A4238';
-    ctx.font = 'bold 22px "Space Grotesk", sans-serif';
+    ctx.font = '500 22px "Fredoka", "Space Grotesk", sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('CARNET DE VOYAGE', 60, 75);
 
@@ -294,14 +294,14 @@ export function drawStaysPoster(
       ctx.strokeRect(80, startY + 12, 48, 56);
 
       ctx.fillStyle = '#035096';
-      ctx.font = 'bold 16px "Space Grotesk", sans-serif';
+      ctx.font = '500 16px "Fredoka", "Space Grotesk", sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(countryCode, 104, startY + 45);
 
       // Details
       ctx.textAlign = 'left';
       ctx.fillStyle = '#1D1D1D';
-      ctx.font = 'bold 15px "Space Grotesk", sans-serif';
+      ctx.font = '400 15px "Fredoka", "Space Grotesk", sans-serif';
       ctx.fillText(`${stay.country} · ${stay.city}`, 144, startY + 30);
 
       ctx.fillStyle = '#6B7280';
@@ -311,7 +311,7 @@ export function drawStaysPoster(
 
       if (stay.remark) {
         ctx.fillStyle = '#F43F5E';
-        ctx.font = 'italic 11px "Space Grotesk", sans-serif';
+        ctx.font = 'italic 11px "Fredoka", "Space Grotesk", sans-serif';
         const truncatedRemark = stay.remark.length > 35 ? stay.remark.substring(0, 35) + '...' : stay.remark;
         ctx.fillText(`“${truncatedRemark}”`, 144, startY + 68);
       }
@@ -420,7 +420,7 @@ export function drawInsightsPoster(canvas: HTMLCanvasElement, stays: Stay[], sta
 
     // 2. HEADER: QUANTUM TRAJECTORY ANALYTICS
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 22px "Space Grotesk", sans-serif';
+    ctx.font = 'bold 22px "Fredoka", "Space Grotesk", sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('COSMIC TRAJECTORY INSIGHTS', 60, 70);
 
@@ -460,12 +460,12 @@ export function drawInsightsPoster(canvas: HTMLCanvasElement, stays: Stay[], sta
       ctx.fillStyle = c.color;
       ctx.fillRect(x, y, cardW, 3);
 
-      ctx.font = 'bold 22px "Space Grotesk", sans-serif';
+      ctx.font = '500 22px "Fredoka", "Space Grotesk", sans-serif';
       ctx.fillStyle = '#FFFFFF';
       ctx.textAlign = 'left';
       ctx.fillText(c.val, x + 15, y + 36);
 
-      ctx.font = 'bold 11px sans-serif';
+      ctx.font = '400 11px "Fredoka", sans-serif';
       ctx.fillStyle = '#E2E8F0';
       ctx.fillText(c.label, x + 15, y + 54);
 
@@ -512,7 +512,7 @@ export function drawInsightsPoster(canvas: HTMLCanvasElement, stays: Stay[], sta
       ctx.fillText(`0${idx + 1}`, 60, rankY + 16);
 
       ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 13px "Space Grotesk", sans-serif';
+      ctx.font = 'bold 13px "Fredoka", "Space Grotesk", sans-serif';
       ctx.fillText(r.country, 95, rankY + 16);
 
       ctx.textAlign = 'right';
