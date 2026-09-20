@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Search, Plus, Bookmark, EyeOff, ShieldAlert } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, onSnapshot, doc, getDoc, setDoc, where, updateDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, getDoc, setDoc, deleteDoc, where, updateDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Trip, UserProfile, GestureSettings } from '../types';
 import { TripCard } from '../components/TripCard';
 import { GlassSearchInput } from '../components/GlassSearchInput';
@@ -21,6 +21,18 @@ export const HomeView: React.FC<HomeViewProps> = ({ onAvatarClick, onTripClick, 
   const [profiles, setProfiles] = useState<Record<string, UserProfile>>({});
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [savedTripIds, setSavedTripIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!user) {
+      setSavedTripIds(new Set());
+      return;
+    }
+    const unsub = onSnapshot(collection(db, 'users', user.uid, 'savedTrips'), (snap) => {
+      setSavedTripIds(new Set(snap.docs.map(d => d.id)));
+    });
+    return unsub;
+  }, [user]);
 
   useEffect(() => {
     const q = query(collection(db, 'trips'), orderBy('createdAt', 'desc'));
@@ -60,14 +72,23 @@ export const HomeView: React.FC<HomeViewProps> = ({ onAvatarClick, onTripClick, 
     
     if (action === '收藏') {
       const saveRef = doc(db, 'users', user.uid, 'savedTrips', trip.id);
-      const snap = await getDoc(saveRef);
-      if (!snap.exists()) {
+      const isAlreadySaved = savedTripIds.has(trip.id);
+      if (isAlreadySaved) {
+        await deleteDoc(saveRef);
+      } else {
         await setDoc(saveRef, { savedAt: serverTimestamp(), tripId: trip.id });
       }
     } else if (action === '不感興趣') {
-      await updateDoc(doc(db, 'users', user.uid), {
-        hiddenItems: arrayUnion(trip.id)
-      });
+      const isHidden = profile?.hiddenItems?.includes(trip.id);
+      if (isHidden) {
+        await updateDoc(doc(db, 'users', user.uid), {
+          hiddenItems: arrayRemove(trip.id)
+        });
+      } else {
+        await updateDoc(doc(db, 'users', user.uid), {
+          hiddenItems: arrayUnion(trip.id)
+        });
+      }
     } else if (action === '檢舉') {
       if (!confirm('確定要檢舉這則徵人啟事嗎？我們會盡快審核。')) return;
       await addDoc(collection(db, 'reports'), {
@@ -82,9 +103,13 @@ export const HomeView: React.FC<HomeViewProps> = ({ onAvatarClick, onTripClick, 
     }
   };
 
-  const getActionConfig = (actionName: string) => {
+  const getActionConfig = (actionName: string, isSaved?: boolean) => {
     switch (actionName) {
-      case '收藏': return { icon: Bookmark, color: 'text-red-500', label: '收藏' };
+      case '收藏': return { 
+        icon: Bookmark, 
+        color: isSaved ? 'text-apple-gray-400' : 'text-red-500', 
+        label: isSaved ? '取消收藏' : '收藏' 
+      };
       case '不感興趣': return { icon: EyeOff, color: 'text-black', label: '不感興趣' };
       case '檢舉': return { icon: ShieldAlert, color: 'text-red-600', label: '檢舉' };
       default: return { icon: Bookmark, color: 'text-red-500', label: '收藏' };
@@ -190,18 +215,17 @@ export const HomeView: React.FC<HomeViewProps> = ({ onAvatarClick, onTripClick, 
               >
                 <SwipeableWrapper
                   leftAction={{ 
-                    ...getActionConfig(gestureSettings.homeLeft), 
+                    ...getActionConfig(gestureSettings.homeLeft, savedTripIds.has(trip.id)), 
                     onTrigger: () => handleAction(trip, gestureSettings.homeLeft) 
                   }}
                   rightAction={{ 
-                    ...getActionConfig(gestureSettings.homeRight), 
+                    ...getActionConfig(gestureSettings.homeRight, savedTripIds.has(trip.id)), 
                     onTrigger: () => handleAction(trip, gestureSettings.homeRight) 
                   }}
                   onTap={() => onTripClick(trip.id)}
                 >
                   <TripCard 
                     trip={trip} 
-                    onClick={() => onTripClick(trip.id)}
                     onAvatarClick={onAvatarClick}
                     onCommentClick={(e) => {
                       e.stopPropagation();

@@ -20,7 +20,19 @@ export const TravelBarView: React.FC<{
   const [isPosting, setIsPosting] = useState(false);
   const [newPostContent, setNewPostContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
   const { user, profile } = useAuth();
+
+  useEffect(() => {
+    if (!user) {
+      setSavedPostIds(new Set());
+      return;
+    }
+    const unsub = onSnapshot(collection(db, 'users', user.uid, 'savedPosts'), (snap) => {
+      setSavedPostIds(new Set(snap.docs.map(d => d.id)));
+    });
+    return unsub;
+  }, [user]);
 
   useEffect(() => {
     const q = query(collection(db, 'barPosts'), orderBy('createdAt', 'desc'));
@@ -81,10 +93,12 @@ export const TravelBarView: React.FC<{
     
     if (action === '點讚') {
       const likeDoc = doc(db, 'barPosts', post.id, 'likes', user.uid);
-      const isLiked = (await getDoc(likeDoc)).exists();
+      const postRef = doc(db, 'barPosts', post.id);
+      const snap = await getDoc(likeDoc);
+      const isLiked = snap.exists();
       if (!isLiked) {
         await setDoc(likeDoc, { createdAt: serverTimestamp() });
-        await updateDoc(doc(db, 'barPosts', post.id), { likesCount: increment(1) });
+        await updateDoc(postRef, { likesCount: increment(1) });
         if (post.authorId && post.authorId !== user.uid) {
           try {
             await addDoc(collection(db, 'notifications'), {
@@ -101,18 +115,32 @@ export const TravelBarView: React.FC<{
             console.warn('Failed to send like notification:', notifErr);
           }
         }
+      } else {
+        await deleteDoc(likeDoc);
+        await updateDoc(postRef, { likesCount: increment(-1) });
       }
     } else if (action === '收藏') {
       const favRef = doc(db, 'users', user.uid, 'savedPosts', post.id);
+      const postRef = doc(db, 'barPosts', post.id);
       const isFav = (await getDoc(favRef)).exists();
       if (!isFav) {
         await setDoc(favRef, { savedAt: serverTimestamp(), postId: post.id });
-        await updateDoc(doc(db, 'barPosts', post.id), { favoritesCount: increment(1) });
+        await updateDoc(postRef, { favoritesCount: increment(1) });
+      } else {
+        await deleteDoc(favRef);
+        await updateDoc(postRef, { favoritesCount: increment(-1) });
       }
     } else if (action === '不感興趣') {
-      await updateDoc(doc(db, 'users', user.uid), {
-        hiddenItems: arrayUnion(post.id)
-      });
+      const isHidden = profile?.hiddenItems?.includes(post.id);
+      if (isHidden) {
+        await updateDoc(doc(db, 'users', user.uid), {
+          hiddenItems: arrayRemove(post.id)
+        });
+      } else {
+        await updateDoc(doc(db, 'users', user.uid), {
+          hiddenItems: arrayUnion(post.id)
+        });
+      }
     } else if (action === '檢舉') {
       if (!confirm('確定要檢舉這則見聞嗎？我們會盡快審核。')) return;
       await addDoc(collection(db, 'reports'), {
@@ -127,10 +155,17 @@ export const TravelBarView: React.FC<{
     }
   };
 
-  const getActionConfig = (actionName: string) => {
+  const getActionConfig = (actionName: string, post?: BarPost) => {
     switch (actionName) {
       case '點讚': return { icon: ThumbsUp, color: 'text-apple-blue', label: '點讚' };
-      case '收藏': return { icon: Bookmark, color: 'text-red-500', label: '收藏' };
+      case '收藏': {
+        const isSaved = post ? savedPostIds.has(post.id) : false;
+        return { 
+          icon: Bookmark, 
+          color: isSaved ? 'text-apple-gray-400' : 'text-red-500', 
+          label: isSaved ? '取消收藏' : '收藏' 
+        };
+      }
       case '不感興趣': return { icon: EyeOff, color: 'text-black', label: '不感興趣' };
       case '檢舉': return { icon: ShieldAlert, color: 'text-red-600', label: '檢舉' };
       default: return { icon: ThumbsUp, color: 'text-apple-blue', label: '點讚' };
@@ -229,11 +264,11 @@ export const TravelBarView: React.FC<{
             >
               <SwipeableWrapper
                 leftAction={{ 
-                  ...getActionConfig(gestureSettings.barLeft), 
+                  ...getActionConfig(gestureSettings.barLeft, post), 
                   onTrigger: () => handleAction(post, gestureSettings.barLeft) 
                 }}
                 rightAction={{ 
-                  ...getActionConfig(gestureSettings.barRight), 
+                  ...getActionConfig(gestureSettings.barRight, post), 
                   onTrigger: () => handleAction(post, gestureSettings.barRight) 
                 }}
               >

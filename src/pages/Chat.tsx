@@ -3063,7 +3063,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
         senderId: user.uid,
         text: `📍 地點：${name}`,
         location: locObj,
-        createdAt: serverTimestamp()
+        createdAt: new Date().toISOString()
       });
       await updateRoomAndNotifyRecipients(roomId, `📍 地點：${name}`, user.uid);
     } catch (err) {
@@ -3073,6 +3073,9 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
     setCustomLocationName('');
     setCustomLocationAddress('');
     setLocationSearchQuery('');
+    setTimeout(() => {
+      scrollToBottom();
+    }, 100);
   };
 
   const allChatMedia = React.useMemo(() => {
@@ -3277,6 +3280,25 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
     const q = query(collection(db, 'chatRooms', roomId, 'messages'), orderBy('createdAt', 'asc'));
     const unsubMsgs = onSnapshot(q, (s) => {
       const mapped = s.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
+      // Normalize timestamp sorting across mixed createdAt types (ISO string, Timestamp, etc.)
+      mapped.sort((a, b) => {
+        const getMs = (val: any) => {
+          if (!val) return Date.now();
+          if (typeof val === 'string') {
+            const t = new Date(val).getTime();
+            return isNaN(t) ? Date.now() : t;
+          }
+          if (typeof val === 'number') return val;
+          if (typeof val?.toDate === 'function') {
+            return val.toDate().getTime();
+          }
+          if (val?.seconds) {
+            return val.seconds * 1000 + (val.nanoseconds ? val.nanoseconds / 1000000 : 0);
+          }
+          return Date.now();
+        };
+        return getMs(a.createdAt) - getMs(b.createdAt);
+      });
       setMessages(mapped);
     }, (err) => {
       console.warn('Messages snapshot listener error:', err);

@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import { motion, PanInfo, useAnimation, useMotionValue, useTransform, AnimatePresence } from 'motion/react';
-import { Info, Undo2 } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { motion, PanInfo, useMotionValue } from 'motion/react';
 
 interface SwipeableWrapperProps {
   children: React.ReactNode;
@@ -18,14 +17,19 @@ export const SwipeableWrapper: React.FC<SwipeableWrapperProps> = ({
   onTap,
 }) => {
   const [dragProgress, setDragProgress] = useState(0); // -1 to 1
-  const controls = useAnimation();
   const x = useMotionValue(0);
+  const isDraggingRef = useRef(false);
   
   const threshold = 100;
 
+  const handleDragStart = () => {
+    isDraggingRef.current = true;
+  };
+
   const handleDrag = (_: any, info: PanInfo) => {
-    // Calculate progress based on distance dragged
-    // 0 = center, 1 = right (threshold), -1 = left (-threshold)
+    if (Math.abs(info.offset.x) > 6 || Math.abs(info.offset.y) > 6) {
+      isDraggingRef.current = true;
+    }
     const progress = info.offset.x / threshold;
     setDragProgress(Math.max(-1.5, Math.min(1.5, progress)));
   };
@@ -40,6 +44,10 @@ export const SwipeableWrapper: React.FC<SwipeableWrapperProps> = ({
     }
     
     setDragProgress(0);
+    // Keep isDraggingRef true for 250ms so that the trailing synthetic click event from pointerup is blocked
+    setTimeout(() => {
+      isDraggingRef.current = false;
+    }, 250);
   };
 
   const isRightActive = dragProgress >= 1;
@@ -83,9 +91,17 @@ export const SwipeableWrapper: React.FC<SwipeableWrapperProps> = ({
         drag="x"
         dragConstraints={{ left: 0, right: 0 }}
         dragElastic={0.8}
+        onDragStart={handleDragStart}
         onDrag={handleDrag}
         onDragEnd={handleDragEnd}
+        onClickCapture={(e) => {
+          if (isDraggingRef.current) {
+            e.stopPropagation();
+            e.preventDefault();
+          }
+        }}
         onTap={(e: any) => {
+          if (isDraggingRef.current) return;
           const target = e.target as HTMLElement;
           if (
             target.closest('button') || 
