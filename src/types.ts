@@ -103,7 +103,19 @@ export interface Trip {
   itinerary?: ItineraryDay[];
 }
 
-export type NotificationType = 'friend_request' | 'trip_join_request' | 'trip_join_approved' | 'trip_join_rejected' | 'trip_member_removed' | 'trip_member_exited' | 'chat_message';
+export type NotificationType = 
+  | 'friend_request' 
+  | 'friend_accepted'
+  | 'trip_join_request' 
+  | 'trip_join_approved' 
+  | 'trip_join_rejected' 
+  | 'trip_member_removed' 
+  | 'trip_member_exited' 
+  | 'chat_message'
+  | 'post_like'
+  | 'post_comment'
+  | 'trip_comment'
+  | 'trip_itinerary_updated';
 
 export interface Notification {
   id: string;
@@ -112,9 +124,13 @@ export interface Notification {
   toId: string;
   tripId?: string;
   roomId?: string;
+  postId?: string;
+  postSnippet?: string;
+  postImage?: string;
+  commentText?: string;
   messageSnippet?: string;
   status: 'pending' | 'approved' | 'rejected' | 'read';
-  createdAt: string;
+  createdAt: any;
 }
 
 export interface TripComment {
@@ -137,6 +153,7 @@ export interface BarPost {
   authorId: string;
   content: string;
   imageUrl?: string;
+  images?: string[];
   likesCount?: number;
   commentsCount?: number;
   favoritesCount?: number;
@@ -155,6 +172,21 @@ export interface ChatRoom {
   unreadBy?: string[];
   unreadCounts?: Record<string, number>;
 }
+
+export const getRoomUnreadCount = (
+  room: { unreadCounts?: Record<string, number>; unreadBy?: string[] } | null | undefined,
+  userId?: string | null
+): number => {
+  if (!userId || !room) return 0;
+  const count = room.unreadCounts?.[userId];
+  if (typeof count === 'number' && !isNaN(count)) {
+    return Math.max(0, count);
+  }
+  if (Array.isArray(room.unreadBy) && room.unreadBy.includes(userId)) {
+    return 1;
+  }
+  return 0;
+};
 
 export interface PollOption {
   id: string;

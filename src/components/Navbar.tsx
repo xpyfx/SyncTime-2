@@ -7,9 +7,16 @@ interface NavbarProps {
   setActiveTab: (tab: string) => void;
   hasUnreadChat?: boolean;
   unreadChatCount?: number;
+  unreadNotifCount?: number;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, hasUnreadChat, unreadChatCount = 0 }) => {
+export const Navbar: React.FC<NavbarProps> = ({ 
+  activeTab, 
+  setActiveTab, 
+  hasUnreadChat, 
+  unreadChatCount = 0,
+  unreadNotifCount = 0
+}) => {
   const tabs = [
     { id: 'home', icon: Home, label: '主頁' },
     { id: 'bar', icon: Beer, label: '旅吧' },
@@ -20,7 +27,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, hasUnre
 
   const effectiveChatUnread = unreadChatCount > 0 ? unreadChatCount : (hasUnreadChat ? 1 : 0);
   const chatCountText = effectiveChatUnread > 99 ? '99+' : String(effectiveChatUnread);
-  const chatFontSize = chatCountText.length >= 3 ? 'text-[7.5px]' : chatCountText.length === 2 ? 'text-[9px]' : 'text-[10.5px]';
+  const chatFontSize = chatCountText.length >= 3 ? 'text-[8px]' : chatCountText.length === 2 ? 'text-[9.5px]' : 'text-[11px]';
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none flex justify-center pb-[max(env(safe-area-inset-bottom,0px),1rem)] pt-1 px-5 max-w-md mx-auto">
@@ -57,19 +64,26 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, hasUnre
                         className="text-[#035096]" 
                         fill="#035096"
                       />
-                      <span className={`absolute inset-0 flex items-center justify-center ${chatFontSize} font-black text-[#b6cada] leading-none -translate-y-[1px] select-none`}>
+                      <span className={`absolute inset-0 flex items-center justify-center ${chatFontSize} font-black text-white leading-none -translate-y-[1px] select-none drop-shadow-xs`}>
                         {chatCountText}
                       </span>
                     </div>
                   ) : (
-                    <tab.icon 
-                      size={20} 
-                      strokeWidth={isActive ? 2.5 : 1.8} 
-                      className={`transition-colors duration-200 ${
-                        isActive ? 'text-[#0081d1]' : 'text-apple-gray-600 group-hover:text-apple-gray-900'
-                      }`}
-                      fill={isActive && tab.id === 'home' ? 'currentColor' : 'none'}
-                    />
+                    <div className="relative flex items-center justify-center">
+                      <tab.icon 
+                        size={20} 
+                        strokeWidth={isActive ? 2.5 : 1.8} 
+                        className={`transition-colors duration-200 ${
+                          isActive ? 'text-[#0081d1]' : 'text-apple-gray-600 group-hover:text-apple-gray-900'
+                        }`}
+                        fill={isActive && tab.id === 'home' ? 'currentColor' : 'none'}
+                      />
+                      {tab.id === 'notifications' && unreadNotifCount > 0 && (
+                        <span className="absolute -top-1.5 -right-2 min-w-[15px] h-[15px] px-1 bg-[#0081d1] text-white text-[8.5px] font-black rounded-full flex items-center justify-center border border-white shadow-xs leading-none select-none">
+                          {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
                 <span className={`text-[10px] tracking-tight transition-colors duration-200 ${

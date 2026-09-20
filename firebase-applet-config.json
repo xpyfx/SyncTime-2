@@ -6,5 +6,7 @@
   "firestoreDatabaseId": "ai-studio-5292c131-851f-4a86-a73d-ee1e405f202a",
   "storageBucket": "innate-bucksaw-477015-b7.firebasestorage.app",
   "messagingSenderId": "375613098551",
-  "measurementId": ""
+  "measurementId": "",
+  "oAuthClientId": "375613098551-uhv6bde5o4i703mnng5mipt2qp8ol6a7.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }

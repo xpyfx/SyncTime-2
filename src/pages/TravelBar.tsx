@@ -85,6 +85,22 @@ export const TravelBarView: React.FC<{
       if (!isLiked) {
         await setDoc(likeDoc, { createdAt: serverTimestamp() });
         await updateDoc(doc(db, 'barPosts', post.id), { likesCount: increment(1) });
+        if (post.authorId && post.authorId !== user.uid) {
+          try {
+            await addDoc(collection(db, 'notifications'), {
+              type: 'post_like',
+              fromId: user.uid,
+              toId: post.authorId,
+              postId: post.id,
+              postSnippet: (post.content || '').slice(0, 60),
+              postImage: post.imageUrl || post.images?.[0] || '',
+              status: 'pending',
+              createdAt: serverTimestamp()
+            });
+          } catch (notifErr) {
+            console.warn('Failed to send like notification:', notifErr);
+          }
+        }
       }
     } else if (action === '收藏') {
       const favRef = doc(db, 'users', user.uid, 'savedPosts', post.id);

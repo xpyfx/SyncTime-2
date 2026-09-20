@@ -1,6 +1,7 @@
 import { Stay } from '../types';
 import { parseCoordinateForCountry } from '../components/TravelGlobe';
 import { jsPDF } from 'jspdf';
+import { drawWorldTrajectoryMap, createHighResWorldMapCanvas } from './worldMapRenderer';
 
 // Generate country ISO code matching
 function getCountryCode(countryName: string): string {
@@ -38,15 +39,112 @@ function formatStayDate(dateStr: string) {
   return date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' });
 }
 
-// RENDER RETRO "TRAJECTORY POSTCARD" (用於軌跡足跡)
-export function drawStaysPoster(canvas: HTMLCanvasElement, stays: Stay[], userEmail: string = 'Traveller'): Promise<void> {
+// Cache for the Chinese font base64 string
+let cachedChineseFont: string | null = null;
+
+async function getChineseFontBase64(): Promise<string | null> {
+  if (cachedChineseFont) return cachedChineseFont;
+  try {
+    const res = await fetch('/fonts/NotoSansTC-Regular.ttf');
+    if (!res.ok) return null;
+    const arrayBuffer = await res.arrayBuffer();
+    let binary = '';
+    const bytes = new Uint8Array(arrayBuffer);
+    const len = bytes.byteLength;
+    const chunkSize = 0x8000;
+    for (let i = 0; i < len; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunkSize)));
+    }
+    cachedChineseFont = btoa(binary);
+    return cachedChineseFont;
+  } catch (err) {
+    console.warn('Could not load Chinese font for vector PDF, using standard fallback:', err);
+    return null;
+  }
+}
+
+export interface PassportUserInfo {
+  displayName?: string;
+  username?: string;
+  email?: string;
+  avatarUrl?: string;
+  authority?: string;
+}
+
+// Helper to convert avatar URL to base64 DataURL for embedding in PDF
+async function loadAvatarImageData(url?: string): Promise<string | null> {
+  if (!url) return null;
+  if (url.startsWith('data:image')) return url;
+
+  return new Promise<string | null>((resolve) => {
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    const timer = setTimeout(() => resolve(null), 3000);
+
+    img.onload = () => {
+      clearTimeout(timer);
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 360;
+        canvas.height = 465;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(null);
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const imgRatio = img.width / img.height;
+        const targetRatio = canvas.width / canvas.height;
+        let sx = 0, sy = 0, sw = img.width, sh = img.height;
+        if (imgRatio > targetRatio) {
+          sw = img.height * targetRatio;
+          sx = (img.width - sw) / 2;
+        } else {
+          sh = img.width / targetRatio;
+          sy = (img.height - sh) / 2;
+        }
+
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.92));
+      } catch {
+        resolve(null);
+      }
+    };
+
+    img.onerror = () => {
+      clearTimeout(timer);
+      resolve(null);
+    };
+
+    img.src = url;
+  });
+}
+
+// =========================================================================
+// 1. RENDER RETRO "TRAJECTORY POSTCARD" (用於軌跡足跡海報 - 儲存至相簿)
+// Ultra-HD 300 DPI Resolution (2400 x 3600 px) with Real World Map
+// =========================================================================
+export function drawStaysPoster(
+  canvas: HTMLCanvasElement,
+  stays: Stay[],
+  userInfo: string | PassportUserInfo = 'Traveller'
+): Promise<void> {
   return new Promise((resolve) => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return resolve();
 
-    // Scale canvas for ultra high resolution (DPI)
-    canvas.width = 800;
-    canvas.height = 1200;
+    const userDisplayName = typeof userInfo === 'string'
+      ? (userInfo.includes('@') ? userInfo.split('@')[0] : userInfo)
+      : (userInfo.displayName || userInfo.username || 'Traveller');
+
+    // Scale canvas for Ultra High Resolution (3x DPI -> 2400 x 3600 pixels)
+    const SCALE = 3;
+    canvas.width = 800 * SCALE;
+    canvas.height = 1200 * SCALE;
+    ctx.scale(SCALE, SCALE);
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
     // 1. Draw Paper Texture Background
     ctx.fillStyle = '#FAF7F0';
@@ -68,277 +166,206 @@ export function drawStaysPoster(canvas: HTMLCanvasElement, stays: Stay[], userEm
       ctx.stroke();
     }
 
-    // Outer vintage double borders
+    // Outer double border
     ctx.strokeStyle = '#4A4238';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
     ctx.strokeRect(20, 20, 760, 1160);
     ctx.strokeStyle = '#8C8070';
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = 0.8;
     ctx.strokeRect(26, 26, 748, 1148);
 
-    // Side Margin Coordinate Ruler Text
-    ctx.save();
-    ctx.translate(12, 600);
-    ctx.rotate(-Math.PI / 2);
+    // Corner decorative flourishes
+    const drawFlourish = (x: number, y: number) => {
+      ctx.strokeStyle = '#4A4238';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.stroke();
+    };
+    drawFlourish(32, 32);
+    drawFlourish(768, 32);
+    drawFlourish(32, 1168);
+    drawFlourish(768, 1168);
+
+    // 2. TOP HEADER SECTION: PASSPORT AUTHENTICATION BADGE
+    ctx.fillStyle = '#4A4238';
+    ctx.font = 'bold 22px "Space Grotesk", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('CARNET DE VOYAGE', 60, 75);
+
+    ctx.font = '10px monospace';
     ctx.fillStyle = '#8C8070';
-    ctx.font = 'bold 9px monospace';
+    ctx.fillText('OFFICIAL TRANSIT PASS & EXPEDITION LOGBOOK', 60, 92);
+    ctx.fillText(`ISSUED TO: ${userDisplayName.toUpperCase()}`, 60, 106);
+
+    // Official circular verification seal at top right
+    ctx.save();
+    ctx.translate(690, 85);
+    ctx.rotate(12 * Math.PI / 180);
+    ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, 36, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, 30, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
+    ctx.font = 'bold 8px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('• LATITUDE & LONGITUDE PROJECTOR REGISTRATION • METADATA GRID AUTHENTICATED •', 0, 0);
+    ctx.fillText('SYNCTIME', 0, -6);
+    ctx.fillText('APPROVED', 0, 4);
+    ctx.fillText('TRANSIT', 0, 14);
     ctx.restore();
 
-    ctx.save();
-    ctx.translate(788, 600);
-    ctx.rotate(Math.PI / 2);
-    ctx.fillStyle = '#8C8070';
-    ctx.font = 'bold 9px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('• DESIGNED BY SMART PASS-TRAVEL RECORD STATION • DIGITAL POSTER •', 0, 0);
-    ctx.restore();
+    // Divider Line
+    ctx.strokeStyle = '#4A4238';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(60, 135);
+    ctx.lineTo(740, 135);
+    ctx.stroke();
 
-    // 2. HEADER BRANDING SECTION
-    ctx.fillStyle = '#1D1D1D';
-    ctx.font = 'black 36px "Space Grotesk", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('WORLD TRAJECTORY', 400, 75);
+    // 3. MID CONTAINER: THE TRAVEL TRANSIT MAP (REAL WORLD MAP WITH FLIGHT ARCS)
+    const mapBox = { x: 50, y: 155, width: 700, height: 430 };
 
-    ctx.font = 'italic 12px "Times New Roman", serif';
-    ctx.fillStyle = '#6E6252';
-    ctx.fillText('“Not all those who wander are lost” • 漫空旅人軌跡檔案', 400, 100);
+    // Draw the real world map with continents, borders, flight trajectories, and destination pins
+    drawWorldTrajectoryMap(ctx, stays, mapBox, {
+      theme: 'vintage',
+      showFlightArcs: true,
+      showPins: true,
+      showGraticules: true,
+    });
 
-    // Elegant Divider line
+    // Outer vintage map double border
     ctx.strokeStyle = '#4A4238';
     ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(60, 115);
-    ctx.lineTo(740, 115);
-    ctx.stroke();
-
-    // Metadata boxes below divider
-    ctx.fillStyle = '#5A5245';
-    ctx.font = '9px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText(`TRAVELLER: ${userEmail}`, 60, 132);
-    ctx.fillText(`LOG DATE: ${new Date().toISOString().substring(0, 10)}`, 60, 146);
-
-    ctx.textAlign = 'right';
-    ctx.fillText(`TOTAL COUNTRIES: ${new Set(stays.map(s => s.country)).size}`, 740, 132);
-    ctx.fillText(`TOTAL STAYS: ${stays.length} RECORDS`, 740, 146);
-
-    // Mini divider
+    ctx.strokeRect(mapBox.x, mapBox.y, mapBox.width, mapBox.height);
     ctx.strokeStyle = '#8C8070';
     ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.moveTo(60, 155);
-    ctx.lineTo(740, 155);
-    ctx.stroke();
+    ctx.strokeRect(mapBox.x + 3, mapBox.y + 3, mapBox.width - 6, mapBox.height - 6);
 
-    // 3. MID CONTAINER: THE TRAVEL TRANSIT MAP
-    ctx.strokeStyle = '#E2DDD3';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(400, 420, 140, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(400, 420, 220, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Plot coordinates
-    const chronStays = [...stays].sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-    const pts = chronStays.map(s => {
-      const coords = parseCoordinateForCountry(s.country, s.city);
-      return { ...s, lat: coords.lat, lng: coords.lng };
-    });
-
-    let minLat = 20, maxLat = 50, minLng = 10, maxLng = 140;
-    if (pts.length > 0) {
-      const lats = pts.map(p => p.lat);
-      const lngs = pts.map(p => p.lng);
-      minLat = Math.min(...lats);
-      maxLat = Math.max(...lats);
-      minLng = Math.min(...lngs);
-      maxLng = Math.max(...lngs);
-      
-      const latDiff = maxLat - minLat || 10;
-      const lngDiff = maxLng - minLng || 20;
-      minLat -= latDiff * 0.18;
-      maxLat += latDiff * 0.18;
-      minLng -= lngDiff * 0.18;
-      maxLng += lngDiff * 0.18;
-    }
-
-    const mappedPts = pts.map(p => {
-      const x = 120 + ((p.lng - minLng) / (maxLng - minLng || 1)) * 560;
-      const y = 240 + (1 - (p.lat - minLat) / (maxLat - minLat || 1)) * 320;
-      return { ...p, x, y };
-    });
-
-    // Draw connecting flight trajectory paths
-    ctx.strokeStyle = '#2563EB';
-    ctx.lineWidth = 2.5;
-    ctx.setLineDash([5, 8]);
-    ctx.beginPath();
-    mappedPts.forEach((p, index) => {
-      if (index === 0) ctx.moveTo(p.x, p.y);
-      else {
-        // Draw curved beautiful Bezier-like trajectory arc instead of straight lines
-        const prev = mappedPts[index - 1];
-        const cx = (prev.x + p.x) / 2;
-        const cy = (prev.y + p.y) / 2 - Math.abs(prev.x - p.x) * 0.15;
-        ctx.quadraticCurveTo(cx, cy, p.x, p.y);
-      }
-    });
-    ctx.stroke();
-    ctx.setLineDash([]); // Reset line dash
-
-    // Draw Nodes (cities) on the map
-    mappedPts.forEach((p, idx) => {
-      // Glow circle outer ring
-      ctx.fillStyle = 'rgba(37, 99, 235, 0.13)';
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 16, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Core dot
-      ctx.fillStyle = '#2563EB';
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#FFFFFF';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      // Node Index label
-      ctx.fillStyle = '#1D1D1D';
-      ctx.font = 'bold 9px monospace';
-      ctx.fillText(`${idx + 1}`, p.x + 8, p.y + 11);
-
-      // Node Name label
-      ctx.fillStyle = '#3A3228';
-      ctx.font = 'bold 9px "Space Grotesk", sans-serif';
-      ctx.fillText(`${p.country}·${p.city}`, p.x + 8, p.y - 6);
-    });
-
-    // Travel Map Box Header
-    ctx.fillStyle = 'white';
-    ctx.fillRect(320, 180, 160, 24);
+    // Map Header Badge
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(290, mapBox.y - 12, 220, 24);
     ctx.strokeStyle = '#4A4238';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(320, 180, 160, 24);
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(290, mapBox.y - 12, 220, 24);
     ctx.fillStyle = '#4A4238';
-    ctx.font = 'bold 9px monospace';
+    ctx.font = 'bold 10px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('TRAVEL TRAJECTORY MAP', 400, 195);
+    ctx.fillText('GLOBAL TRAJECTORY MAP', 400, mapBox.y + 4);
 
-    // 4. LOWER CARD SECTION: STAYS MEMORABLE POLAROID LOGS (Show up to bottom 5 entries)
+    // 4. LOWER CARD SECTION: RECENT EXPEDITION LOGS
     ctx.fillStyle = '#4A4238';
     ctx.textAlign = 'left';
     ctx.font = 'bold 12px monospace';
-    ctx.fillText('◆ RECENT EXPEDITION LOGS', 60, 620);
+    ctx.fillText('◆ RECENT EXPEDITION LOGS / 歷次探索紀錄', 60, 620);
 
     ctx.strokeStyle = '#8C8070';
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = 0.6;
     ctx.beginPath();
     ctx.moveTo(60, 630);
     ctx.lineTo(740, 630);
     ctx.stroke();
 
-    const recentStays = stays.slice(0, 5);
-    let startY = 650;
+    const chronStays = [...stays].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+    const recentStays = chronStays.slice(0, 5);
+    let startY = 648;
 
     recentStays.forEach((stay, idx) => {
-      // Background row board
+      // Row card background
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(60, startY, 680, 80);
-      ctx.strokeStyle = '#E6E1D7';
+      ctx.strokeStyle = '#EAE4D9';
       ctx.lineWidth = 1;
       ctx.strokeRect(60, startY, 680, 80);
 
-      // Red or blue ink circular custom stamp on the right side of the stay
-      ctx.save();
-      ctx.translate(680, startY + 40);
-      ctx.rotate((idx % 2 === 0 ? 12 : -8) * Math.PI / 180);
-      ctx.strokeStyle = idx % 2 === 0 ? 'rgba(239, 68, 68, 0.45)' : 'rgba(37, 99, 235, 0.4)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(0, 0, 28, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.font = 'bold 7px monospace';
-      ctx.fillStyle = idx % 2 === 0 ? 'rgba(239, 68, 68, 0.5)' : 'rgba(37, 99, 235, 0.45)';
-      ctx.textAlign = 'center';
-      ctx.fillText('DEPARTED', 0, -4);
-      ctx.font = 'bold 7px monospace';
-      ctx.fillText(formatStayDate(stay.startDate), 0, 6);
-      ctx.restore();
+      // Left Sequence Index Pill
+      ctx.fillStyle = '#035096';
+      ctx.fillRect(60, startY, 6, 80);
 
-      // Text information
-      // Flag box
-      const cc = getCountryCode(stay.country);
-      ctx.fillStyle = '#2563EB';
-      ctx.fillRect(80, startY + 20, 48, 40);
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 14px monospace';
+      // Country Flag Stamp
+      const countryCode = getCountryCode(stay.country);
+      ctx.fillStyle = '#EEF2FF';
+      ctx.fillRect(80, startY + 12, 48, 56);
+      ctx.strokeStyle = '#035096';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(80, startY + 12, 48, 56);
+
+      ctx.fillStyle = '#035096';
+      ctx.font = 'bold 16px "Space Grotesk", sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(cc, 104, startY + 45);
+      ctx.fillText(countryCode, 104, startY + 45);
 
       // Details
       ctx.textAlign = 'left';
       ctx.fillStyle = '#1D1D1D';
-      ctx.font = 'bold 16px "Space Grotesk", sans-serif';
-      ctx.fillText(`${stay.country} • ${stay.city}`, 144, startY + 38);
+      ctx.font = 'bold 15px "Space Grotesk", sans-serif';
+      ctx.fillText(`${stay.country} · ${stay.city}`, 144, startY + 30);
 
-      ctx.fillStyle = '#8C8070';
+      ctx.fillStyle = '#6B7280';
       ctx.font = '11px monospace';
-      ctx.fillText(`Duration: ${calculateDays(stay.startDate, stay.endDate)} days (${stay.startDate} to ${stay.endDate})`, 144, startY + 54);
+      const days = calculateDays(stay.startDate, stay.endDate);
+      ctx.fillText(`期間: ${stay.startDate} 至 ${stay.endDate} (${days} 天)`, 144, startY + 50);
 
       if (stay.remark) {
-        ctx.fillStyle = '#FF5C8A';
-        ctx.font = '10px "Space Grotesk", sans-serif';
-        ctx.fillText(`“${stay.remark}”`, 144, startY + 70);
+        ctx.fillStyle = '#F43F5E';
+        ctx.font = 'italic 11px "Space Grotesk", sans-serif';
+        const truncatedRemark = stay.remark.length > 35 ? stay.remark.substring(0, 35) + '...' : stay.remark;
+        ctx.fillText(`“${truncatedRemark}”`, 144, startY + 68);
       }
 
-      startY += 92;
+      startY += 90;
     });
 
     // 5. SIGNATURE FOOTER & BARCODE
-    const footerY = 1120;
-    // Draw horizontal stylized barcode lines
+    const footerY = 1115;
     ctx.fillStyle = '#1D1D1D';
     let codeX = 60;
     const barWidths = [2, 5, 2, 7, 10, 3, 2, 8, 4, 11, 2, 6, 2, 8, 3, 9, 2, 4, 10, 5, 2];
     barWidths.forEach(w => {
-      ctx.fillRect(codeX, footerY, w, 32);
+      ctx.fillRect(codeX, footerY, w, 30);
       codeX += w + 2;
     });
 
     ctx.fillStyle = '#8C8070';
     ctx.font = '9px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText('SA-TS 5292C131851F 4A86A73D EE1E405F202A', 60, footerY + 43);
+    ctx.fillText('SA-TS 5292C131851F 4A86A73D EE1E405F202A • PASSPORT VERIFIED', 60, footerY + 42);
 
     // Dynamic certificate emblem seal
     ctx.strokeStyle = '#4A4238';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(710, footerY + 15, 25, 0, Math.PI * 2);
+    ctx.arc(710, footerY + 14, 24, 0, Math.PI * 2);
     ctx.stroke();
     ctx.font = 'bold 6px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('PASSPORT', 710, footerY + 13);
-    ctx.fillText('VERIFIED', 710, footerY + 22);
+    ctx.fillText('PASSPORT', 710, footerY + 12);
+    ctx.fillText('VERIFIED', 710, footerY + 20);
 
     resolve();
   });
 }
 
-// RENDER GLOWING "COSMIC INSIGHTS poster" (用於軌跡分析)
+// =========================================================================
+// 2. RENDER GLOWING "COSMIC INSIGHTS POSTER" (用於軌跡分析海報)
+// Ultra-HD 300 DPI Resolution (2400 x 3600 px) with Dark Geographic Map
+// =========================================================================
 export function drawInsightsPoster(canvas: HTMLCanvasElement, stays: Stay[], stats: any, currentYear: string = 'All'): Promise<void> {
   return new Promise((resolve) => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return resolve();
 
-    // Scale canvas
-    canvas.width = 800;
-    canvas.height = 1200;
+    // Scale canvas for Ultra High Resolution (3x DPI -> 2400 x 3600 pixels)
+    const SCALE = 3;
+    canvas.width = 800 * SCALE;
+    canvas.height = 1200 * SCALE;
+    ctx.scale(SCALE, SCALE);
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
     // 1. Dark Techno/Cosmic background
     const bgGrad = ctx.createLinearGradient(0, 0, 0, 1200);
@@ -358,1081 +385,784 @@ export function drawInsightsPoster(canvas: HTMLCanvasElement, stays: Stay[], sta
     // Tech Grid Layout overlays
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
     ctx.lineWidth = 1;
-    for (let i = 50; i < 800; i += 50) {
+    for (let i = 40; i < 800; i += 40) {
       ctx.beginPath();
       ctx.moveTo(i, 0);
       ctx.lineTo(i, 1200);
       ctx.stroke();
     }
-    for (let j = 50; j < 1200; j += 50) {
+    for (let j = 40; j < 1200; j += 40) {
       ctx.beginPath();
       ctx.moveTo(0, j);
       ctx.lineTo(800, j);
       ctx.stroke();
     }
 
-    // Border lines
-    ctx.strokeStyle = 'rgba(59, 130, 246, 0.35)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(25, 25, 750, 1150);
+    // Outer neon tech frame
+    ctx.strokeStyle = 'rgba(59, 130, 246, 0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(20, 20, 760, 1160);
 
-    // Corner tech crosshairs
-    const drawCross = (cx: number, cy: number) => {
+    // Corner brackets
+    const drawBracket = (x: number, y: number, dx: number, dy: number) => {
       ctx.strokeStyle = '#3B82F6';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.moveTo(cx - 15, cy); ctx.lineTo(cx + 15, cy);
-      ctx.moveTo(cx, cy - 15); ctx.lineTo(cx, cy + 15);
+      ctx.moveTo(x, y + dy * 20);
+      ctx.lineTo(x, y);
+      ctx.lineTo(x + dx * 20, y);
       ctx.stroke();
     };
-    drawCross(25, 25);
-    drawCross(775, 25);
-    drawCross(25, 1175);
-    drawCross(775, 1175);
+    drawBracket(20, 20, 1, 1);
+    drawBracket(780, 20, -1, 1);
+    drawBracket(20, 1180, 1, -1);
+    drawBracket(780, 1180, -1, -1);
 
-    // 2. HEADER
-    ctx.fillStyle = '#8B5CF6';
-    ctx.font = 'bold 12px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('GLOBAL METRICS DATA VISUALIZATION', 400, 75);
-
+    // 2. HEADER: QUANTUM TRAJECTORY ANALYTICS
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'black 38px "Space Grotesk", sans-serif';
-    ctx.fillText('TRAJECTORY ANALYTICS', 400, 115);
-
-    // Underline
-    ctx.strokeStyle = '#3B82F6';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(100, 135);
-    ctx.lineTo(700, 135);
-    ctx.stroke();
-
-    ctx.fillStyle = '#9CA3AF';
-    ctx.font = '11px monospace';
-    ctx.fillText(`CLASSIFIED PASSPORT RECORD STATION • STATISTICAL SCOPE: ${currentYear === 'All' ? '全部紀錄 (All)' : `${currentYear} 年度`}`, 400, 155);
-
-    // 3. STATISTICAL BENTO BOX GRID (4 Big Cards)
-    // Card 1: Countries
-    const drawCard = (cx: number, cy: number, cw: number, ch: number, label: string, num: string, color: string, sub: string) => {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
-      ctx.fillRect(cx, cy, cw, ch);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(cx, cy, cw, ch);
-
-      // Glowing accent line
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(cx + 50, cy);
-      ctx.stroke();
-
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#9CA3AF';
-      ctx.font = 'bold 11px monospace';
-      ctx.fillText(label.toUpperCase(), cx + 20, cy + 30);
-
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 44px "Space Grotesk", sans-serif';
-      ctx.fillText(num, cx + 20, cy + 85);
-
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
-      ctx.font = '10px monospace';
-      ctx.fillText(sub, cx + 20, cy + 115);
-    };
-
-    drawCard(75, 195, 300, 140, 'Visited Countries', `${stats.totalCountries}`, '#3B82F6', 'countries visited');
-    drawCard(425, 195, 300, 140, 'Total Days', `${stats.totalDays}`, '#10B981', 'days total logged');
-    drawCard(75, 365, 300, 140, 'Logged Stays', `${stats.totalTrips}`, '#F59E0B', 'distinct stays recorded');
-    drawCard(425, 365, 300, 140, 'Density Rate', `${stats.percentLogged}%`, '#EC4899', 'of eligible life days');
-
-    // 4. RADIAL DENSITY CIRCLE GRAPH (MIDDLE)
-    const arcX = 400;
-    const arcY = 650;
-    const arcR = 100;
-
-    // Draw background outer track circle
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-    ctx.lineWidth = 20;
-    ctx.beginPath();
-    ctx.arc(arcX, arcY, arcR, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Draw colored dynamic progress arc
-    const logPct = Math.min(100, Math.max(0, stats.percentLogged)) / 100;
-    const flowGrad = ctx.createLinearGradient(arcX - arcR, arcY, arcX + arcR, arcY);
-    flowGrad.addColorStop(0, '#3B82F6');
-    flowGrad.addColorStop(0.5, '#8B5CF6');
-    flowGrad.addColorStop(1, '#EC4899');
-
-    ctx.strokeStyle = flowGrad;
-    ctx.lineWidth = 22;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.arc(arcX, arcY, arcR, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * logPct));
-    ctx.stroke();
-
-    // Inside concentric center text
-    ctx.fillStyle = '#FFFFFF';
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 36px "Space Grotesk", sans-serif';
-    ctx.fillText(`${stats.percentLogged}%`, arcX, arcY + 8);
-
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.font = 'bold 10px monospace';
-    ctx.fillText('TRAVEL DENSITY', arcX, arcY + 28);
-
-    // 5. PROGRESSIVE COUNTRIES RANKING LIST (BOTTOM)
+    ctx.font = 'bold 22px "Space Grotesk", sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 14px monospace';
-    ctx.fillText('◆ TIME BY COUNTRY RANKING (DAYS)', 75, 810);
+    ctx.fillText('COSMIC TRAJECTORY INSIGHTS', 60, 70);
 
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.lineWidth = 1;
+    ctx.font = '10px monospace';
+    ctx.fillStyle = '#94A3B8';
+    ctx.fillText(`GEO-TEMPORAL CHRONICLE • YEAR: ${currentYear.toUpperCase()}`, 60, 88);
+
+    // Status beacon at top right
+    ctx.fillStyle = '#10B981';
     ctx.beginPath();
-    ctx.moveTo(75, 825);
-    ctx.lineTo(725, 825);
-    ctx.stroke();
+    ctx.arc(710, 70, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#10B981';
+    ctx.fillText('SYS.ONLINE', 645, 73);
 
-    const ranking = stats.ranking.slice(0, 4);
-    let startY = 855;
+    // 3. STATS HUD (4 CARDS)
+    const cardW = 160;
+    const cardH = 80;
+    const cards = [
+      { label: '造訪國家', val: `${stats.totalCountries}`, sub: 'COUNTRIES', color: '#3B82F6' },
+      { label: '旅行天數', val: `${stats.totalDays}`, sub: 'TOTAL DAYS', color: '#10B981' },
+      { label: '記錄旅宿', val: `${stats.totalTrips}`, sub: 'REGISTERED', color: '#F59E0B' },
+      { label: '覆蓋比例', val: `${stats.percentLogged}%`, sub: 'DENSITY', color: '#EC4899' }
+    ];
 
-    ranking.forEach((rank: any, idx: number) => {
-      // Name
+    cards.forEach((c, i) => {
+      const x = 50 + i * (cardW + 20);
+      const y = 110;
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+      ctx.fillRect(x, y, cardW, cardH);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, cardW, cardH);
+
+      ctx.fillStyle = c.color;
+      ctx.fillRect(x, y, cardW, 3);
+
+      ctx.font = 'bold 22px "Space Grotesk", sans-serif';
       ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 14px "Space Grotesk", sans-serif';
-      ctx.fillText(`${idx + 1}. ${rank.country}`, 75, startY);
+      ctx.textAlign = 'left';
+      ctx.fillText(c.val, x + 15, y + 36);
 
-      // Value
-      ctx.fillStyle = '#9CA3AF';
-      ctx.font = 'bold 12px monospace';
-      ctx.textAlign = 'right';
-      ctx.fillText(`${rank.days} days (${rank.pct}%)`, 725, startY);
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillStyle = '#E2E8F0';
+      ctx.fillText(c.label, x + 15, y + 54);
 
-      // Bar container
-      ctx.fillStyle = 'rgba(255,255,255,0.03)';
-      ctx.fillRect(75, startY + 12, 650, 10);
-
-      // Bar active progress
-      const barGrad = ctx.createLinearGradient(75, 0, 725, 0);
-      barGrad.addColorStop(0, '#3B82F6');
-      barGrad.addColorStop(1, '#8B5CF6');
-      ctx.fillStyle = barGrad;
-      ctx.fillRect(75, startY + 12, (rank.pct / 100) * 650, 10);
-
-      startY += 55;
-      ctx.textAlign = 'left'; // reset format
+      ctx.font = '8px monospace';
+      ctx.fillStyle = '#64748B';
+      ctx.fillText(c.sub, x + 15, y + 68);
     });
 
-    // 6. TECHNICAL CERTIFIED FOOTER
-    const footY = 1110;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
-    ctx.font = '9px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText('CORE ENCRYPTION METRIC STAMP ID: 5292c131-851f-4a86-a73d-ee1e405f202a [STABLE_AISTUDIO_BUILD]', 75, footY);
-    ctx.fillText(`INTEGRITY SYSTEM DEPLOYED ONLINE • ${new Date().toISOString()}`, 75, footY + 15);
+    // 4. WORLD MAP SECTION (DARK THEME)
+    const mapBox = { x: 50, y: 210, width: 700, height: 420 };
+    drawWorldTrajectoryMap(ctx, stays, mapBox, {
+      theme: 'dark',
+      showFlightArcs: true,
+      showPins: true,
+      showGraticules: true,
+    });
 
-    // ASCII art stamp logo in lower right
-    ctx.fillStyle = '#3B82F6';
-    ctx.font = 'bold 8px monospace';
-    ctx.textAlign = 'right';
-    ctx.fillText('// COMPUTED METALLIC COMPASS ROSE //', 725, footY);
-    ctx.fillText('     ▲     ', 725, footY + 12);
-    ctx.fillText('  ◄ ─── ►  ', 725, footY + 20);
-    ctx.fillText('     ▼     ', 725, footY + 28);
+    ctx.strokeStyle = 'rgba(59, 130, 246, 0.3)';
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(mapBox.x, mapBox.y, mapBox.width, mapBox.height);
+
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+    ctx.fillRect(290, mapBox.y - 12, 220, 24);
+    ctx.strokeStyle = '#3B82F6';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(290, mapBox.y - 12, 220, 24);
+    ctx.fillStyle = '#60A5FA';
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('GLOBAL FLIGHT PATHS', 400, mapBox.y + 4);
+
+    // 5. RANKING BREAKDOWN SECTION
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#E2E8F0';
+    ctx.font = 'bold 12px monospace';
+    ctx.fillText('◆ GEOGRAPHIC STAY TIME RANKING / 各國停留天數排行', 60, 660);
+
+    let rankY = 685;
+    const ranking = (stats.ranking || []).slice(0, 5);
+
+    ranking.forEach((r: any, idx: number) => {
+      ctx.fillStyle = '#94A3B8';
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText(`0${idx + 1}`, 60, rankY + 16);
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 13px "Space Grotesk", sans-serif';
+      ctx.fillText(r.country, 95, rankY + 16);
+
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#38BDF8';
+      ctx.font = 'bold 12px monospace';
+      ctx.fillText(`${r.days} Days (${r.pct}%)`, 740, rankY + 16);
+      ctx.textAlign = 'left';
+
+      // Bar bg
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+      ctx.fillRect(95, rankY + 24, 645, 7);
+
+      // Bar fill
+      const grad = ctx.createLinearGradient(95, 0, 95 + (645 * (r.pct / 100)), 0);
+      grad.addColorStop(0, '#3B82F6');
+      grad.addColorStop(1, '#EC4899');
+      ctx.fillStyle = grad;
+      ctx.fillRect(95, rankY + 24, Math.max(8, 645 * (r.pct / 100)), 7);
+
+      rankY += 45;
+    });
+
+    // 6. FOOTER
+    const footY = 1130;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(60, footY);
+    ctx.lineTo(740, footY);
+    ctx.stroke();
+
+    ctx.fillStyle = '#64748B';
+    ctx.font = '9px monospace';
+    ctx.fillText('SYNCTIME TRAJECTORY ENGINE • SECURE CRYPTOGRAPHIC TOKEN VERIFIED', 60, footY + 22);
 
     resolve();
   });
 }
 
-// GENERATE DESIGNER INTERACTIVE MULTI-PAGE OFFLINE PORTABLE PDF BOOKLET
+// =========================================================================
+// 3. GENERATE MULTI-PAGE TRUE VECTOR & SELECTABLE TEXT PDF BOOKLET
+// Zero blurriness, vector geometry, true selectable text with Chinese fonts
+// =========================================================================
 export async function generatePortablePassportPDF(
-  stays: Stay[], 
-  userEmail: string = 'Traveller',
+  stays: Stay[],
+  userInfo: string | PassportUserInfo = 'Traveller',
   mode: 'stays' | 'insights' = 'stays',
   stats: any = {},
   activeYear: string = 'All'
 ): Promise<jsPDF> {
-  const doc = new jsPDF('p', 'pt', 'a4'); // A4 is 595 x 842 points
-  
-  // Helper to draw a beautiful page and return high resolution JPEG data url
-  const addPageFromCanvas = (drawFn: (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => void) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 800;
-    canvas.height = 1130; // Matches professional print booklet ratio
-    const ctx = canvas.getContext('2d')!;
-    
-    // Smooth font rendering settings
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    
-    drawFn(canvas, ctx);
-    
-    const imgData = canvas.toDataURL('image/jpeg', 0.94);
-    return imgData;
-  };
+  const doc = new jsPDF('p', 'pt', 'a4'); // A4 is 595.28 x 841.89 points
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
 
-  const pages: string[] = [];
+  const resolvedInfo: PassportUserInfo = typeof userInfo === 'string'
+    ? {
+        displayName: userInfo.includes('@') ? userInfo.split('@')[0] : userInfo,
+        username: userInfo.includes('@') ? userInfo.split('@')[0].toUpperCase() : userInfo.toUpperCase(),
+        email: userInfo,
+        authority: 'Synctime Professional Certification Organization',
+      }
+    : {
+        displayName: userInfo.displayName || userInfo.username || 'Traveller',
+        username: (userInfo.username || userInfo.displayName || 'PHOEBE.PYF').toUpperCase(),
+        email: userInfo.email || '',
+        avatarUrl: userInfo.avatarUrl,
+        authority: userInfo.authority || 'Synctime Professional Certification Organization',
+      };
+
+  const userName = resolvedInfo.displayName || '方方老Baby';
+  const passportId = resolvedInfo.username || 'PHOEBE.PYF';
+  const authority = resolvedInfo.authority || 'Synctime Professional Certification Organization';
+
+  // Load Chinese font for vector rendering
+  const fontBase64 = await getChineseFontBase64();
+  let fontName = 'helvetica';
+
+  if (fontBase64) {
+    try {
+      doc.addFileToVFS('NotoSansTC.ttf', fontBase64);
+      doc.addFont('NotoSansTC.ttf', 'NotoSansTC', 'normal');
+      doc.setFont('NotoSansTC');
+      fontName = 'NotoSansTC';
+    } catch (e) {
+      console.warn('Could not register NotoSansTC with jsPDF:', e);
+      doc.setFont('helvetica');
+    }
+  } else {
+    doc.setFont('helvetica');
+  }
+
   const chronStays = [...stays].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
   const totalCountries = new Set(stays.map(s => s.country)).size;
   const totalDays = stays.reduce((sum, s) => sum + calculateDays(s.startDate, s.endDate), 0);
   const totalStays = stays.length;
+  const dateStr = new Date().toISOString().substring(0, 10);
 
   if (mode === 'stays') {
-    // ==========================================
-    // PAGE 1: PORTRAIT VINTAGE COVER (GOLD ON BLUE)
-    // ==========================================
-    const coverImg = addPageFromCanvas((canvas, ctx) => {
-      // Midnight Rich Blue
-      ctx.fillStyle = '#0F1D36';
-      ctx.fillRect(0, 0, 800, 1130);
+    // =====================================================================
+    // PAGE 1: PORTRAIT VINTAGE COVER (GOLD ON MIDNIGHT BLUE) - PURE VECTOR
+    // =====================================================================
+    // Background
+    doc.setFillColor(15, 29, 54);
+    doc.rect(0, 0, pageWidth, pageHeight, 'F');
 
-      // Gold Foil borders
-      ctx.strokeStyle = '#DFB254';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(30, 30, 740, 1070);
-      ctx.lineWidth = 1;
-      ctx.strokeRect(38, 38, 724, 1054);
+    // Double Gold Foil Borders
+    doc.setDrawColor(223, 178, 84);
+    doc.setLineWidth(2.2);
+    doc.rect(24, 24, pageWidth - 48, pageHeight - 48, 'S');
+    doc.setLineWidth(0.8);
+    doc.rect(30, 30, pageWidth - 60, pageHeight - 60, 'S');
 
-      // Corner gold ornaments
-      const drawCornerOrnament = (cx: number, cy: number, rot: number) => {
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(rot);
-        ctx.strokeStyle = '#DFB254';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(25, 0);
-        ctx.moveTo(0, 0);
-        ctx.lineTo(0, 25);
-        ctx.moveTo(8, 8);
-        ctx.arc(8, 8, 4, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      };
-      drawCornerOrnament(50, 50, 0);
-      drawCornerOrnament(750, 50, Math.PI / 2);
-      drawCornerOrnament(50, 1080, -Math.PI / 2);
-      drawCornerOrnament(750, 1080, Math.PI);
+    // Corner Ornaments
+    const drawCoverCorner = (x: number, y: number) => {
+      doc.setDrawColor(223, 178, 84);
+      doc.setLineWidth(1);
+      doc.circle(x, y, 5, 'S');
+      doc.circle(x, y, 2.5, 'S');
+    };
+    drawCoverCorner(40, 40);
+    drawCoverCorner(pageWidth - 40, 40);
+    drawCoverCorner(40, pageHeight - 40);
+    drawCoverCorner(pageWidth - 40, pageHeight - 40);
 
-      // Center Crest Stamp Logo
-      ctx.save();
-      ctx.translate(400, 500);
-      ctx.strokeStyle = '#DFB254';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(0, 0, 95, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.lineWidth = 0.5;
-      ctx.beginPath();
-      ctx.arc(0, 0, 88, 0, Math.PI * 2);
-      ctx.stroke();
+    // Title text
+    doc.setTextColor(223, 178, 84);
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(10);
+    doc.text('• OFFICIAL DIPLOMATIC CREDENTIALS •', pageWidth / 2, 115, { align: 'center' });
 
-      // Outer letters around circle
-      ctx.font = 'bold 8px monospace';
-      ctx.fillStyle = '#DFB254';
-      ctx.textAlign = 'center';
-      
-      const orbitText = "PASSPORT RECORD STATION • FLIGHT TRAJECTORY CONTROL PANEL • ";
-      for (let i = 0; i < orbitText.length; i++) {
-        const angle = (i * (Math.PI * 2 / orbitText.length)) - Math.PI / 2;
-        ctx.save();
-        ctx.rotate(angle);
-        ctx.fillText(orbitText[i], 0, -100);
-        ctx.restore();
+    doc.setFontSize(26);
+    doc.text('CARNET DE VOYAGE', pageWidth / 2, 165, { align: 'center' });
+
+    doc.setFontSize(13);
+    doc.text('漫 空 旅 人 軌 跡 護 照', pageWidth / 2, 195, { align: 'center' });
+
+    // Center Gold Star Crest & Orbit Circles
+    doc.circle(pageWidth / 2, 380, 75, 'S');
+    doc.circle(pageWidth / 2, 380, 68, 'S');
+    doc.circle(pageWidth / 2, 380, 50, 'S');
+    doc.setFontSize(24);
+    doc.text('★', pageWidth / 2, 375, { align: 'center' });
+    doc.setFontSize(8);
+    doc.text('WORLD TRAVEL', pageWidth / 2, 395, { align: 'center' });
+    doc.text('COMPENDIUM', pageWidth / 2, 406, { align: 'center' });
+
+    doc.setFontSize(7);
+    doc.text('PASSPORT RECORD STATION • FLIGHT TRAJECTORY SYSTEM', pageWidth / 2, 475, { align: 'center' });
+
+    // Metadata Summary Box
+    doc.setDrawColor(223, 178, 84);
+    doc.setLineWidth(1);
+    doc.rect(95, 590, pageWidth - 190, 155, 'S');
+
+    doc.setFontSize(8.5);
+    doc.text(`BOOKLET HOLDER:  ${userName.toUpperCase()}`, 115, 622);
+    doc.text(`METRIC PASSPORT STAMP:  SA-TS-5292C131851F`, 115, 648);
+    doc.text(`TOTAL REGISTERED EVENTS:  ${totalStays} STAYS RECORDED`, 115, 674);
+    doc.text(`STATUS LEVEL:  APPROVED DEPUTY EXPLORER`, 115, 700);
+    doc.text(`CERTIFICATION DATE:  ${dateStr}`, 115, 726);
+
+    // =====================================================================
+    // PAGE 2: BIOMETRIC TRAVELLER REGISTRY - PURE VECTOR
+    // =====================================================================
+    doc.addPage();
+    doc.setFillColor(255, 245, 238);
+    doc.rect(0, 0, pageWidth, pageHeight, 'F');
+
+    // Double Borders
+    doc.setDrawColor(204, 150, 115);
+    doc.setLineWidth(1.8);
+    doc.rect(24, 24, pageWidth - 48, pageHeight - 48, 'S');
+    doc.setLineWidth(0.5);
+    doc.rect(28, 28, pageWidth - 56, pageHeight - 56, 'S');
+
+    // Header
+    doc.setTextColor(29, 29, 29);
+    doc.setFontSize(18);
+    doc.text('BIOMETRIC TRAVELLER REGISTRY', 50, 68);
+    doc.setTextColor(180, 120, 85);
+    doc.setFontSize(9);
+    doc.text('Certified Identifications and Global Logbook Summary / 旅客註冊檔案', 50, 82);
+
+    doc.setDrawColor(230, 215, 200);
+    doc.setLineWidth(1);
+    doc.line(50, 94, pageWidth - 50, 94);
+
+    // Photo Box (Left)
+    const drawPlaceholderPhoto = () => {
+      doc.setFillColor(252, 235, 225);
+      doc.rect(50, 115, 120, 155, 'FD');
+      doc.setDrawColor(204, 150, 115);
+      doc.setLineWidth(1.5);
+      doc.circle(110, 175, 22, 'S');
+      doc.line(80, 225, 140, 225);
+
+      doc.setFontSize(7.5);
+      doc.setTextColor(180, 120, 85);
+      doc.text('APPROVED TRAVELLER PHOTO', 110, 255, { align: 'center' });
+    };
+
+    // Attempt to load user avatar image or fall back gracefully
+    const avatarData = await loadAvatarImageData(resolvedInfo.avatarUrl);
+    if (avatarData) {
+      try {
+        doc.addImage(avatarData, 'JPEG', 50, 115, 120, 155);
+        doc.setDrawColor(204, 150, 115);
+        doc.setLineWidth(1.5);
+        doc.rect(50, 115, 120, 155, 'S');
+      } catch (err) {
+        console.warn('Could not embed user avatar into PDF:', err);
+        drawPlaceholderPhoto();
       }
+    } else {
+      drawPlaceholderPhoto();
+    }
 
-      // Compass rose star at center
-      ctx.fillStyle = '#DFB254';
-      ctx.font = '36px "Space Grotesk", sans-serif';
-      ctx.fillText('★', 0, -4);
-      ctx.font = 'bold 10px monospace';
-      ctx.fillText('WORLD TRAVEL', 0, 24);
-      ctx.fillText('COMPENDIUM', 0, 36);
-      ctx.restore();
+    // Official passport visa approval stamp at the bottom corner of the photo box
+    doc.setDrawColor(220, 38, 38);
+    doc.setTextColor(220, 38, 38);
+    doc.setLineWidth(1);
+    doc.rect(101, 237, 64, 26, 'S');
+    doc.setLineWidth(0.4);
+    doc.rect(103, 239, 60, 22, 'S');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.8);
+    doc.text('SyncTime Visa', 133, 248, { align: 'center' });
+    doc.text('Approved', 133, 256.5, { align: 'center' });
+    doc.setFont(fontName, 'normal');
 
-      // Titles
-      ctx.fillStyle = '#DFB254';
-      ctx.textAlign = 'center';
-      ctx.font = 'bold 13px monospace';
-      ctx.fillText('• OFFICIAL DIPLOMATIC CREDENTIALS •', 400, 130);
+    // Identification Fields (Right)
+    const drawFieldRow = (label: string, value: string, sy: number) => {
+      doc.setTextColor(180, 120, 85);
+      doc.setFontSize(8);
+      doc.text(label, 190, sy);
 
-      ctx.font = 'black 34px "Space Grotesk", sans-serif';
-      ctx.fillText('CARNET DE VOYAGE', 400, 205);
-      
-      ctx.font = 'bold 15px "Space Grotesk", sans-serif';
-      ctx.fillText('漫 空 旅 人 軌 跡 護 照', 400, 245);
+      doc.setTextColor(29, 29, 29);
+      doc.setFontSize(11);
+      doc.text(value, 190, sy + 15);
 
-      // Bottom Metadata Card Box
-      ctx.fillStyle = 'rgba(223, 178, 84, 0.08)';
-      ctx.fillRect(150, 800, 500, 200);
-      ctx.strokeStyle = '#DFB254';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(150, 800, 500, 200);
+      doc.setDrawColor(230, 215, 200);
+      doc.setLineWidth(0.6);
+      doc.line(190, sy + 22, pageWidth - 50, sy + 22);
+    };
 
-      ctx.fillStyle = '#DFB254';
-      ctx.font = 'bold 11px monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText(`BOOKLET HOLDER:  ${userEmail.toUpperCase()}`, 180, 840);
-      ctx.fillText(`METRIC PASSPORT STAMP:  SA-TS-5292C131851F`, 180, 875);
-      ctx.fillText(`TOTAL REGISTERED EVENTS:  ${totalStays} STAYS RECORDED`, 180, 910);
-      ctx.fillText(`STATUS LEVEL:  APPROVED DEPUTY EXPLORER`, 180, 945);
-      ctx.fillText(`CERTIFICATION DATE:  ${new Date().toISOString().substring(0, 10)}`, 180, 980);
+    drawFieldRow('SURNAME & GIVEN NAME / 姓名別名', userName, 130);
+    drawFieldRow('TRAVELLER ACCOUNT / 漫空使用者帳戶', passportId, 172);
+    drawFieldRow('Authority / 發證機構', authority, 214);
+    drawFieldRow('REGISTRY EXPORT DATE / 護照導出日期', dateStr, 256);
+
+    // Trajectory Metrics Overview (4 Stat Cards)
+    doc.setTextColor(29, 29, 29);
+    doc.setFontSize(11);
+    doc.text('◆ TRAJECTORY METRICS OVERVIEW / 全球軌跡統計數據', 50, 315);
+
+    const statCardW = 238;
+    const statCardH = 75;
+    const statGridX = [50, 308];
+    const statGridY = [330, 420];
+
+    const ratePct = totalDays > 0 ? Math.min(100, Math.round(totalDays * 0.45)) : 0;
+    const statCardsData = [
+      { val: `${totalCountries}`, label: 'COUNTRIES REGISTERED / 造訪國家', color: [59, 130, 246] },
+      { val: `${totalDays}`, label: 'CUMULATIVE STAYS DAYS / 累計天數', color: [16, 185, 129] },
+      { val: `${totalStays}`, label: 'STOPS STAMPED IN LUGGAGE / 旅宿紀錄', color: [245, 158, 11] },
+      { val: `${ratePct}%`, label: 'ACTIVE PATH DENSITY RATIO / 軌跡覆蓋', color: [236, 72, 153] }
+    ];
+
+    statCardsData.forEach((card, idx) => {
+      const col = idx % 2;
+      const row = Math.floor(idx / 2);
+      const x = statGridX[col];
+      const y = statGridY[row];
+
+      doc.setFillColor(255, 255, 255);
+      doc.rect(x, y, statCardW, statCardH, 'F');
+      doc.setDrawColor(225, 215, 205);
+      doc.setLineWidth(0.8);
+      doc.rect(x, y, statCardW, statCardH, 'S');
+
+      // Top indicator bar
+      doc.setFillColor(card.color[0], card.color[1], card.color[2]);
+      doc.rect(x, y, statCardW, 3, 'F');
+
+      // Value
+      doc.setTextColor(29, 29, 29);
+      doc.setFontSize(22);
+      doc.text(card.val, x + 16, y + 36);
+
+      // Label
+      doc.setTextColor(120, 110, 100);
+      doc.setFontSize(7.5);
+      doc.text(card.label, x + 16, y + 55);
     });
-    pages.push(coverImg);
 
-    // ==========================================
-    // PAGE 2: BIOMETRICS LEDGER & STATS WIDGETS
-    // ==========================================
-    const bioImg = addPageFromCanvas((canvas, ctx) => {
-      // Vintage cream paper color
-      ctx.fillStyle = '#fff0e6';
-      ctx.fillRect(0, 0, 800, 1130);
-
-      // Borders
-      ctx.strokeStyle = '#f5d0bd';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(30, 30, 740, 1070);
-      ctx.strokeStyle = '#cc9673';
-      ctx.lineWidth = 0.5;
-      ctx.strokeRect(36, 36, 728, 1058);
-
-      // Header Label
-      ctx.fillStyle = '#1D1D1D';
-      ctx.font = 'black 22px "Space Grotesk", sans-serif';
-      ctx.fillText('BIOMETRIC TRAVELLER REGISTRY', 80, 90);
-      ctx.fillStyle = '#cc9673';
-      ctx.font = 'italic 11px Georgia, serif';
-      ctx.fillText('Certified Identifications and Global Logbook Summary', 80, 110);
-
-      // Biometrics layout dividing line
-      ctx.strokeStyle = '#f3ded0';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(80, 130);
-      ctx.lineTo(720, 130);
-      ctx.stroke();
-
-      // Portrait photo box on the left
-      ctx.fillStyle = '#fce5d8';
-      ctx.fillRect(80, 160, 160, 210);
-      ctx.strokeStyle = '#cc9673';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(80, 160, 160, 210);
-
-      // User Silhouette SVG representation
-      ctx.save();
-      ctx.translate(160, 245);
-      ctx.strokeStyle = '#cc9673';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(0, -25, 25, 0, Math.PI * 2); // head
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(0, 45, 45, Math.PI, 0); // shoulders
-      ctx.stroke();
-      ctx.restore();
-
-      ctx.fillStyle = '#cc9673';
-      ctx.font = 'bold 8px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('APPROVED TRAVELLER PHOTO', 160, 355);
-
-      // Slanted verification stamp
-      ctx.save();
-      ctx.translate(210, 335);
-      ctx.rotate(-15 * Math.PI / 180);
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(-50, -18, 100, 36);
-      ctx.strokeRect(-46, -14, 92, 28);
-      ctx.fillStyle = 'rgba(239, 68, 68, 0.55)';
-      ctx.font = 'bold 8px monospace';
-      ctx.fillText('SYNCTIME APPNET', 0, -3);
-      ctx.fillText('PASSPORT CONTROL', 0, 7);
-      ctx.restore();
-
-      // Right fields table
-      ctx.textAlign = 'left';
-      const drawFieldRow = (label: string, value: string, sy: number) => {
-        ctx.fillStyle = '#cc9673';
-        ctx.font = 'bold 9px monospace';
-        ctx.fillText(label, 270, sy);
-
-        ctx.fillStyle = '#1D1D1D';
-        ctx.font = 'bold 14px "Space Grotesk", sans-serif';
-        ctx.fillText(value, 270, sy + 20);
-
-        ctx.strokeStyle = '#EAE4D9';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(270, sy + 30);
-        ctx.lineTo(720, sy + 30);
-        ctx.stroke();
-      };
-
-      drawFieldRow('SURNAME & GIVEN NAME / 姓名別名', userEmail.split('@')[0].toUpperCase(), 175);
-      drawFieldRow('TRAVELLER ACCOUNT / 漫空使用者帳戶', userEmail, 230);
-      drawFieldRow('ISSUING REQUISITE STAMP / 簽發認證終端', 'AI STUDIO SECURE VIRTUAL DEPLOY_KEY', 285);
-      drawFieldRow('REGISTRY EXPORT DATE / 護照導出日期', new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }), 340);
-
-      // Bottom half: Bento box summary statistics cards
-      ctx.fillStyle = '#4A4238';
-      ctx.font = 'bold 12px monospace';
-      ctx.fillText('◆ TRAJECTORY METRICS OVERVIEW', 80, 470);
-
-      ctx.strokeStyle = '#8C8070';
-      ctx.lineWidth = 0.5;
-      ctx.beginPath();
-      ctx.moveTo(80, 480);
-      ctx.lineTo(720, 480);
-      ctx.stroke();
-
-      const drawStatCard = (cx: number, cy: number, cw: number, ch: number, countNum: string, label: string, color: string) => {
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(cx, cy, cw, ch);
-        ctx.strokeStyle = '#E2DDD3';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(cx, cy, cw, ch);
-
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx + 40, cy);
-        ctx.stroke();
-
-        ctx.fillStyle = '#1D1D1D';
-        ctx.font = 'bold 36px "Space Grotesk", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(countNum, cx + cw/2, cy + ch/2 + 5);
-
-        ctx.fillStyle = '#8C8070';
-        ctx.font = 'bold 9px monospace';
-        ctx.fillText(label, cx + cw/2, cy + ch - 18);
-      };
-
-      drawStatCard(80, 510, 305, 140, `${totalCountries}`, 'COUNTRIES REGISTERED', '#3B82F6');
-      drawStatCard(415, 510, 305, 140, `${totalDays}`, 'CUMULATIVE STAYS DAYS', '#10B981');
-      drawStatCard(80, 680, 305, 140, `${totalStays}`, 'STOPS STAMPED IN LUGGAGE', '#F59E0B');
-      
-      const ratePct = totalDays > 0 ? Math.min(100, Math.round(totalDays * 0.45)) : 0;
-      drawStatCard(415, 680, 305, 140, `${ratePct}%`, 'ACTIVE PATH DENSITY RATIO', '#EC4899');
-
-      // Barcode at bottom of profile page
-      const footY = 940;
-      ctx.fillStyle = '#1D1D1D';
-      let barX = 80;
-      const barPattern = [4, 2, 7, 3, 2, 8, 4, 10, 2, 5, 2, 7, 10, 3, 2, 6, 2, 8, 3, 9, 2, 4, 10, 5, 2];
-      barPattern.forEach(w => {
-        ctx.fillRect(barX, footY, w, 40);
-        barX += w + 2;
-      });
-
-      ctx.fillStyle = '#8C8070';
-      ctx.font = '9px monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText('IDENTITY CERTIFICATE DEPLOYED AND ENCRYPTED • SECURE SIGNATURE SYNCED', 80, footY + 54);
-      ctx.fillText('INDEX CARNET NO: 5292C131-851F-4A86-A73D-EE1E405F202A', 80, footY + 65);
+    // Barcode at bottom
+    const footY = 690;
+    doc.setFillColor(29, 29, 29);
+    let barX = 50;
+    const barPattern = [4, 2, 7, 3, 2, 8, 4, 10, 2, 5, 2, 7, 10, 3, 2, 6, 2, 8, 3, 9, 2, 4, 10, 5, 2];
+    barPattern.forEach(w => {
+      doc.rect(barX, footY, w, 28, 'F');
+      barX += w + 2;
     });
-    pages.push(bioImg);
 
-    // ==========================================
-    // PAGE 3+: VISA LOG STAMPS GRID
-    // ==========================================
+    doc.setTextColor(140, 128, 112);
+    doc.setFontSize(7.5);
+    doc.text('IDENTITY CERTIFICATE DEPLOYED AND ENCRYPTED • SECURE SIGNATURE SYNCED', 50, footY + 40);
+    doc.text('INDEX CARNET NO: 5292C131-851F-4A86-A73D-EE1E405F202A', 50, footY + 52);
+
+    // =====================================================================
+    // PAGES 3+: VISA LOG STAMPS GRID - PURE VECTOR
+    // =====================================================================
     const itemsPerPage = 6;
     const pageCount = Math.ceil(chronStays.length / itemsPerPage) || 1;
 
     for (let p = 0; p < pageCount; p++) {
+      doc.addPage();
+      doc.setFillColor(250, 249, 245);
+      doc.rect(0, 0, pageWidth, pageHeight, 'F');
+
+      // Borders
+      doc.setDrawColor(74, 66, 56);
+      doc.setLineWidth(1.8);
+      doc.rect(24, 24, pageWidth - 48, pageHeight - 48, 'S');
+      doc.setLineWidth(0.5);
+      doc.rect(28, 28, pageWidth - 56, pageHeight - 56, 'S');
+
+      // Header
+      doc.setTextColor(29, 29, 29);
+      doc.setFontSize(15);
+      doc.text('PASSPORT RECORD SEALS / 歷次出入境簽證戳印', 50, 68);
+      doc.setTextColor(140, 128, 112);
+      doc.setFontSize(8);
+      doc.text(`PAGINATION INDEX: ALBUM PAGE ${p + 1} OF ${pageCount} • ACTIVE VISAS SYSTEM`, 50, 82);
+
+      doc.setDrawColor(74, 66, 56);
+      doc.setLineWidth(0.8);
+      doc.line(50, 92, pageWidth - 50, 92);
+
+      const gridX = [50, 308];
+      const gridY = [110, 315, 520];
+      const cardW = 238;
+      const cardH = 185;
+
       const pageStays = chronStays.slice(p * itemsPerPage, (p + 1) * itemsPerPage);
-      const stampImg = addPageFromCanvas((canvas, ctx) => {
-        ctx.fillStyle = '#FAF9F5';
-        ctx.fillRect(0, 0, 800, 1130);
 
-        // Borders
-        ctx.strokeStyle = '#4A4238';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(30, 30, 740, 1070);
-        ctx.strokeStyle = '#8C8070';
-        ctx.lineWidth = 0.5;
-        ctx.strokeRect(36, 36, 728, 1058);
+      pageStays.forEach((stay, index) => {
+        const col = index % 2;
+        const row = Math.floor(index / 2);
+        const x = gridX[col];
+        const y = gridY[row];
 
-        // Header Label
-        ctx.fillStyle = '#1D1D1D';
-        ctx.font = 'bold 16px "Space Grotesk", sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillText('PASSPORT RECORD SEALS / 歷次出入境簽證戳印', 80, 90);
-        ctx.font = 'mono bold 9px monospace';
-        ctx.fillStyle = '#8C8070';
-        ctx.fillText(`PAGINATION INDEX: ALBUM PAGE ${p + 1} OF ${pageCount} • ACTIVE VISAS SYSTEM`, 80, 110);
+        const cardColors = [
+          { bg: [238, 242, 255], border: [79, 70, 229], text: [49, 46, 129] },
+          { bg: [254, 242, 242], border: [239, 68, 68], text: [127, 29, 29] },
+          { bg: [236, 253, 245], border: [16, 185, 129], text: [6, 78, 59] },
+          { bg: [255, 251, 235], border: [245, 158, 11], text: [120, 53, 15] },
+          { bg: [253, 242, 248], border: [236, 72, 153], text: [112, 26, 117] },
+          { bg: [245, 243, 255], border: [139, 92, 246], text: [76, 29, 149] }
+        ];
+        const style = cardColors[(p * itemsPerPage + index) % cardColors.length];
 
-        ctx.strokeStyle = '#4A4238';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(80, 125);
-        ctx.lineTo(720, 125);
-        ctx.stroke();
+        // Background
+        doc.setFillColor(style.bg[0], style.bg[1], style.bg[2]);
+        doc.rect(x, y, cardW, cardH, 'F');
 
-        const gridX = [80, 410];
-        const gridY = [160, 460, 760];
-        const cardW = 310;
-        const cardH = 260;
+        // Dashed Border
+        doc.setDrawColor(style.border[0], style.border[1], style.border[2]);
+        doc.setLineWidth(1.2);
+        doc.setLineDashPattern([3, 3], 0);
+        doc.rect(x, y, cardW, cardH, 'S');
+        doc.setLineDashPattern([], 0); // Reset dash
 
-        pageStays.forEach((stay, index) => {
-          const col = index % 2;
-          const row = Math.floor(index / 2);
-          const x = gridX[col];
-          const y = gridY[row];
+        // Circular Visa Stamp
+        doc.circle(x + 36, y + 42, 22, 'S');
+        doc.setFontSize(6.5);
+        doc.setTextColor(style.border[0], style.border[1], style.border[2]);
+        doc.text('ENTRY SEEN', x + 36, y + 38, { align: 'center' });
+        doc.setFontSize(9);
+        doc.text(getCountryCode(stay.country), x + 36, y + 49, { align: 'center' });
 
-          const colors = [
-            { bg: '#EEF2FF', border: '#4F46E5', text: '#312E81', ink: 'rgba(79, 70, 229, 0.4)' },
-            { bg: '#FEF2F2', border: '#EF4444', text: '#7F1D1D', ink: 'rgba(239, 68, 68, 0.4)' },
-            { bg: '#ECFDF5', border: '#10B981', text: '#064E3B', ink: 'rgba(16, 185, 129, 0.4)' },
-            { bg: '#FFFBEB', border: '#F59E0B', text: '#78350F', ink: 'rgba(245, 158, 11, 0.4)' },
-            { bg: '#FDF2F8', border: '#EC4899', text: '#701A75', ink: 'rgba(236, 72, 153, 0.4)' },
-            { bg: '#F5F3FF', border: '#8B5CF6', text: '#4C1D95', ink: 'rgba(139, 92, 246, 0.4)' }
-          ];
-          const style = colors[(p * itemsPerPage + index) % colors.length];
+        // Destination Titles
+        doc.setTextColor(29, 29, 29);
+        doc.setFontSize(14);
+        doc.text(stay.country, x + 68, y + 36);
 
-          ctx.fillStyle = style.bg;
-          ctx.fillRect(x, y, cardW, cardH);
-          ctx.strokeStyle = style.border;
-          ctx.lineWidth = 1.5;
-          ctx.setLineDash([4, 6]);
-          ctx.strokeRect(x, y, cardW, cardH);
-          ctx.setLineDash([]);
+        doc.setTextColor(style.text[0], style.text[1], style.text[2]);
+        doc.setFontSize(10.5);
+        doc.text(stay.city, x + 68, y + 52);
 
-          ctx.save();
-          ctx.translate(x + 50, y + 60);
-          ctx.rotate(-15 * Math.PI / 180);
-          ctx.strokeStyle = style.ink;
-          ctx.lineWidth = 1.8;
-          ctx.beginPath();
-          ctx.arc(0, 0, 32, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.font = 'bold 8px monospace';
-          ctx.fillStyle = style.text || style.border;
-          ctx.textAlign = 'center';
-          ctx.fillText('ENTRY SEEN', 0, -4);
-          ctx.fillText(getCountryCode(stay.country), 0, 8);
-          ctx.restore();
+        // Divider
+        doc.setDrawColor(210, 200, 190);
+        doc.setLineWidth(0.6);
+        doc.line(x + 14, y + 72, x + cardW - 14, y + 72);
 
-          ctx.textAlign = 'left';
-          ctx.fillStyle = '#1D1D1D';
-          ctx.font = 'bold 17px "Space Grotesk", sans-serif';
-          ctx.fillText(stay.country, x + 110, y + 45);
-          ctx.font = 'bold 11px monospace';
-          ctx.fillStyle = '#6E6252';
-          ctx.fillText(stay.city, x + 110, y + 65);
+        // Details
+        doc.setTextColor(120, 110, 100);
+        doc.setFontSize(7.5);
+        doc.text('TRAJECTORY SPAN RANGE / 期間', x + 16, y + 88);
 
-          ctx.strokeStyle = 'rgba(0,0,0,0.06)';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(x + 20, y + 105);
-          ctx.lineTo(x + cardW - 20, y + 105);
-          ctx.stroke();
+        doc.setTextColor(29, 29, 29);
+        doc.setFontSize(9.5);
+        doc.text(`${stay.startDate} — ${stay.endDate}`, x + 16, y + 102);
 
-          ctx.font = '9px monospace';
-          ctx.fillStyle = '#8C8070';
-          ctx.fillText('TRAJECTORY SPAN RANGE', x + 30, y + 130);
-          ctx.fillStyle = '#1D1D1D';
-          ctx.font = 'bold 11px "Space Grotesk", sans-serif';
-          ctx.fillText(`${stay.startDate} ── ${stay.endDate}`, x + 30, y + 148);
+        const days = calculateDays(stay.startDate, stay.endDate);
+        doc.setTextColor(120, 110, 100);
+        doc.setFontSize(7.5);
+        doc.text('ACTIVE RESIDENCY DAYS / 停留天數', x + 16, y + 120);
 
-          ctx.fillStyle = '#8C8070';
-          ctx.font = '9px monospace';
-          ctx.fillText('TIME CUMULATIVE COUNT', x + 30, y + 180);
-          ctx.fillStyle = '#1D1D1D';
-          ctx.font = 'bold 11px "Space Grotesk", sans-serif';
-          ctx.fillText(`${calculateDays(stay.startDate, stay.endDate)} ACTIVE RESIDENCY DAYS`, x + 30, y + 198);
+        doc.setTextColor(style.border[0], style.border[1], style.border[2]);
+        doc.setFontSize(10);
+        doc.text(`${days} DAYS`, x + 16, y + 134);
 
-          if (stay.remark) {
-            ctx.fillStyle = '#EC4899';
-            ctx.font = 'italic 10px serif';
-            ctx.fillText(`“${stay.remark}”`, x + 30, y + 230);
-          }
+        if (stay.remark) {
+          doc.setTextColor(236, 72, 153);
+          doc.setFontSize(8);
+          const tr = stay.remark.length > 25 ? stay.remark.substring(0, 25) + '...' : stay.remark;
+          doc.text(`“${tr}”`, x + 16, y + 152);
+        }
 
-          ctx.fillStyle = 'rgba(0,0,0,0.15)';
-          ctx.font = 'bold 8px monospace';
-          ctx.textAlign = 'right';
-          ctx.fillText(`#${p * itemsPerPage + index + 1} APPROVED IMMIGRATION`, x + cardW - 15, y + cardH - 12);
-        });
+        // Mini stamp note
+        doc.setTextColor(160, 150, 140);
+        doc.setFontSize(6.5);
+        doc.text(`PASSPORT CONTROL REF #${index + 1 + p * itemsPerPage}`, x + 16, y + 172);
       });
-      pages.push(stampImg);
     }
 
-    // ==========================================
-    // PAGE 4: FLIGHT TRAJECTORY ROUTE NETWORK MAP
-    // ==========================================
-    const mapImg = addPageFromCanvas((canvas, ctx) => {
-      ctx.fillStyle = '#FAF9F5';
-      ctx.fillRect(0, 0, 800, 1130);
+    // =====================================================================
+    // FINAL PAGE: WORLD TRANSIT TRAJECTORY NETWORK MAP & SUMMARY INDEX
+    // 300 DPI Map Background + Pure Vector Frame and Text
+    // =====================================================================
+    doc.addPage();
+    doc.setFillColor(250, 249, 245);
+    doc.rect(0, 0, pageWidth, pageHeight, 'F');
 
-      ctx.strokeStyle = '#4A4238';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(30, 30, 740, 1070);
-      ctx.strokeStyle = '#8C8070';
-      ctx.lineWidth = 0.5;
-      ctx.strokeRect(36, 36, 728, 1058);
+    // Page Border
+    doc.setDrawColor(74, 66, 56);
+    doc.setLineWidth(1.8);
+    doc.rect(24, 24, pageWidth - 48, pageHeight - 48, 'S');
+    doc.setLineWidth(0.5);
+    doc.rect(28, 28, pageWidth - 56, pageHeight - 56, 'S');
 
-      ctx.fillStyle = '#1D1D1D';
-      ctx.font = 'bold 20px "Space Grotesk", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('WORLD TRANSIT TRAJECTORY NETWORK MAP', 400, 95);
-      ctx.font = 'italic 11px Georgia, serif';
-      ctx.fillStyle = '#6E6252';
-      ctx.fillText('“A mapping of recorded geographical movements of the traveler”', 400, 115);
+    // Header
+    doc.setTextColor(29, 29, 29);
+    doc.setFontSize(16);
+    doc.text('WORLD TRANSIT TRAJECTORY NETWORK MAP', pageWidth / 2, 55, { align: 'center' });
+    doc.setFontSize(8);
+    doc.setTextColor(140, 128, 112);
+    doc.text('“A mapping of recorded geographical movements of the traveler • 漫空全球軌跡巡弋圖”', pageWidth / 2, 69, { align: 'center' });
 
-      ctx.strokeStyle = '#E2DDD3';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(400, 480, 180, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(400, 480, 275, 0, Math.PI * 2);
-      ctx.stroke();
+    // High-Resolution 300 DPI World Trajectory Map Canvas
+    const mapCanvas = createHighResWorldMapCanvas(stays, 2400, 1450, 'vintage');
+    const mapImgData = mapCanvas.toDataURL('image/jpeg', 0.95);
 
-      const pts = chronStays.map(s => {
-        const coords = parseCoordinateForCountry(s.country, s.city);
-        return { ...s, lat: coords.lat, lng: coords.lng };
-      });
+    // Insert Map Graphic
+    const mapBoxX = 40;
+    const mapBoxY = 82;
+    const mapBoxW = pageWidth - 80;
+    const mapBoxH = 310;
+    doc.addImage(mapImgData, 'JPEG', mapBoxX, mapBoxY, mapBoxW, mapBoxH);
 
-      let minLat = 20, maxLat = 50, minLng = 10, maxLng = 140;
-      if (pts.length > 0) {
-        const lats = pts.map(p => p.lat);
-        const lngs = pts.map(p => p.lng);
-        minLat = Math.min(...lats);
-        maxLat = Math.max(...lats);
-        minLng = Math.min(...lngs);
-        maxLng = Math.max(...lngs);
-        
-        const latDiff = maxLat - minLat || 10;
-        const lngDiff = maxLng - minLng || 20;
-        minLat -= latDiff * 0.22;
-        maxLat += latDiff * 0.22;
-        minLng -= lngDiff * 0.22;
-        maxLng += lngDiff * 0.22;
+    // Vector border around map
+    doc.setDrawColor(74, 66, 56);
+    doc.setLineWidth(1.5);
+    doc.rect(mapBoxX, mapBoxY, mapBoxW, mapBoxH, 'S');
+
+    // Expedition Chronology Table (Vector)
+    const tableY = 410;
+    doc.setTextColor(29, 29, 29);
+    doc.setFontSize(11);
+    doc.text('◆ EXPEDITION TRAJECTORY CHRONOLOGY / 歷次探索足跡總覽', 40, tableY);
+
+    // Table Header
+    doc.setFillColor(240, 235, 225);
+    doc.rect(40, tableY + 10, pageWidth - 80, 20, 'F');
+    doc.setDrawColor(210, 200, 190);
+    doc.setLineWidth(0.6);
+    doc.rect(40, tableY + 10, pageWidth - 80, 20, 'S');
+
+    doc.setTextColor(100, 90, 80);
+    doc.setFontSize(7.5);
+    doc.text('NO.', 52, tableY + 23);
+    doc.text('COUNTRY / 國家', 85, tableY + 23);
+    doc.text('CITY / 城市', 200, tableY + 23);
+    doc.text('DATE RANGE / 停留日期', 320, tableY + 23);
+    doc.text('DURATION / 天數', 465, tableY + 23);
+
+    // Table Rows (Show top 10 chronologically)
+    let rowY = tableY + 30;
+    const displayStays = chronStays.slice(0, 10);
+    displayStays.forEach((s, idx) => {
+      const days = calculateDays(s.startDate, s.endDate);
+      if (idx % 2 === 1) {
+        doc.setFillColor(248, 245, 240);
+        doc.rect(40, rowY, pageWidth - 80, 20, 'F');
       }
+      doc.setDrawColor(230, 225, 215);
+      doc.setLineWidth(0.5);
+      doc.line(40, rowY + 20, pageWidth - 40, rowY + 20);
 
-      const mappedPts = pts.map(p => {
-        const x = 100 + ((p.lng - minLng) / (maxLng - minLng || 1)) * 600;
-        const y = 200 + (1 - (p.lat - minLat) / (maxLat - minLat || 1)) * 520;
-        return { ...p, x, y };
-      });
+      doc.setTextColor(29, 29, 29);
+      doc.setFontSize(8);
+      doc.text(`${idx + 1}`, 52, rowY + 14);
+      doc.text(s.country, 85, rowY + 14);
+      doc.text(s.city, 200, rowY + 14);
+      doc.text(`${s.startDate} ~ ${s.endDate}`, 320, rowY + 14);
+      doc.text(`${days} 天`, 465, rowY + 14);
 
-      ctx.strokeStyle = '#2563EB';
-      ctx.lineWidth = 2.8;
-      ctx.setLineDash([6, 9]);
-      ctx.beginPath();
-      mappedPts.forEach((p, index) => {
-        if (index === 0) ctx.moveTo(p.x, p.y);
-        else {
-          const prev = mappedPts[index - 1];
-          const cx = (prev.x + p.x) / 2;
-          const cy = (prev.y + p.y) / 2 - Math.abs(prev.x - p.x) * 0.16;
-          ctx.quadraticCurveTo(cx, cy, p.x, p.y);
-        }
-      });
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      mappedPts.forEach((p, idx) => {
-        ctx.fillStyle = 'rgba(37, 99, 235, 0.12)';
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 20, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = '#2563EB';
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 2.5;
-        ctx.stroke();
-
-        ctx.fillStyle = '#1D1D1D';
-        ctx.font = 'bold 9px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${idx + 1}`, p.x + 13, p.y + 13);
-
-        ctx.font = 'bold 11px "Space Grotesk", sans-serif';
-        ctx.fillStyle = '#4A4238';
-        ctx.textAlign = 'left';
-        ctx.fillText(`${p.country}·${p.city}`, p.x + 12, p.y - 4);
-      });
-
-      const footY = 940;
-      ctx.strokeStyle = '#4A4238';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(100, footY - 10, 600, 110);
-      
-      ctx.fillStyle = '#4A4238';
-      ctx.font = 'bold 10px monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText(`CUMULATIVE STOPS INDEX: ${totalStays} STATIONS SYNCED`, 120, footY + 20);
-      ctx.fillText(`GLOBAL TRAJECTORY PROJECTION: CYCLICAL BEZIER INTERPOLATION`, 120, footY + 45);
-      ctx.fillText(`AUTHENTICATION ID: ${userEmail.split('@')[0].toUpperCase()}#5292C131-851F`, 120, footY + 70);
-
-      ctx.save();
-      ctx.translate(610, footY + 45);
-      ctx.rotate(10 * Math.PI / 180);
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(0, 0, 36, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(239, 68, 68, 0.45)';
-      ctx.font = 'bold 7px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('PASSPORT CONTROL', 0, -4);
-      ctx.fillText('VERIFIED DIPLOMATIC', 0, 6);
-      ctx.restore();
+      rowY += 20;
     });
-    pages.push(mapImg);
+
+    // Verification Index Box at Bottom
+    const authBoxY = Math.max(rowY + 15, 680);
+    doc.setDrawColor(74, 66, 56);
+    doc.setLineWidth(1);
+    doc.rect(40, authBoxY, pageWidth - 80, 75, 'S');
+
+    doc.setTextColor(29, 29, 29);
+    doc.setFontSize(8.5);
+    doc.text(`CUMULATIVE STOPS INDEX:  ${totalStays} STATIONS SYNCED`, 55, authBoxY + 22);
+    doc.text(`GLOBAL TRAJECTORY PROJECTION:  CYCLICAL BEZIER INTERPOLATION`, 55, authBoxY + 38);
+    doc.text(`AUTHENTICATION ID:  ${passportId.toUpperCase()}#5292C131-851F`, 55, authBoxY + 54);
+
+    // Circular Stamp on Right
+    doc.setDrawColor(239, 68, 68);
+    doc.circle(pageWidth - 85, authBoxY + 37, 24, 'S');
+    doc.setTextColor(239, 68, 68);
+    doc.setFontSize(6.5);
+    doc.text('SYNCTIME', pageWidth - 85, authBoxY + 33, { align: 'center' });
+    doc.text('VERIFIED', pageWidth - 85, authBoxY + 43, { align: 'center' });
 
   } else {
-    // ==========================================================================================
-    // TRAJECTORY INSIGHTS PDF MODE
-    // ==========================================================================================
-    const totalDaysNum = stats.totalDays || totalDays || 0;
-    const totalCountriesNum = stats.totalCountries || totalCountries || 0;
-    const totalTripsNum = stats.totalTrips || totalStays || 0;
-    const densityPercent = stats.percentLogged || 0;
+    // =====================================================================
+    // MODE === 'INSIGHTS': COSMIC TRAJECTORY ANALYTICS REPORT - PURE VECTOR
+    // =====================================================================
+    // Background
+    doc.setFillColor(9, 10, 16);
+    doc.rect(0, 0, pageWidth, pageHeight, 'F');
 
-    // ==========================================
-    // INSIGHTS PAGE 1: DEEP SLATE INSIGHTS COVER
-    // ==========================================
-    const insightsCover = addPageFromCanvas((canvas, ctx) => {
-      const grad = ctx.createLinearGradient(0, 0, 0, 1130);
-      grad.addColorStop(0, '#090A10');
-      grad.addColorStop(0.5, '#0F1223');
-      grad.addColorStop(1, '#05060A');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, 800, 1130);
+    // Outer Neon Border
+    doc.setDrawColor(59, 130, 246);
+    doc.setLineWidth(1.5);
+    doc.rect(24, 24, pageWidth - 48, pageHeight - 48, 'S');
 
-      ctx.strokeStyle = 'rgba(59, 130, 246, 0.4)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(30, 30, 740, 1070);
+    // Header
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(18);
+    doc.text('COSMIC TRAJECTORY INSIGHTS REPORT', 45, 65);
+    doc.setTextColor(148, 163, 184);
+    doc.setFontSize(8.5);
+    doc.text(`GEO-TEMPORAL CHRONICLE • YEAR: ${activeYear.toUpperCase()} • DEPLOY_KEY AUTHENTICATED`, 45, 80);
 
-      const drawTechCross = (cx: number, cy: number) => {
-        ctx.strokeStyle = '#3B82F6';
-        ctx.lineWidth = 1.6;
-        ctx.beginPath();
-        ctx.moveTo(cx - 15, cy); ctx.lineTo(cx + 15, cy);
-        ctx.moveTo(cx, cy - 15); ctx.lineTo(cx, cy + 15);
-        ctx.stroke();
-      };
-      drawTechCross(30, 30);
-      drawTechCross(770, 30);
-      drawTechCross(30, 1100);
-      drawTechCross(770, 1100);
+    // 4 KPI Stat Cards
+    const kpiW = (pageWidth - 90 - 30) / 4;
+    const kpiH = 65;
+    const kpiCards = [
+      { val: `${stats.totalCountries}`, label: '造訪國家', sub: 'COUNTRIES', color: [59, 130, 246] },
+      { val: `${stats.totalDays}`, label: '旅行天數', sub: 'TOTAL DAYS', color: [16, 185, 129] },
+      { val: `${stats.totalTrips}`, label: '記錄旅宿', sub: 'STAYS', color: [245, 158, 11] },
+      { val: `${stats.percentLogged}%`, label: '覆蓋比例', sub: 'COVERAGE', color: [236, 72, 153] }
+    ];
 
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(400, 560, 240, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(400, 560, 360, 0, Math.PI * 2);
-      ctx.stroke();
+    kpiCards.forEach((c, idx) => {
+      const x = 45 + idx * (kpiW + 10);
+      const y = 98;
 
-      ctx.fillStyle = '#8B5CF6';
-      ctx.font = 'bold 12px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('GLOBAL TRAJECTORY LOGBOOK INTEL CODES', 400, 150);
+      doc.setFillColor(20, 25, 40);
+      doc.rect(x, y, kpiW, kpiH, 'F');
+      doc.setDrawColor(40, 50, 75);
+      doc.setLineWidth(0.8);
+      doc.rect(x, y, kpiW, kpiH, 'S');
 
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'black 34px "Space Grotesk", sans-serif';
-      ctx.fillText('TRAJECTORY ANALYTICS', 400, 220);
-      ctx.font = 'bold 15px monospace';
-      ctx.fillStyle = '#3B82F6';
-      ctx.fillText('DATA & STATISTICAL INSIGHTS ANNUAL FILE', 400, 260);
+      // Top color line
+      doc.setFillColor(c.color[0], c.color[1], c.color[2]);
+      doc.rect(x, y, kpiW, 2.5, 'F');
 
-      ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      ctx.font = 'italic 12px serif';
-      ctx.fillText(`個人智慧旅行軌跡綜合統計與數據分析報告 • ${activeYear} 年度範疇`, 400, 290);
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(18);
+      doc.text(c.val, x + 10, y + 28);
 
-      ctx.save();
-      ctx.translate(400, 560);
-      ctx.strokeStyle = '#8B5CF6';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(0, 0, 110, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.strokeStyle = 'rgba(59, 130, 246, 0.5)';
-      ctx.lineWidth = 0.5;
-      ctx.beginPath();
-      ctx.arc(0, 0, 102, 0, Math.PI * 2);
-      ctx.stroke();
-      
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 44px "Space Grotesk", sans-serif';
-      ctx.fillText(`${densityPercent}%`, 0, -5);
-      ctx.fillStyle = '#9CA3AF';
-      ctx.font = 'bold 10px monospace';
-      ctx.fillText('INTELLIGENT DENSITY', 0, 26);
-      ctx.fillText('INDEX DEPLOYED', 0, 38);
-      ctx.restore();
+      doc.setFontSize(8.5);
+      doc.text(c.label, x + 10, y + 44);
 
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
-      ctx.fillRect(150, 820, 500, 190);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-      ctx.strokeRect(150, 820, 500, 190);
-
-      ctx.fillStyle = '#9CA3AF';
-      ctx.font = 'bold 10px monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText(`TRAVELLER ACCOUNT:`, 180, 860);
-      ctx.fillText(`COMPILING SCOPE:`, 180, 895);
-      ctx.fillText(`TOTAL ENUMERATED DAYS:`, 180, 930);
-      ctx.fillText(`RECORDS STATUS ENVELOPE:`, 180, 965);
-
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 12px "Space Grotesk", sans-serif';
-      ctx.fillText(userEmail, 360, 860);
-      ctx.fillText(`${activeYear} YEARLY INSIGHTS`, 360, 895);
-      ctx.fillText(`${totalDaysNum} DAYS COMPLETED`, 360, 930);
-      ctx.fillText('CLASSIFIED PASS-TRAJECT STATE', 360, 965);
+      doc.setTextColor(100, 116, 139);
+      doc.setFontSize(6.5);
+      doc.text(c.sub, x + 10, y + 55);
     });
-    pages.push(insightsCover);
 
-    // ==========================================
-    // INSIGHTS PAGE 2: BENTO GRID STATS & RADIAL CIRCLE
-    // ==========================================
-    const insightsDashboard = addPageFromCanvas((canvas, ctx) => {
-      ctx.fillStyle = '#090A10';
-      ctx.fillRect(0, 0, 800, 1130);
+    // High-Resolution World Map (Dark Theme)
+    const mapCanvas = createHighResWorldMapCanvas(stays, 2400, 1400, 'dark');
+    const mapImgData = mapCanvas.toDataURL('image/jpeg', 0.95);
 
-      ctx.strokeStyle = 'rgba(59, 130, 246, 0.4)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(30, 30, 740, 1070);
+    const mapY = 180;
+    const mapH = 260;
+    doc.addImage(mapImgData, 'JPEG', 45, mapY, pageWidth - 90, mapH);
+    doc.setDrawColor(59, 130, 246);
+    doc.setLineWidth(1);
+    doc.rect(45, mapY, pageWidth - 90, mapH, 'S');
 
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 22px "Space Grotesk", sans-serif';
-      ctx.fillText('STATISTICAL METRICS OVERVIEW', 80, 90);
-      ctx.fillStyle = '#9CA3AF';
-      ctx.font = '9px monospace';
-      ctx.fillText('INTELLIGENT INSIGHTS DECIPHERED FROM HISTORIC VISA LEDGER', 80, 110);
+    // Ranking Breakdown Section
+    const rankSectionY = mapY + mapH + 25;
+    doc.setTextColor(241, 245, 249);
+    doc.setFontSize(11);
+    doc.text('◆ GEOGRAPHIC STAY TIME RANKING / 各國停留天數排行', 45, rankSectionY);
 
-      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(80, 125);
-      ctx.lineTo(720, 125);
-      ctx.stroke();
+    let rowY = rankSectionY + 15;
+    const ranking = (stats.ranking || []).slice(0, 5);
 
-      const drawDarkBento = (cx: number, cy: number, cw: number, ch: number, statNum: string, label: string, color: string) => {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
-        ctx.fillRect(cx, cy, cw, ch);
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(cx, cy, cw, ch);
+    ranking.forEach((r: any, idx: number) => {
+      doc.setFillColor(15, 20, 32);
+      doc.rect(45, rowY, pageWidth - 90, 36, 'F');
+      doc.setDrawColor(30, 41, 59);
+      doc.setLineWidth(0.6);
+      doc.rect(45, rowY, pageWidth - 90, 36, 'S');
 
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 3.5;
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx + 45, cy);
-        ctx.stroke();
+      doc.setTextColor(148, 163, 184);
+      doc.setFontSize(9);
+      doc.text(`0${idx + 1}`, 58, rowY + 16);
 
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 44px "Space Grotesk", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(statNum, cx + cw/2, cy + ch/2 + 5);
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(10.5);
+      doc.text(r.country, 85, rowY + 16);
 
-        ctx.fillStyle = '#9CA3AF';
-        ctx.font = 'bold 10px monospace';
-        ctx.fillText(label, cx + cw/2, cy + ch - 22);
-      };
+      doc.setTextColor(56, 189, 248);
+      doc.setFontSize(9);
+      doc.text(`${r.days} Days (${r.pct}%)`, pageWidth - 60, rowY + 16, { align: 'right' });
 
-      drawDarkBento(80, 160, 305, 170, `${totalCountriesNum}`, 'COUNTRIES EXPLORED', '#3B82F6');
-      drawDarkBento(415, 160, 305, 170, `${totalDaysNum}`, 'TOTAL LOGGED TRAJECT DAYS', '#10B981');
-      drawDarkBento(80, 370, 305, 170, `${totalTripsNum}`, 'STAMPED STAYS ENTRIES', '#F59E0B');
-      drawDarkBento(415, 370, 305, 170, `${densityPercent}%`, 'ACTIVE MATRIX DENSITY', '#EC4899');
+      // Progress bar bg
+      doc.setFillColor(30, 41, 59);
+      doc.rect(85, rowY + 22, pageWidth - 160, 5, 'F');
 
-      const ox = 400;
-      const oy = 770;
-      const or = 130;
+      // Progress bar fill
+      doc.setFillColor(59, 130, 246);
+      const barW = Math.max(4, (pageWidth - 160) * (r.pct / 100));
+      doc.rect(85, rowY + 22, barW, 5, 'F');
 
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
-      ctx.lineWidth = 25;
-      ctx.beginPath();
-      ctx.arc(ox, oy, or, 0, Math.PI * 2);
-      ctx.stroke();
-
-      const prog = Math.min(100, Math.max(0, densityPercent)) / 100;
-      const flowGrd = ctx.createLinearGradient(ox - or, oy, ox + or, oy);
-      flowGrd.addColorStop(0, '#3B82F6');
-      flowGrd.addColorStop(0.5, '#8B5CF6');
-      flowGrd.addColorStop(1, '#EC4899');
-
-      ctx.strokeStyle = flowGrd;
-      ctx.lineWidth = 26;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.arc(ox, oy, or, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * prog));
-      ctx.stroke();
-
-      ctx.fillStyle = '#FFFFFF';
-      ctx.textAlign = 'center';
-      ctx.font = 'bold 48px "Space Grotesk", sans-serif';
-      ctx.fillText(`${densityPercent}%`, ox, oy + 12);
-      ctx.font = 'bold 10px monospace';
-      ctx.fillStyle = '#9CA3AF';
-      ctx.fillText('OVERALL TRAVEL SPACE DENSITY', ox, oy + 38);
-
-      const footY = 1010;
-      ctx.fillStyle = 'rgba(255,255,255,0.2)';
-      ctx.font = '9px monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText('COMPILATION MATRIX SYSTEM INTEGRAL CODE: 5292C131-851F-4A86-A73D-EE1E405F202A', 80, footY);
-      ctx.fillText(`SECURE RECORD STAMPS RECTIFIED ONLINE BY SYNCTIME ENGINE • ${new Date().toISOString()}`, 80, footY + 16);
+      rowY += 42;
     });
-    pages.push(insightsDashboard);
 
-    // ==========================================
-    // INSIGHTS PAGE 3: COUNTRY RANKING & TIMELINE
-    // ==========================================
-    const insightsRanking = addPageFromCanvas((canvas, ctx) => {
-      ctx.fillStyle = '#090A10';
-      ctx.fillRect(0, 0, 800, 1130);
+    // Footer
+    const footY = pageHeight - 50;
+    doc.setDrawColor(30, 41, 59);
+    doc.setLineWidth(0.8);
+    doc.line(45, footY, pageWidth - 45, footY);
 
-      ctx.strokeStyle = 'rgba(59, 130, 246, 0.4)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(30, 30, 740, 1070);
-
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 18px "Space Grotesk", sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText('◆ TIME BY COUNTRY CLASSIFICATION & CHRONOLOGY', 80, 95);
-
-      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(80, 115);
-      ctx.lineTo(720, 115);
-      ctx.stroke();
-
-      const rankingList = stats.ranking || [];
-      const showRanking = rankingList.slice(0, 5);
-
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 13px monospace';
-      ctx.fillText('TOP DESTINATION RANKINGS (RELATIVE DAY WEIGHTS)', 80, 155);
-
-      let barY = 190;
-      showRanking.forEach((rank: any, idx: number) => {
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 13px "Space Grotesk", sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillText(`${idx + 1}. ${rank.country}`, 80, barY);
-
-        ctx.fillStyle = '#9CA3AF';
-        ctx.font = 'bold 11px monospace';
-        ctx.textAlign = 'right';
-        ctx.fillText(`${rank.days} days (${rank.pct}%)`, 720, barY);
-
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
-        ctx.fillRect(80, barY + 10, 640, 12);
-
-        const barGrd = ctx.createLinearGradient(80, 0, 720, 0);
-        barGrd.addColorStop(0, '#3B82F6');
-        barGrd.addColorStop(1, '#8B5CF6');
-        ctx.fillStyle = barGrd;
-        ctx.fillRect(80, barY + 10, (rank.pct / 100) * 640, 12);
-
-        barY += 52;
-      });
-
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 13px monospace';
-      ctx.fillText('CHRONOLOGY EVENT INDEX (RECORDED COMPENDIUM EVENTS)', 80, 480);
-
-      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-      ctx.beginPath();
-      ctx.moveTo(80, 498);
-      ctx.lineTo(720, 498);
-      ctx.stroke();
-
-      let rowY = 535;
-      const recentEvents = chronStays.slice(-8);
-
-      ctx.fillStyle = 'rgba(255,255,255,0.04)';
-      ctx.fillRect(80, 510, 640, 26);
-      ctx.fillStyle = '#3B82F6';
-      ctx.font = 'bold 9px monospace';
-      ctx.fillText('IDX', 95, 526);
-      ctx.fillText('COUNTRY/CITY OF STAY', 135, 526);
-      ctx.fillText('START DATE', 360, 526);
-      ctx.fillText('END DATE', 485, 526);
-      ctx.fillText('SPAN', 610, 526);
-
-      recentEvents.forEach((stay, idx) => {
-        ctx.fillStyle = (idx % 2 === 0) ? 'rgba(255,255,255,0.01)' : 'transparent';
-        if (idx % 2 === 0) {
-          ctx.fillRect(80, rowY - 14, 640, 26);
-        }
-
-        ctx.fillStyle = '#9CA3AF';
-        ctx.font = 'bold 10px monospace';
-        ctx.fillText(`#${idx + 1}`, 95, rowY);
-
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 11px "Space Grotesk", sans-serif';
-        ctx.fillText(`${stay.country}·${stay.city}`, 135, rowY);
-
-        ctx.fillStyle = '#9CA3AF';
-        ctx.font = '10px monospace';
-        ctx.fillText(stay.startDate, 360, rowY);
-        ctx.fillText(stay.endDate, 485, rowY);
-
-        ctx.fillStyle = '#10B981';
-        ctx.font = 'bold 10px monospace';
-        ctx.fillText(`${calculateDays(stay.startDate, stay.endDate)}D`, 610, rowY);
-
-        ctx.strokeStyle = 'rgba(255,255,255,0.03)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(80, rowY + 12);
-        ctx.lineTo(720, rowY + 12);
-        ctx.stroke();
-
-        rowY += 28;
-      });
-
-      const footY = 930;
-      ctx.strokeStyle = 'rgba(59, 130, 246, 0.2)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(80, footY + 40, 640, 70);
-
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.font = '9px monospace';
-      ctx.fillText('SYSTEM STATUS: ENCRYPTED AND INTEGRATED ONLINE', 100, footY + 65);
-      ctx.fillText('VERIFY COMPLIANT ID: 5292C131-851F-4A86-A73D-EE1E405F202A', 100, footY + 86);
-
-      ctx.fillStyle = '#3B82F6';
-      ctx.font = 'bold 8px monospace';
-      ctx.textAlign = 'right';
-      ctx.fillText('▲ CLASSIFIED', 700, footY + 65);
-      ctx.fillText('◄  ► GLOBAL INTEL', 700, footY + 77);
-      ctx.fillText('▼ ENVELOPE', 700, footY + 89);
-    });
-    pages.push(insightsRanking);
+    doc.setTextColor(100, 116, 139);
+    doc.setFontSize(7.5);
+    doc.text('SYNCTIME TRAJECTORY ENGINE • SECURE CRYPTOGRAPHIC TOKEN VERIFIED', 45, footY + 18);
   }
-
-  // Compile all high resolution canvas layouts as sequential pages inside true PDF booklet
-  pages.forEach((imgData, index) => {
-    if (index > 0) {
-      doc.addPage();
-    }
-    doc.addImage(imgData, 'JPEG', 0, 0, 595, 842, undefined, 'FAST');
-  });
 
   return doc;
 }
-

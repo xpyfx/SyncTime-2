@@ -714,16 +714,33 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
     if (!newComment.trim() || !user || isPostingComment) return;
     setIsPostingComment(true);
     const path = `trips/${tripId}/comments`;
+    const commentText = newComment.trim();
     try {
       await addDoc(collection(db, path), {
         authorId: user.uid,
-        text: newComment,
+        text: commentText,
         createdAt: new Date().toISOString()
       });
       // Increment comment count
       await updateDoc(doc(db, 'trips', tripId), {
         commentsCount: (trip?.commentsCount || 0) + 1
       });
+      // Send notification to trip author if commenter is not the author
+      if (trip && trip.authorId && trip.authorId !== user.uid) {
+        try {
+          await addDoc(collection(db, 'notifications'), {
+            type: 'trip_comment',
+            fromId: user.uid,
+            toId: trip.authorId,
+            tripId: tripId,
+            messageSnippet: commentText.slice(0, 80),
+            status: 'pending',
+            createdAt: serverTimestamp()
+          });
+        } catch (notifErr) {
+          console.warn('Failed to send trip comment notification:', notifErr);
+        }
+      }
       setNewComment('');
     } catch (e) {
       handleFirestoreError(e, OperationType.CREATE, path);
@@ -1759,6 +1776,24 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
         dayIndex={editingDayIndex}
         onSave={async (updatedItinerary) => {
           await updateDoc(doc(db, 'trips', tripId), { itinerary: updatedItinerary });
+          // Notify other trip members and author about the itinerary change
+          if (trip) {
+            const allTargetIds = Array.from(new Set([trip.authorId, ...(trip.members || [])])).filter(id => id && id !== user?.uid);
+            for (const targetId of allTargetIds) {
+              try {
+                await addDoc(collection(db, 'notifications'), {
+                  type: 'trip_itinerary_updated',
+                  fromId: user?.uid,
+                  toId: targetId,
+                  tripId: tripId,
+                  status: 'pending',
+                  createdAt: serverTimestamp()
+                });
+              } catch (notifErr) {
+                console.warn('Failed to send itinerary update notification:', notifErr);
+              }
+            }
+          }
           setShowItineraryEditor(false);
           setEditingDayIndex(null);
         }}

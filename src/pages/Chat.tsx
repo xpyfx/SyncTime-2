@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Search, UserPlus, Send, ArrowLeft, Users, Plane, Image as ImageIcon, Video, Plus, X, Lock, Play, Camera, ShieldCheck, Download, ChevronLeft, ChevronRight, ArrowUp, FileText, MapPin, Calendar, Wallet, BarChart2, Dices, Sparkles, Navigation, DollarSign, Vote, CheckCircle2, Trash2, Clock, Check, MessageCircle, CreditCard, Tag, Calculator, Folder, Link as LinkIcon, ExternalLink, FileDown, Eye, Menu } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where, doc, getDoc, getDocs, updateDoc, arrayUnion, arrayRemove, limit, deleteDoc, increment } from 'firebase/firestore';
-import { ChatRoom, Message, UserProfile, PollData, PollOption, LuckyDrawData, ExpenseData, SettlementData, SettlementItem, SettlementExpenseDetail, SettlementPayerTotal, Trip, ItineraryCardData, ItineraryCardDay, ItineraryCardActivity, LocationData } from '../types';
+import { ChatRoom, Message, UserProfile, PollData, PollOption, LuckyDrawData, ExpenseData, SettlementData, SettlementItem, SettlementExpenseDetail, SettlementPayerTotal, Trip, ItineraryCardData, ItineraryCardDay, ItineraryCardActivity, LocationData, getRoomUnreadCount } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { GlassSearchInput } from '../components/GlassSearchInput';
@@ -208,26 +208,8 @@ const ChatRoomItem: React.FC<ChatRoomItemProps> = ({ room, onClick }) => {
   const { user } = useAuth();
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [tripEndDate, setTripEndDate] = useState<string | undefined>(undefined);
-  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
   const isGroup = room.type === 'group';
   const otherId = room.participants.find(id => id !== user?.uid);
-
-  // Listen to pending chat notifications for this room to ensure real-time accuracy
-  useEffect(() => {
-    if (!user?.uid || !room.id) return;
-    const q = query(
-      collection(db, 'notifications'),
-      where('toId', '==', user.uid),
-      where('roomId', '==', room.id),
-      where('status', '==', 'pending')
-    );
-    const unsub = onSnapshot(q, (snap) => {
-      setUnreadNotifCount(snap.size);
-    }, (err) => {
-      console.warn('Error listening to room pending notifications:', err);
-    });
-    return () => unsub();
-  }, [user?.uid, room.id]);
 
   useEffect(() => {
     if (!isGroup && otherId) {
@@ -266,13 +248,8 @@ const ChatRoomItem: React.FC<ChatRoomItemProps> = ({ room, onClick }) => {
     }
   };
 
-  const rawRoomUnread = user?.uid
-    ? ((room.unreadCounts && typeof room.unreadCounts[user.uid] === 'number')
-        ? room.unreadCounts[user.uid]
-        : (room.unreadBy?.includes(user.uid) ? 1 : 0))
-    : 0;
-
-  const effectiveUnread = Math.max(rawRoomUnread, unreadNotifCount);
+  // Exact unread count for current user from chat room document (single source of truth matching navbar)
+  const effectiveUnread = getRoomUnreadCount(room, user?.uid);
 
   return (
     <div onClick={onClick} className="flex gap-3.5 p-4 active:bg-apple-gray-50 transition-colors cursor-pointer border-b border-apple-gray-100/70 items-center">
@@ -313,8 +290,8 @@ const ChatRoomItem: React.FC<ChatRoomItemProps> = ({ room, onClick }) => {
           {formatTime(room.lastUpdatedAt)}
         </span>
         {effectiveUnread > 0 ? (
-          <div className="min-w-[19px] h-[19px] px-1.5 rounded-full bg-[#035096] flex items-center justify-center shadow-2xs mt-1">
-            <span className="text-[11px] font-bold text-[#b6cada] leading-none select-none">
+          <div className="min-w-[19px] h-[19px] px-1.5 rounded-full bg-[#035096] flex items-center justify-center shadow-xs mt-1">
+            <span className="text-[11px] font-black text-white leading-none select-none">
               {effectiveUnread > 99 ? '99+' : effectiveUnread}
             </span>
           </div>
@@ -2276,7 +2253,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
 
     let recipientIds: string[] = [];
 
-    if (room?.participants) {
+    if (room?.id === targetRoomId && room?.participants) {
       recipientIds = room.participants.filter(id => id !== sId);
     }
 
@@ -2328,23 +2305,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
       console.warn('Failed to update room unreadBy:', err);
     }
 
-    // 2. Add notification record for each recipient
-    for (const toId of recipientIds) {
-      try {
-        await addDoc(collection(db, 'notifications'), {
-          type: 'chat_message',
-          fromId: sId,
-          toId: toId,
-          tripId: room?.tripId || currentTrip?.id || '',
-          roomId: targetRoomId,
-          messageSnippet: lastMsgText,
-          status: 'pending',
-          createdAt: new Date().toISOString()
-        });
-      } catch (e) {
-        console.warn('Failed to send chat notification:', e);
-      }
-    }
+    // Room document unread counts are updated above. Chat notifications are kept strictly within chatRooms.
   };
 
   const handleSendTripItineraryCard = async () => {
@@ -5804,6 +5765,8 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
           name: friend.displayName || '個人對話',
           type: 'direct',
           participants: [user.uid, friend.uid],
+          unreadCounts: { [user.uid]: 0, [friend.uid]: 0 },
+          unreadBy: [],
           lastMessage: '',
           lastUpdatedAt: serverTimestamp()
         });
@@ -5850,6 +5813,13 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
       await addDoc(collection(db, 'friendRequests'), {
         senderId: user.uid,
         receiverId: targetId,
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
+      await addDoc(collection(db, 'notifications'), {
+        type: 'friend_request',
+        fromId: user.uid,
+        toId: targetId,
         status: 'pending',
         createdAt: serverTimestamp()
       });

@@ -15,6 +15,7 @@ import { NotificationsPage } from './pages/Notifications';
 import { TripDetailView } from './pages/TripDetailView';
 import { UserProfileView } from './pages/UserProfileView';
 import { UserPostsView } from './pages/UserPostsView';
+import { getRoomUnreadCount, ChatRoom } from './types';
 
 const AppContent = () => {
   const { user, loading, login } = useAuth();
@@ -22,59 +23,52 @@ const AppContent = () => {
   const [selectedChatRoomId, setSelectedChatRoomId] = useState<string | null>(null);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   
   // Detail views stack
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [viewingUserPostsId, setViewingUserPostsId] = useState<string | null>(null);
 
-  // Listen for unread chat messages
+  // Listen for unread chat messages & non-chat notifications
   useEffect(() => {
     if (!user?.uid) {
       setHasUnreadChat(false);
       setUnreadChatCount(0);
+      setUnreadNotifCount(0);
       return;
     }
 
+    // Query all chat rooms the user participates in to calculate exact unread count
     const qRooms = query(
       collection(db, 'chatRooms'),
-      where('unreadBy', 'array-contains', user.uid)
+      where('participants', 'array-contains', user.uid)
     );
-
-    const qNotifs = query(
-      collection(db, 'notifications'),
-      where('toId', '==', user.uid),
-      where('type', '==', 'chat_message'),
-      where('status', '==', 'pending')
-    );
-
-    let roomsCount = 0;
-    let notifsCount = 0;
-
-    const syncCount = () => {
-      const count = Math.max(roomsCount, notifsCount);
-      setUnreadChatCount(count);
-      setHasUnreadChat(count > 0);
-    };
 
     const unsubRooms = onSnapshot(qRooms, (snapshot) => {
       let sum = 0;
       snapshot.docs.forEach(d => {
-        const data = d.data();
-        const c = data.unreadCounts?.[user.uid];
-        sum += (typeof c === 'number' && c > 0) ? c : 1;
+        const data = d.data() as ChatRoom;
+        sum += getRoomUnreadCount(data, user.uid);
       });
-      roomsCount = sum;
-      syncCount();
+      setUnreadChatCount(sum);
+      setHasUnreadChat(sum > 0);
     }, (err) => {
       console.warn('Unread chat rooms listener warning:', err);
     });
 
+    // Listen to non-chat notifications (friend requests, trip visa applications, comments, likes, itinerary updates)
+    const qNotifs = query(
+      collection(db, 'notifications'),
+      where('toId', '==', user.uid),
+      where('status', '==', 'pending')
+    );
+
     const unsubNotifs = onSnapshot(qNotifs, (snapshot) => {
-      notifsCount = snapshot.size;
-      syncCount();
+      const nonChatCount = snapshot.docs.filter(d => d.data().type !== 'chat_message').length;
+      setUnreadNotifCount(nonChatCount);
     }, (err) => {
-      console.warn('Pending chat notifications listener warning:', err);
+      console.warn('Pending notifications listener warning:', err);
     });
 
     return () => {
@@ -183,7 +177,7 @@ const AppContent = () => {
           </motion.div>
         </AnimatePresence>
       </div>
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} hasUnreadChat={hasUnreadChat} unreadChatCount={unreadChatCount} />
+      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} hasUnreadChat={hasUnreadChat} unreadChatCount={unreadChatCount} unreadNotifCount={unreadNotifCount} />
 
       {/* Full screen overlays with layered Z-indices */}
       <AnimatePresence>

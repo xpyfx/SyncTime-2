@@ -14,7 +14,7 @@ import EXIF from 'exif-js';
 import { Country, City } from 'country-state-city';
 import { getCitiesByCountry } from '../lib/locationData';
 import TravelGlobe, { parseCoordinateForCountry } from '../components/TravelGlobe';
-import { drawStaysPoster, drawInsightsPoster, generatePortablePassportPDF } from '../utils/posterGenerator';
+import { drawStaysPoster, drawInsightsPoster, generatePortablePassportPDF, PassportUserInfo } from '../utils/posterGenerator';
 
 // Helper to project standard binary coordinates back to Country and City
 function findClosestCountryAndCity(lat: number, lng: number) {
@@ -135,6 +135,7 @@ interface TravelTrajectoryProps {
   userId: string;
   isOwnProfile: boolean;
   onUserClick?: (uid: string) => void;
+  userProfile?: UserProfile | null;
 }
 
 // Helper to compute CSS gradient backgrounds matching country flag colors to avoid generic iOS emoji flags
@@ -178,7 +179,8 @@ function getCustomFlagBadgeGradient(countryName: string): string {
   return mapping[countryName] || 'linear-gradient(135deg, #e2e8f0, #cbd5e1)';
 }
 
-export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUserClick }: TravelTrajectoryProps) {
+export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUserClick, userProfile: initialUserProfile }: TravelTrajectoryProps) {
+  const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(initialUserProfile || null);
   const [activeTab, setActiveTab] = useState<'stays' | 'insights'>('stays');
   const [stays, setStays] = useState<Stay[]>([]);
   const [loading, setLoading] = useState(true);
@@ -242,10 +244,16 @@ export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUser
           throw new Error('Canvas element not found ref');
         }
 
-        const travelerEmail = userId === 'guest' || !userId ? '精采漫空旅客 (Guest)' : 'phoebe.pyf@gmail.com'; 
+        const passportInfo: PassportUserInfo = {
+          displayName: currentUserProfile?.displayName || (userId === 'guest' || !userId ? '精采漫空旅客' : '方方老Baby'),
+          username: currentUserProfile?.username || (userId === 'guest' || !userId ? 'GUEST' : 'PHOEBE.PYF'),
+          email: currentUserProfile?.username ? `${currentUserProfile.username}@synctime.app` : 'phoebe.pyf@gmail.com',
+          avatarUrl: currentUserProfile?.avatarUrl,
+          authority: 'Synctime Professional Certification Organization',
+        };
 
         if (activeTab === 'stays') {
-          await drawStaysPoster(canvas, stays, travelerEmail);
+          await drawStaysPoster(canvas, stays, passportInfo);
         } else {
           await drawInsightsPoster(canvas, stays, stats, selectedInsightYear);
         }
@@ -266,10 +274,17 @@ export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUser
     setShareFormat('file');
     setIsGeneratingFile(true);
     try {
-      const travelerEmail = userId === 'guest' || !userId ? 'guest@synctime.app' : 'phoebe.pyf@gmail.com';
+      const passportInfo: PassportUserInfo = {
+        displayName: currentUserProfile?.displayName || (userId === 'guest' || !userId ? '精采漫空旅客' : '方方老Baby'),
+        username: currentUserProfile?.username || (userId === 'guest' || !userId ? 'GUEST' : 'PHOEBE.PYF'),
+        email: currentUserProfile?.username ? `${currentUserProfile.username}@synctime.app` : 'phoebe.pyf@gmail.com',
+        avatarUrl: currentUserProfile?.avatarUrl,
+        authority: 'Synctime Professional Certification Organization',
+      };
+
       const pdfDoc = await generatePortablePassportPDF(
         stays,
-        travelerEmail,
+        passportInfo,
         activeTab,
         stats,
         selectedInsightYear
@@ -375,6 +390,12 @@ export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUser
     fetchStays();
   }, [userId, isOwnProfile]);
 
+  useEffect(() => {
+    if (initialUserProfile) {
+      setCurrentUserProfile(initialUserProfile);
+    }
+  }, [initialUserProfile]);
+
   // Load current user's friends list to be chose as companions
   useEffect(() => {
     const fetchFriends = async () => {
@@ -382,7 +403,8 @@ export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUser
       try {
         const userSnap = await getDoc(doc(db, 'users', userId));
         if (userSnap.exists()) {
-          const userData = userSnap.data() as UserProfile;
+          const userData = { uid: userSnap.id, ...userSnap.data() } as UserProfile;
+          setCurrentUserProfile(prev => prev ? { ...prev, ...userData } : userData);
           const friendUids = userData.friends || [];
           if (friendUids.length > 0) {
             const loadedFriends: UserProfile[] = [];
@@ -2004,9 +2026,9 @@ export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUser
         )}
       </AnimatePresence>
 
-      {/* Hidden background rendering canvas */}
-      <div className="hidden">
-        <canvas ref={canvasRef} style={{ width: '800px', height: '1200px' }} />
+      {/* Offscreen background rendering canvas */}
+      <div style={{ position: 'fixed', left: '-9999px', top: '-9999px', pointerEvents: 'none', opacity: 0 }}>
+        <canvas ref={canvasRef} width={2400} height={3600} />
       </div>
 
     </div>

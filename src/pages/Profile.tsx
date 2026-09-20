@@ -1054,6 +1054,19 @@ export const ProfilePage: React.FC<{
       if (!s.empty) {
         // Withdraw request
         await deleteDoc(doc(db, 'friendRequests', s.docs[0].id));
+        try {
+          const notifQ = query(
+            collection(db, 'notifications'),
+            where('type', '==', 'friend_request'),
+            where('fromId', '==', user.uid),
+            where('toId', '==', targetId),
+            where('status', '==', 'pending')
+          );
+          const nSnap = await getDocs(notifQ);
+          nSnap.docs.forEach(nd => deleteDoc(nd.ref));
+        } catch (err) {
+          console.warn('Error deleting friend request notification:', err);
+        }
         alert('已收回好友請求');
         return;
       }
@@ -1061,6 +1074,13 @@ export const ProfilePage: React.FC<{
       await addDoc(collection(db, 'friendRequests'), {
         senderId: user.uid,
         receiverId: targetId,
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
+      await addDoc(collection(db, 'notifications'), {
+        type: 'friend_request',
+        fromId: user.uid,
+        toId: targetId,
         status: 'pending',
         createdAt: serverTimestamp()
       });
@@ -1083,6 +1103,14 @@ export const ProfilePage: React.FC<{
       // Add both ways
       await updateDoc(doc(db, 'users', user.uid), { friends: arrayUnion(senderId) });
       await updateDoc(doc(db, 'users', senderId), { friends: arrayUnion(user.uid) });
+      // Send notification back to sender
+      await addDoc(collection(db, 'notifications'), {
+        type: 'friend_accepted',
+        fromId: user.uid,
+        toId: senderId,
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
       alert('已成爲好友');
     } catch (e) {
       console.error(e);
@@ -3465,6 +3493,7 @@ export const ProfilePage: React.FC<{
             <TravelTrajectory 
               userId={effectiveUserId!} 
               isOwnProfile={isOwnProfile}
+              userProfile={profile}
               onClose={() => setShowTravelTrajectory(false)} 
               onUserClick={(uid) => {
                 setShowTravelTrajectory(false);

@@ -103,6 +103,23 @@ export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatCl
       } else {
         await setDoc(likeDoc, { createdAt: serverTimestamp() });
         await updateDoc(postRef, { likesCount: increment(1) });
+        // Send notification to post author
+        if (post.authorId && post.authorId !== user.uid) {
+          try {
+            await addDoc(collection(db, 'notifications'), {
+              type: 'post_like',
+              fromId: user.uid,
+              toId: post.authorId,
+              postId: post.id,
+              postSnippet: (post.content || '').slice(0, 60),
+              postImage: post.imageUrl || post.images?.[0] || '',
+              status: 'pending',
+              createdAt: serverTimestamp()
+            });
+          } catch (notifErr) {
+            console.warn('Failed to send like notification:', notifErr);
+          }
+        }
       }
     } catch (e) {
       console.error(e);
@@ -144,16 +161,35 @@ export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatCl
 
   const handlePostComment = async () => {
     if (!newComment.trim() || !user || isPostingComment) return;
+    const commentContent = newComment.trim();
     setIsPostingComment(true);
     try {
       await addDoc(collection(db, 'barPosts', post.id, 'comments'), {
         authorId: user.uid,
-        content: newComment,
+        content: commentContent,
         createdAt: new Date().toISOString()
       });
       await updateDoc(doc(db, 'barPosts', post.id), {
         commentsCount: (post.commentsCount || 0) + 1
       });
+      // Send notification to post author
+      if (post.authorId && post.authorId !== user.uid) {
+        try {
+          await addDoc(collection(db, 'notifications'), {
+            type: 'post_comment',
+            fromId: user.uid,
+            toId: post.authorId,
+            postId: post.id,
+            commentText: commentContent.slice(0, 80),
+            postSnippet: (post.content || '').slice(0, 60),
+            postImage: post.imageUrl || post.images?.[0] || '',
+            status: 'pending',
+            createdAt: serverTimestamp()
+          });
+        } catch (notifErr) {
+          console.warn('Failed to send comment notification:', notifErr);
+        }
+      }
       setNewComment('');
     } catch (e) {
       console.error(e);
