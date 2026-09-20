@@ -481,24 +481,24 @@ export const ProfilePage: React.FC<{
       {/* Top Bar - Identity */}
       <div className="flex justify-between items-center mb-2.5">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-black tracking-[0.25em] text-[#cc9673] uppercase">Passport</span>
-          <div className="w-[1px] h-3 bg-[#f0d0bd]" />
-          <span className="text-[8px] font-bold text-[#cc9673] opacity-80 uppercase tracking-widest">Synctime Network</span>
+          <span className="text-[11px] font-black tracking-[0.25em] text-[#035096] uppercase">Passport</span>
+          <div className="w-[1px] h-3 bg-[#035096]/20" />
+          <span className="text-[8px] font-bold text-[#035096] opacity-80 uppercase tracking-widest">Synctime Network</span>
         </div>
         <div className="flex gap-1.5">
-          <div className="w-5 h-4 rounded-sm border border-[#cc9673]/30 bg-[#cc9673]/5" />
-          <div className="w-2 h-2 rounded-full bg-[#cc9673] opacity-20" />
+          <div className="w-5 h-4 rounded-sm border border-[#035096]/30 bg-[#035096]/5" />
+          <div className="w-2 h-2 rounded-full bg-[#035096] opacity-20" />
         </div>
       </div>
 
       <div className="flex gap-4 flex-1 min-h-0">
         {/* Profile Photo - Left Side */}
         <div className="w-[100px] shrink-0 flex flex-col justify-center">
-          <div className="aspect-[3/4] w-full bg-[#fce5d8] rounded-lg shadow-sm overflow-hidden border border-[#f0d0bd] relative">
+          <div className="aspect-[3/4] w-full bg-[#035096]/5 rounded-lg shadow-sm overflow-hidden border border-[#035096]/20 relative">
             {profile?.avatarUrl ? (
               <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover grayscale-[0.05] contrast-[1.05]" referrerPolicy="no-referrer" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-4xl text-[#cc9673] font-bold">
+              <div className="w-full h-full flex items-center justify-center text-4xl text-[#035096] font-bold">
                 {profile?.displayName?.[0]}
               </div>
             )}
@@ -509,24 +509,24 @@ export const ProfilePage: React.FC<{
         {/* Passport Information - Right Side */}
         <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
           {/* Row 1: Age / Code / Passport ID */}
-          <div className="flex border-b border-[#f3ded0] gap-4 pb-1.5 mb-1.5">
+          <div className="flex border-b border-[#035096]/15 gap-4 pb-1.5 mb-1.5">
             <div className="w-8">
-              <label className="text-[6px] font-bold text-[#cc9673] uppercase tracking-tighter block">年齡 Age</label>
+              <label className="text-[6px] font-bold text-[#035096] uppercase tracking-tighter block">年齡 Age</label>
               <p className="text-[11px] font-black text-[#2d2a23] leading-none mt-1">{calculateAge(profile?.birthday || '')}</p>
             </div>
             <div className="w-10">
-              <label className="text-[6px] font-bold text-[#cc9673] uppercase tracking-tighter block">代碼 Code</label>
+              <label className="text-[6px] font-bold text-[#035096] uppercase tracking-tighter block">代碼 Code</label>
               <p className="text-[11px] font-black text-[#2d2a23] leading-none mt-1">{getCountryISO3(profile?.nationality || '')}</p>
             </div>
             <div className="min-w-0 flex-1">
-              <label className="text-[6px] font-bold text-[#cc9673] uppercase tracking-tighter block">護照ID</label>
+              <label className="text-[6px] font-bold text-[#035096] uppercase tracking-tighter block">護照ID</label>
               <p className="text-[11px] font-black text-[#2d2a23] leading-none mt-1 truncate uppercase">{profile?.username}</p>
             </div>
           </div>
 
           {/* Row 2: Name */}
           <div className="py-1">
-            <label className="text-[6px] font-bold text-[#cc9673] uppercase tracking-tighter block">姓名 Name</label>
+            <label className="text-[6px] font-bold text-[#035096] uppercase tracking-tighter block">姓名 Name</label>
             <p className="text-[19px] font-black text-[#2d2a23] leading-none truncate tracking-tight py-1">{profile?.displayName}</p>
           </div>
 
@@ -534,33 +534,33 @@ export const ProfilePage: React.FC<{
           <div className="space-y-3">
             <div className="grid grid-cols-3 gap-2">
               <div className="min-w-0">
-                <label className="text-[5.5px] font-bold text-[#cc9673] uppercase tracking-tighter block">國籍 NAT.</label>
+                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">國籍 NAT.</label>
                 <p className="text-[9px] font-black text-[#2d2a23] leading-none uppercase truncate mt-0.5">{profile?.nationality || 'Global'}</p>
               </div>
               <div className="min-w-0">
-                <label className="text-[5.5px] font-bold text-[#cc9673] uppercase tracking-tighter block">性別 SEX</label>
+                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">性別 SEX</label>
                 <p className="text-[9px] font-black text-[#2d2a23] leading-none uppercase mt-0.5">{profile?.gender || 'O'}</p>
               </div>
               <div className="min-w-0">
-                <label className="text-[5.5px] font-bold text-[#cc9673] uppercase tracking-tighter block">出生 BIRTH</label>
+                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">出生 BIRTH</label>
                 <p className="text-[9px] font-black text-[#2d2a23] leading-none uppercase mt-0.5">{formatDatePassport(profile?.birthday || '')}</p>
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
               <div className="min-w-0">
-                <label className="text-[5.5px] font-bold text-[#cc9673] uppercase tracking-tighter block">發照 ISSUE</label>
+                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">發照 ISSUE</label>
                 <p className="text-[9px] font-black text-[#2d2a23] leading-none uppercase truncate mt-0.5">{formatDatePassport(profile?.createdAt || '')}</p>
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-0.5">
-                  <label className="text-[5.5px] font-bold text-[#cc9673] uppercase tracking-tighter block">已旅國 VISIT.</label>
+                  <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">已旅國 VISIT.</label>
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
                       setShowFootprintInfo(true);
                     }}
-                    className="text-[#cc9673]/60 hover:text-[#cc9673] transition-colors"
+                    className="text-[#035096]/60 hover:text-[#035096] transition-colors"
                   >
                     <Info size={5} />
                   </button>
@@ -568,15 +568,15 @@ export const ProfilePage: React.FC<{
                 <p className="text-[9px] font-black text-[#2d2a23] leading-none uppercase mt-0.5">{profile?.visitedCities || 0}</p>
               </div>
               <div className="min-w-0">
-                <label className="text-[5.5px] font-bold text-[#cc9673] uppercase tracking-tighter block">居住地 RES.</label>
+                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">居住地 RES.</label>
                 <p className="text-[9px] font-black text-[#2d2a23] leading-none uppercase truncate mt-0.5">{profile?.residence || '---'}</p>
               </div>
             </div>
           </div>
 
           <div className="mt-auto pt-2 pb-0.5">
-            <label className="text-[5px] font-bold text-[#cc9673] uppercase tracking-tighter block mb-0.5">發照機構 AUTHORITY</label>
-            <p className="text-[7.5px] font-bold text-[#cc9673] opacity-90 italic leading-none truncate">
+            <label className="text-[5px] font-bold text-[#035096] uppercase tracking-tighter block mb-0.5">發照機構 AUTHORITY</label>
+            <p className="text-[7.5px] font-bold text-[#035096] opacity-90 italic leading-none truncate">
               Synctime Professional Certification Organization
             </p>
           </div>
@@ -584,11 +584,11 @@ export const ProfilePage: React.FC<{
       </div>
 
       {/* MRZ Area */}
-      <div className="mt-1.5 pt-2 border-t border-[#f3ded0] opacity-60">
+      <div className="mt-1.5 pt-2 border-t border-[#035096]/15 opacity-70">
         {profile && generateMRZ(profile).map((line, idx) => (
           <div key={idx} className="grid grid-cols-[repeat(45,1fr)] w-full mb-0.5">
             {line.split('').map((char, charIdx) => (
-              <span key={charIdx} className="font-mono text-[8.5px] text-center leading-none text-[#cc9673] uppercase font-bold">
+              <span key={charIdx} className="font-mono text-[8.5px] text-center leading-none text-[#035096] uppercase font-bold">
                 {char}
               </span>
             ))}
@@ -1976,11 +1976,11 @@ export const ProfilePage: React.FC<{
       <div className="px-4 pt-4">
         <motion.div 
           onClick={() => setIsPassportExpanded(true)}
-          className="w-full aspect-[1.36/1] bg-[#FFF9F5] rounded-[24px] shadow-2xl border border-[#f5d9c7] overflow-hidden relative flex flex-col cursor-pointer active:scale-[0.99] transition-transform"
+          className="w-full aspect-[1.36/1] bg-[#F7FAFD] rounded-[24px] shadow-2xl border border-[#035096]/20 overflow-hidden relative flex flex-col cursor-pointer active:scale-[0.99] transition-transform"
         >
           {/* Passport Texture Overlay */}
-          <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 0.5px, transparent 0.5px)', backgroundSize: '10px 10px' }} />
-          <div className="absolute inset-0 bg-gradient-to-tr from-[#ffe6d5]/50 to-transparent pointer-events-none" />
+          <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#035096 0.5px, transparent 0.5px)', backgroundSize: '10px 10px' }} />
+          <div className="absolute inset-0 bg-gradient-to-tr from-[#035096]/[0.08] to-transparent pointer-events-none" />
           
           {renderPassportContent()}
           
@@ -1991,7 +1991,7 @@ export const ProfilePage: React.FC<{
                 e.stopPropagation();
                 setShowEditPassport(true);
               }} 
-              className="absolute right-4 top-4 w-9 h-9 rounded-full bg-white/60 shadow-sm border border-white/80 text-[#cc9673] backdrop-blur-xl active:scale-90 transition-transform z-10 flex items-center justify-center cursor-pointer"
+              className="absolute right-4 top-4 w-9 h-9 rounded-full bg-white/70 shadow-sm border border-white/90 text-[#035096] backdrop-blur-xl active:scale-90 transition-transform z-10 flex items-center justify-center cursor-pointer hover:bg-white"
               title="修改護照資料"
               aria-label="修改護照資料"
             >
@@ -2019,9 +2019,9 @@ export const ProfilePage: React.FC<{
             <button 
               type="button"
               onClick={() => setShowTravelTrajectory(true)}
-              className="w-full h-11 bg-[#ffe6d5]/50 border border-[#f5d0bd]/80 text-[#cc9673] rounded-2xl font-black text-xs flex items-center justify-center gap-2 shadow-apple-sm active:scale-95 transition-all hover:bg-[#ffd9c2] hover:text-[#b88260]"
+              className="w-full h-11 bg-[#035096]/10 border border-[#035096]/25 text-[#035096] rounded-2xl font-black text-xs flex items-center justify-center gap-2 shadow-apple-sm active:scale-95 transition-all hover:bg-[#035096]/15 hover:text-[#023e75]"
             >
-              <Globe size={14} className="text-[#cc9673]" />
+              <Globe size={14} className="text-[#035096]" />
               <span>{isOwnProfile ? "開啟我的旅遊軌跡" : "查看旅遊軌跡"}</span>
             </button>
           </div>
