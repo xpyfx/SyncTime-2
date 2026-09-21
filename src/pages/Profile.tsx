@@ -181,7 +181,7 @@ const ProfileItem = ({ icon: Icon, label, onClick, color = "text-apple-gray-600"
       <div className={`w-8 h-8 rounded-lg bg-apple-gray-50 flex items-center justify-center ${color}`}>
         <Icon size={18} />
       </div>
-      <span className="text-sm font-medium">{label}</span>
+      <span className="text-sm font-Semibold">{label}</span>
     </div>
     <ChevronRight size={16} className="text-apple-gray-200" />
   </button>
@@ -501,7 +501,7 @@ export const ProfilePage: React.FC<{
             {profile?.avatarUrl ? (
               <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover grayscale-[0.05] contrast-[1.05]" referrerPolicy="no-referrer" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-4xl text-[#035096] font-medium">
+              <div className="w-full h-full flex items-center justify-center text-4xl text-[#035096] font-Semibold">
                 {profile?.displayName?.[0]}
               </div>
             )}
@@ -515,11 +515,11 @@ export const ProfilePage: React.FC<{
           <div className="flex border-b border-[#035096]/15 gap-4 pb-1.5 mb-1.5">
             <div className="w-8">
               <label className="text-[8px] font-bold text-[#035096] uppercase tracking-tighter block">年齡</label>
-              <p className="text-[11px] font-medium text-[#2d2a23] leading-none mt-1">{calculateAge(profile?.birthday || '')}</p>
+              <p className="text-[11px] font-Semibold text-[#2d2a23] leading-none mt-1">{calculateAge(profile?.birthday || '')}</p>
             </div>
             <div className="w-10">
               <label className="text-[8px] font-bold text-[#035096] uppercase tracking-tighter block">代碼</label>
-              <p className="text-[11px] font-regular text-[#2d2a23] leading-none mt-1">{getCountryISO3(profile?.nationality || '')}</p>
+              <p className="text-[11px] font-Semibold text-[#2d2a23] leading-none mt-1">{getCountryISO3(profile?.nationality || '')}</p>
             </div>
             <div className="min-w-0 flex-1">
               <label className="text-[8px] font-bold text-[#035096] uppercase tracking-tighter block">護照ID</label>
@@ -529,35 +529,35 @@ export const ProfilePage: React.FC<{
 
           {/* Row 2: Name */}
           <div className="py-1">
-            <label className="text-[6px] font-bold text-[#035096] uppercase tracking-tighter block">姓名</label>
-            <p className="text-[19px] font-medium text-[#2d2a23] leading-none truncate tracking-tight py-1">{profile?.displayName}</p>
+            <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block">姓名</label>
+            <p className="text-[19px] font-Semibold text-[#2d2a23] leading-none truncate tracking-tight py-1">{profile?.displayName}</p>
           </div>
 
           {/* Bio Info Rows */}
           <div className="space-y-3">
             <div className="grid grid-cols-3 gap-2">
               <div className="min-w-0">
-                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">國籍</label>
-                <p className="text-[9px] font-medium text-[#2d2a23] leading-none uppercase truncate mt-0.5">{profile?.nationality || 'Global'}</p>
+                <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block">國籍</label>
+                <p className="text-[9px] font-Semibold text-[#2d2a23] leading-none uppercase truncate mt-0.5">{profile?.nationality || 'Global'}</p>
               </div>
               <div className="min-w-0">
-                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">性別</label>
-                <p className="text-[9px] font-medium text-[#2d2a23] leading-none uppercase mt-0.5">{profile?.gender || 'O'}</p>
+                <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block">性別</label>
+                <p className="text-[9px] font-Semibold text-[#2d2a23] leading-none uppercase mt-0.5">{profile?.gender || 'O'}</p>
               </div>
               <div className="min-w-0">
-                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">出生</label>
-                <p className="text-[9px] font-medium text-[#2d2a23] leading-none uppercase mt-0.5">{formatDatePassport(profile?.birthday || '')}</p>
+                <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block">出生</label>
+                <p className="text-[9px] font-Semibold text-[#2d2a23] leading-none uppercase mt-0.5">{formatDatePassport(profile?.birthday || '')}</p>
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
               <div className="min-w-0">
-                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">發照</label>
-                <p className="text-[9px] font-medium text-[#2d2a23] leading-none uppercase truncate mt-0.5">{formatDatePassport(profile?.createdAt || '')}</p>
+                <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block">發照</label>
+                <p className="text-[9px] font-Semibold text-[#2d2a23] leading-none uppercase truncate mt-0.5">{formatDatePassport(profile?.createdAt || '')}</p>
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-0.5">
-                  <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">已旅國</label>
+                  <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block">已旅國</label>
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
@@ -568,18 +568,18 @@ export const ProfilePage: React.FC<{
                     <Info size={5} />
                   </button>
                 </div>
-                <p className="text-[9px] font-medium text-[#2d2a23] leading-none uppercase mt-0.5">{profile?.visitedCities || 0}</p>
+                <p className="text-[9px] font-Semibold text-[#2d2a23] leading-none uppercase mt-0.5">{profile?.visitedCities || 0}</p>
               </div>
               <div className="min-w-0">
-                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">居住地</label>
-                <p className="text-[9px] font-medium text-[#2d2a23] leading-none uppercase truncate mt-0.5">{profile?.residence || '---'}</p>
+                <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block">居住地</label>
+                <p className="text-[9px] font-Semibold text-[#2d2a23] leading-none uppercase truncate mt-0.5">{profile?.residence || '---'}</p>
               </div>
             </div>
           </div>
 
           <div className="mt-auto pt-2 pb-0.5">
             <label className="text-[5px] font-bold text-[#035096] uppercase tracking-tighter block mb-0.5">發照機構</label>
-            <p className="text-[7.5px] font-medium text-[#035096] opacity-90 italic leading-none truncate">
+            <p className="text-[7.5px] font-Semibold text-[#035096] opacity-90 italic leading-none truncate">
               Synctime Professional Certification Organization
             </p>
           </div>
@@ -1418,7 +1418,7 @@ export const ProfilePage: React.FC<{
                     <div className="w-8 h-8 rounded-lg bg-apple-gray-50 flex items-center justify-center text-apple-gray-600">
                       <Search size={18} />
                     </div>
-                    <span className="text-sm font-medium">語言 (Language)</span>
+                    <span className="text-sm font-Semibold">語言 (Language)</span>
                   </div>
                   <span className="text-xs text-apple-gray-300">繁體中文</span>
                 </div>
@@ -1473,7 +1473,7 @@ export const ProfilePage: React.FC<{
                   是否確定要住註銷帳號？
                 </h3>
                 <div className="p-3.5 bg-red-50/70 rounded-2xl border border-red-100/80 text-left">
-                  <p className="text-xs text-red-700 leading-relaxed font-medium">
+                  <p className="text-xs text-red-700 leading-relaxed font-Semibold">
                     叮叮叮！！！你注意了！這個操作意味著我們會直接銷毀你的護照，你將失去所有該帳號原先擁有的資料，即便你重新註冊，該帳號的過往內容也不會復原，你的護照也將徹底失效。
                   </p>
                 </div>
@@ -1521,7 +1521,7 @@ export const ProfilePage: React.FC<{
                   type="button"
                   disabled={isDeletingAccount}
                   onClick={() => setShowDeleteAccountModal(false)}
-                  className="w-full h-12 bg-apple-gray-100 hover:bg-apple-gray-200 active:scale-[0.98] text-apple-gray-700 rounded-xl font-medium transition-all cursor-pointer disabled:opacity-50"
+                  className="w-full h-12 bg-apple-gray-100 hover:bg-apple-gray-200 active:scale-[0.98] text-apple-gray-700 rounded-xl font-Semibold transition-all cursor-pointer disabled:opacity-50"
                 >
                   取消
                 </button>
@@ -1559,7 +1559,7 @@ export const ProfilePage: React.FC<{
                   >
                     <span className="text-sm font-bold">左滑手勢</span>
                     <div className="flex items-center gap-2">
-                       <span className="text-xs text-apple-gray-300 font-medium">{profile?.gestureSettings?.homeLeft || '不感興趣'}</span>
+                       <span className="text-xs text-apple-gray-300 font-Semibold">{profile?.gestureSettings?.homeLeft || '不感興趣'}</span>
                        <ChevronRight size={16} className="text-apple-gray-200" />
                     </div>
                   </button>
@@ -1569,7 +1569,7 @@ export const ProfilePage: React.FC<{
                   >
                     <span className="text-sm font-bold">右滑手勢</span>
                     <div className="flex items-center gap-2">
-                       <span className="text-xs text-apple-gray-300 font-medium">{profile?.gestureSettings?.homeRight || '收藏'}</span>
+                       <span className="text-xs text-apple-gray-300 font-Semibold">{profile?.gestureSettings?.homeRight || '收藏'}</span>
                        <ChevronRight size={16} className="text-apple-gray-200" />
                     </div>
                   </button>
@@ -1586,7 +1586,7 @@ export const ProfilePage: React.FC<{
                   >
                     <span className="text-sm font-bold">左滑手勢</span>
                     <div className="flex items-center gap-2">
-                       <span className="text-xs text-apple-gray-300 font-medium">{profile?.gestureSettings?.barLeft || '不感興趣'}</span>
+                       <span className="text-xs text-apple-gray-300 font-Semibold">{profile?.gestureSettings?.barLeft || '不感興趣'}</span>
                        <ChevronRight size={16} className="text-apple-gray-200" />
                     </div>
                   </button>
@@ -1596,7 +1596,7 @@ export const ProfilePage: React.FC<{
                   >
                     <span className="text-sm font-bold">右滑手勢</span>
                     <div className="flex items-center gap-2">
-                       <span className="text-xs text-apple-gray-300 font-medium">{profile?.gestureSettings?.barRight || '點讚'}</span>
+                       <span className="text-xs text-apple-gray-300 font-Semibold">{profile?.gestureSettings?.barRight || '點讚'}</span>
                        <ChevronRight size={16} className="text-apple-gray-200" />
                     </div>
                   </button>
@@ -1707,7 +1707,7 @@ export const ProfilePage: React.FC<{
                             setPassportForm(p => ({ ...p, avatarUrl: e.target.value }));
                           }
                         }}
-                        className={`w-full bg-apple-gray-50 rounded-xl px-4 h-12 text-sm focus:outline-apple-blue font-medium ${passportForm.avatarUrl.startsWith('data:') ? 'text-apple-gray-300 italic' : ''}`}
+                        className={`w-full bg-apple-gray-50 rounded-xl px-4 h-12 text-sm focus:outline-apple-blue font-Semibold ${passportForm.avatarUrl.startsWith('data:') ? 'text-apple-gray-300 italic' : ''}`}
                       />
                       {passportForm.avatarUrl.startsWith('data:') && (
                         <button 
@@ -1877,7 +1877,7 @@ export const ProfilePage: React.FC<{
           >
             <div className="px-5 pt-[max(env(safe-area-inset-top,0px),48px)] pb-4 flex items-center justify-between border-b border-apple-gray-50 bg-white shrink-0">
               <h2 className="text-lg font-bold">好友申請</h2>
-              <button onClick={() => setShowRequests(false)} className="text-apple-gray-600 font-medium px-2 py-1">關閉</button>
+              <button onClick={() => setShowRequests(false)} className="text-apple-gray-600 font-Semibold px-2 py-1">關閉</button>
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -1907,9 +1907,9 @@ export const ProfilePage: React.FC<{
                         </div>
                       </div>
                       {profile?.friends?.includes(searchResult.uid) ? (
-                        <span className="text-xs text-apple-gray-300 font-medium">已是好友</span>
+                        <span className="text-xs text-apple-gray-300 font-Semibold">已是好友</span>
                       ) : searchResult.uid === user?.uid ? (
-                        <span className="text-xs text-apple-gray-300 font-medium">你自己</span>
+                        <span className="text-xs text-apple-gray-300 font-Semibold">你自己</span>
                       ) : (
                         <button 
                           onClick={() => handleAddFriend(searchResult.uid)}
@@ -2049,7 +2049,7 @@ export const ProfilePage: React.FC<{
               {profile?.blockedUsers?.length ? (
                 profile.blockedUsers.map(id => (
                   <div key={id} className="flex justify-between items-center p-4 bg-white rounded-2xl border border-apple-gray-100 shadow-apple-xs">
-                    <span className="text-sm font-medium">用戶 ID: {id}</span>
+                    <span className="text-sm font-Semibold">用戶 ID: {id}</span>
                     <button className="text-xs text-apple-blue font-semibold">解除封鎖</button>
                   </div>
                 ))
@@ -2213,7 +2213,7 @@ export const ProfilePage: React.FC<{
                     <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-3 text-center">
                       {profile?.displayName || '旅人'}
                     </h2>
-                    <p className="text-xs sm:text-sm font-medium text-white/50 text-center mt-0.5">
+                    <p className="text-xs sm:text-sm font-Semibold text-white/50 text-center mt-0.5">
                       @{profile?.username || 'user'}
                     </p>
                   </div>
@@ -2347,7 +2347,7 @@ export const ProfilePage: React.FC<{
                     {filteredStamps.length === 0 ? (
                       <div className="p-8 text-center bg-white/[0.02] border border-dashed border-white/10 rounded-2xl">
                         <Compass size={28} className="mx-auto text-white/30 mb-2" />
-                        <p className="text-xs text-white/50 font-medium">找不到相符的國家印章</p>
+                        <p className="text-xs text-white/50 font-Semibold">找不到相符的國家印章</p>
                         <button
                           type="button"
                           onClick={() => {
@@ -2866,7 +2866,7 @@ export const ProfilePage: React.FC<{
                         value={bioEditVal}
                         onChange={(e) => setBioEditVal(e.target.value)}
                         placeholder="介紹一下您的旅行風格、興趣愛好，或想對旅伴說的話吧！"
-                        className="w-full h-32 bg-apple-gray-50 rounded-2xl p-4 text-sm focus:outline-apple-blue border border-apple-gray-100 resize-none font-medium"
+                        className="w-full h-32 bg-apple-gray-50 rounded-2xl p-4 text-sm focus:outline-apple-blue border border-apple-gray-100 resize-none font-Semibold"
                         maxLength={1000}
                       />
                       <div className="flex justify-between items-center text-xs">
@@ -2969,7 +2969,7 @@ export const ProfilePage: React.FC<{
                       <Sparkles size={14} />
                       我給出的評價 (My Submitted Reviews)
                     </div>
-                    <p className="text-apple-gray-600 font-medium leading-relaxed">
+                    <p className="text-apple-gray-600 font-Semibold leading-relaxed">
                       此列表列出了您曾寫給其他旅伴的真實評語。為保護隱私安全，您的評價在對方的個人頁面上
                       <span className="font-bold text-[#007aff] px-1 bg-blue-50/70 rounded border border-blue-100">一律以「匿名旅伴」形式</span>顯示，其他人（包含該旅伴本人）皆無法得知是由您撰寫。
                     </p>
@@ -3192,7 +3192,7 @@ export const ProfilePage: React.FC<{
                                         <div className="flex items-center justify-between gap-2 py-0.5" key={label}>
                                           <span className="text-apple-gray-400 font-bold w-[48px] truncate">{label}</span>
                                           <div className="flex-1 flex items-center gap-1.5 justify-end">
-                                            <span className={`text-[9px] font-medium ${isLeft ? 'font-black text-apple-gray-800' : 'text-apple-gray-300'}`}>{leftOpt}</span>
+                                            <span className={`text-[9px] font-Semibold ${isLeft ? 'font-black text-apple-gray-800' : 'text-apple-gray-300'}`}>{leftOpt}</span>
                                             <div className="w-16 h-1 bg-apple-gray-100 rounded-full relative overflow-hidden">
                                               <div 
                                                 className="absolute top-0 bottom-0 bg-apple-blue"
@@ -3202,7 +3202,7 @@ export const ProfilePage: React.FC<{
                                                 }}
                                               />
                                             </div>
-                                            <span className={`text-[9px] font-medium ${isRight ? 'font-black text-apple-gray-800' : 'text-apple-gray-300'}`}>{rightOpt}</span>
+                                            <span className={`text-[9px] font-Semibold ${isRight ? 'font-black text-apple-gray-800' : 'text-apple-gray-300'}`}>{rightOpt}</span>
                                             <span className="text-[8px] font-mono font-bold bg-white text-apple-gray-400 px-1 py-0.5 rounded border border-apple-gray-50">
                                               {isCenter ? '等同' : `${pct}%`}
                                             </span>
@@ -3281,7 +3281,7 @@ export const ProfilePage: React.FC<{
                   </div>
                   
                   <div className="text-center py-12 px-8 bg-apple-gray-50 rounded-2xl border border-dashed border-apple-gray-200">
-                    <p className="text-xs text-apple-gray-300 font-medium leading-relaxed italic">
+                    <p className="text-xs text-apple-gray-300 font-Semibold leading-relaxed italic">
                       「世界是一本書，而不旅行的人只讀了其中一頁。」<br/>
                       快去探索更多未知的地方吧！
                     </p>
