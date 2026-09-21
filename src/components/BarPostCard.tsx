@@ -7,12 +7,14 @@ import { getOrCreateChatRoom } from '../lib/chatUtils';
 import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, deleteDoc, updateDoc, setDoc, onSnapshot, collection, addDoc, serverTimestamp, query, orderBy, getDoc, increment } from 'firebase/firestore';
+import { ReportModal } from './ReportModal';
 
 interface BarPostCardProps {
   post: BarPost;
   author?: UserProfile;
   onChatClick?: (roomId: string) => void;
   onAvatarClick?: (uid: string) => void;
+  onReport?: (post: BarPost) => void;
 }
 
 interface BarComment {
@@ -22,10 +24,11 @@ interface BarComment {
   createdAt: string;
 }
 
-export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatClick, onAvatarClick }) => {
+export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatClick, onAvatarClick, onReport }) => {
   const { user } = useAuth();
   const [showMenu, setShowMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isReporting, setIsReporting] = useState(false);
   const [editedContent, setEditedContent] = useState(post.content);
   const [isLiked, setIsLiked] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
@@ -226,25 +229,13 @@ export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatCl
     }
   };
 
-  const handleReport = async (e: React.MouseEvent) => {
+  const handleReport = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!user) return;
-    if (!confirm('確定要檢舉這則貼文嗎？我們會盡快審核。')) return;
-    
-    try {
-      await addDoc(collection(db, 'reports'), {
-        reporterId: user.uid,
-        targetId: post.id,
-        targetType: 'barPost',
-        authorId: post.authorId,
-        createdAt: serverTimestamp(),
-        status: 'pending'
-      });
-      alert('感謝您的回報，我們會盡快處理！');
-      setShowMenu(false);
-    } catch (e) {
-      console.error(e);
-      alert('檢舉失敗，請稍後再試。');
+    setShowMenu(false);
+    if (onReport) {
+      onReport(post);
+    } else {
+      setIsReporting(true);
     }
   };
 
@@ -462,6 +453,17 @@ export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatCl
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Report Modal */}
+      {isReporting && (
+        <ReportModal
+          isOpen={isReporting}
+          onClose={() => setIsReporting(false)}
+          targetType="bar_post"
+          targetId={post.id}
+          targetTitle={`見聞貼文: ${post.content.slice(0, 30)}${post.content.length > 30 ? '...' : ''} (由 ${author?.displayName || '旅客'} 發布)`}
+        />
+      )}
     </div>
   );
 };

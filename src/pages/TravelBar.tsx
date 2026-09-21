@@ -266,7 +266,13 @@ export const TravelBarView: React.FC<{
                   onTrigger: () => handleAction(post, gestureSettings.barRight) 
                 }}
               >
-                <BarPostCard post={post} author={authors[post.authorId]} onChatClick={onChatClick} onAvatarClick={onAvatarClick} />
+                <BarPostCard 
+                  post={post} 
+                  author={authors[post.authorId]} 
+                  onChatClick={onChatClick} 
+                  onAvatarClick={onAvatarClick} 
+                  onReport={(p) => setReportingPost(p)}
+                />
               </SwipeableWrapper>
             </motion.div>
           ))}
