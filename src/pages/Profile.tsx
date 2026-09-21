@@ -514,22 +514,22 @@ export const ProfilePage: React.FC<{
           {/* Row 1: Age / Code / Passport ID */}
           <div className="flex border-b border-[#035096]/15 gap-4 pb-1.5 mb-1.5">
             <div className="w-8">
-              <label className="text-[6px] font-bold text-[#035096] uppercase tracking-tighter block">年齡 Age</label>
+              <label className="text-[8px] font-bold text-[#035096] uppercase tracking-tighter block">年齡</label>
               <p className="text-[11px] font-medium text-[#2d2a23] leading-none mt-1">{calculateAge(profile?.birthday || '')}</p>
             </div>
             <div className="w-10">
-              <label className="text-[6px] font-bold text-[#035096] uppercase tracking-tighter block">代碼 Code</label>
-              <p className="text-[11px] font-medium text-[#2d2a23] leading-none mt-1">{getCountryISO3(profile?.nationality || '')}</p>
+              <label className="text-[8px] font-bold text-[#035096] uppercase tracking-tighter block">代碼</label>
+              <p className="text-[11px] font-regular text-[#2d2a23] leading-none mt-1">{getCountryISO3(profile?.nationality || '')}</p>
             </div>
             <div className="min-w-0 flex-1">
-              <label className="text-[6px] font-bold text-[#035096] uppercase tracking-tighter block">護照ID</label>
-              <p className="text-[11px] font-medium text-[#2d2a23] leading-none mt-1 truncate uppercase">{profile?.username}</p>
+              <label className="text-[8px] font-bold text-[#035096] uppercase tracking-tighter block">護照ID</label>
+              <p className="text-[11px] font-bold text-[#2d2a23] leading-none mt-1 truncate uppercase">{profile?.username}</p>
             </div>
           </div>
 
           {/* Row 2: Name */}
           <div className="py-1">
-            <label className="text-[6px] font-bold text-[#035096] uppercase tracking-tighter block">姓名 Name</label>
+            <label className="text-[6px] font-bold text-[#035096] uppercase tracking-tighter block">姓名</label>
             <p className="text-[19px] font-medium text-[#2d2a23] leading-none truncate tracking-tight py-1">{profile?.displayName}</p>
           </div>
 
@@ -537,27 +537,27 @@ export const ProfilePage: React.FC<{
           <div className="space-y-3">
             <div className="grid grid-cols-3 gap-2">
               <div className="min-w-0">
-                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">國籍 NAT.</label>
+                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">國籍</label>
                 <p className="text-[9px] font-medium text-[#2d2a23] leading-none uppercase truncate mt-0.5">{profile?.nationality || 'Global'}</p>
               </div>
               <div className="min-w-0">
-                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">性別 SEX</label>
+                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">性別</label>
                 <p className="text-[9px] font-medium text-[#2d2a23] leading-none uppercase mt-0.5">{profile?.gender || 'O'}</p>
               </div>
               <div className="min-w-0">
-                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">出生 BIRTH</label>
+                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">出生</label>
                 <p className="text-[9px] font-medium text-[#2d2a23] leading-none uppercase mt-0.5">{formatDatePassport(profile?.birthday || '')}</p>
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
               <div className="min-w-0">
-                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">發照 ISSUE</label>
+                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">發照</label>
                 <p className="text-[9px] font-medium text-[#2d2a23] leading-none uppercase truncate mt-0.5">{formatDatePassport(profile?.createdAt || '')}</p>
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-0.5">
-                  <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">已旅國 VISIT.</label>
+                  <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">已旅國</label>
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
@@ -571,14 +571,14 @@ export const ProfilePage: React.FC<{
                 <p className="text-[9px] font-medium text-[#2d2a23] leading-none uppercase mt-0.5">{profile?.visitedCities || 0}</p>
               </div>
               <div className="min-w-0">
-                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">居住地 RES.</label>
+                <label className="text-[5.5px] font-bold text-[#035096] uppercase tracking-tighter block">居住地</label>
                 <p className="text-[9px] font-medium text-[#2d2a23] leading-none uppercase truncate mt-0.5">{profile?.residence || '---'}</p>
               </div>
             </div>
           </div>
 
           <div className="mt-auto pt-2 pb-0.5">
-            <label className="text-[5px] font-bold text-[#035096] uppercase tracking-tighter block mb-0.5">發照機構 AUTHORITY</label>
+            <label className="text-[5px] font-bold text-[#035096] uppercase tracking-tighter block mb-0.5">發照機構</label>
             <p className="text-[7.5px] font-medium text-[#035096] opacity-90 italic leading-none truncate">
               Synctime Professional Certification Organization
             </p>
