@@ -25,6 +25,8 @@ export interface UserProfile {
   isTrajectoryPublic?: boolean; // Whether user's travel trajectory is visible to others
   bio?: string; // Self introduction
   customExpenseCategories?: string[]; // User-defined expense categories persisted across trips
+  isDeleted?: boolean;
+  deletedAt?: string;
 }
 
 export interface UserReview {
@@ -333,3 +335,35 @@ export interface Stay {
   createdAt: string;
   companionIds?: string[];
 }
+
+export type ReportTargetType = 'user' | 'passport' | 'trip' | 'bar_post';
+
+export const REPORT_CATEGORIES = [
+  '垃圾訊息 / 廣告',
+  '騷擾或霸凌',
+  '仇恨或歧視',
+  '色情或不當內容',
+  '暴力或威脅',
+  '詐騙',
+  '冒充他人',
+  '未成年人安全問題',
+  '假帳號',
+  '其他'
+] as const;
+
+export type ReportCategory = typeof REPORT_CATEGORIES[number];
+
+export interface ReportData {
+  id?: string;
+  reporterId: string;
+  targetType: ReportTargetType;
+  targetId: string;
+  targetTitle?: string;
+  category: string;
+  customCategoryReason?: string;
+  description?: string;
+  imageUrl?: string;
+  createdAt: any;
+  status: 'pending' | 'reviewed' | 'resolved';
+}
+

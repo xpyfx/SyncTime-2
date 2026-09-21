@@ -30,7 +30,13 @@ import {
   Award,
   Compass,
   CheckCircle2,
-  Filter
+  Filter,
+  AlertCircle,
+  FileX2,
+  MoreHorizontal,
+  Ban,
+  FileWarning,
+  UserX
 } from 'lucide-react';
 import { getOrCreateChatRoom } from '../lib/chatUtils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -52,7 +58,8 @@ import {
   deleteDoc,
   documentId
 } from 'firebase/firestore';
-import { UserProfile, Notification, Trip, BarPost, GestureSettings, UserReview } from '../types';
+import { UserProfile, Notification, Trip, BarPost, GestureSettings, UserReview, ReportTargetType } from '../types';
+import { ReportModal } from '../components/ReportModal';
 import { TripCard } from '../components/TripCard';
 import { BarPostCard } from '../components/BarPostCard';
 import { CompanionRadarChart } from '../components/CompanionRadarChart';
@@ -195,7 +202,7 @@ export const ProfilePage: React.FC<{
   onChatClick: (roomId: string) => void,
   onUserClick?: (uid: string) => void
 }> = ({ targetUserId, onBack, onMyPostsClick, onTripClick, onChatClick, onUserClick }) => {
-  const { user, profile: myProfile, logout, deleteAccount } = useAuth();
+  const { user, profile: myProfile, logout, deleteAccount, blockUser, unblockUser, isUserBlocked, blockedByUsers } = useAuth();
   const effectiveUserId = targetUserId || user?.uid;
   const isOwnProfile = !targetUserId || targetUserId === user?.uid;
 
@@ -209,11 +216,47 @@ export const ProfilePage: React.FC<{
     const unsub = onSnapshot(doc(db, 'users', effectiveUserId), (snap) => {
       if (snap.exists()) {
         setProfile(snap.data() as UserProfile);
+      } else {
+        setProfile(null);
       }
       setProfileLoading(false);
     });
     return unsub;
   }, [effectiveUserId]);
+
+  const isPassportExpired = Boolean(
+    profile?.isDeleted || (!profileLoading && !profile && !effectiveUserId)
+  );
+
+  // Bidirectional Block State
+  const isBlockedByMe = Boolean(
+    !isOwnProfile && effectiveUserId && myProfile?.blockedUsers?.includes(effectiveUserId)
+  );
+  const isBlockedByThem = Boolean(
+    !isOwnProfile && (
+      (user?.uid && profile?.blockedUsers?.includes(user.uid)) ||
+      (effectiveUserId && blockedByUsers.includes(effectiveUserId))
+    )
+  );
+  const isBlockedRelationship = isBlockedByMe || isBlockedByThem;
+
+  // Profile Action Menu & Modals
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showBlockConfirmModal, setShowBlockConfirmModal] = useState(false);
+  const [isBlockingAction, setIsBlockingAction] = useState(false);
+  const [reportModalConfig, setReportModalConfig] = useState<{
+    isOpen: boolean;
+    targetType: ReportTargetType;
+    targetId: string;
+    targetTitle?: string;
+  }>({
+    isOpen: false,
+    targetType: 'user',
+    targetId: '',
+    targetTitle: ''
+  });
+  const [blockedUsersDetails, setBlockedUsersDetails] = useState<Record<string, UserProfile>>({});
+  const [searchBlockedNotice, setSearchBlockedNotice] = useState(false);
 
   const [showSearch, setShowSearch] = useState(false);
   const [searchId, setSearchId] = useState('');
@@ -498,11 +541,15 @@ export const ProfilePage: React.FC<{
         {/* Profile Photo - Left Side */}
         <div className="w-[100px] shrink-0 flex flex-col justify-center">
           <div className="aspect-[3/4] w-full bg-[#035096]/5 rounded-lg shadow-sm overflow-hidden border border-[#035096]/20 relative">
-            {profile?.avatarUrl ? (
+            {isPassportExpired ? (
+              <div className="w-full h-full flex items-center justify-center text-4xl text-[#035096]/40 font-normal">
+                -
+              </div>
+            ) : profile?.avatarUrl ? (
               <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover grayscale-[0.05] contrast-[1.05]" referrerPolicy="no-referrer" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-4xl text-[#035096] font-Semibold">
-                {profile?.displayName?.[0]}
+              <div className="w-full h-full flex items-center justify-center text-4xl text-[#035096] font-normal">
+                {profile?.displayName?.[0] || '-'}
               </div>
             )}
             <div className="absolute inset-0 opacity-10 pointer-events-none mix-blend-overlay bg-[repeating-linear-gradient(45deg,#000,#000_10px,#fff_10px,#fff_20px)]" />
@@ -515,22 +562,30 @@ export const ProfilePage: React.FC<{
           <div className="flex border-b border-[#035096]/15 gap-4 pb-1.5 mb-1.5">
             <div className="w-8">
               <label className="text-[8px] font-bold text-[#035096] uppercase tracking-tighter block">年齡</label>
-              <p className="text-[11px] font-Semibold text-[#2d2a23] leading-none mt-1">{calculateAge(profile?.birthday || '')}</p>
+              <p className="text-[11px] font-normal text-[#2d2a23] leading-none mt-1">
+                {isPassportExpired ? '-' : calculateAge(profile?.birthday || '')}
+              </p>
             </div>
             <div className="w-10">
               <label className="text-[8px] font-bold text-[#035096] uppercase tracking-tighter block">代碼</label>
-              <p className="text-[11px] font-Semibold text-[#2d2a23] leading-none mt-1">{getCountryISO3(profile?.nationality || '')}</p>
+              <p className="text-[11px] font-normal text-[#2d2a23] leading-none mt-1">
+                {isPassportExpired ? '-' : getCountryISO3(profile?.nationality || '')}
+              </p>
             </div>
             <div className="min-w-0 flex-1">
               <label className="text-[8px] font-bold text-[#035096] uppercase tracking-tighter block">護照ID</label>
-              <p className="text-[11px] font-bold text-[#2d2a23] leading-none mt-1 truncate uppercase">{profile?.username}</p>
+              <p className="text-[11px] font-normal text-[#2d2a23] leading-none mt-1 truncate uppercase">
+                {isPassportExpired ? '-' : (profile?.username || '-')}
+              </p>
             </div>
           </div>
 
           {/* Row 2: Name */}
           <div className="py-0 -mt-1">
             <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block">姓名</label>
-            <p className="text-[18px] font-Semibold text-[#2d2a23] leading-none truncate tracking-tight py-1">{profile?.displayName}</p>
+            <p className="text-[18px] font-normal text-[#2d2a23] leading-none truncate tracking-tight py-1">
+              {isPassportExpired ? '-' : (profile?.displayName || '-')}
+            </p>
           </div>
 
           {/* Bio Info Rows */}
@@ -538,49 +593,63 @@ export const ProfilePage: React.FC<{
             <div className="grid grid-cols-3 gap-2">
               <div className="min-w-0">
                 <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block">國籍</label>
-                <p className="text-[9px] font-Semibold text-[#2d2a23] leading-none uppercase truncate mt-0.5">{profile?.nationality || 'Global'}</p>
+                <p className="text-[9px] font-normal text-[#2d2a23] leading-none uppercase truncate mt-0.5">
+                  {isPassportExpired ? '-' : (profile?.nationality || 'Global')}
+                </p>
               </div>
               <div className="min-w-0">
                 <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block">性別</label>
-                <p className="text-[9px] font-Semibold text-[#2d2a23] leading-none uppercase mt-0.5">{profile?.gender || 'O'}</p>
+                <p className="text-[9px] font-normal text-[#2d2a23] leading-none uppercase mt-0.5">
+                  {isPassportExpired ? '-' : (profile?.gender || 'O')}
+                </p>
               </div>
               <div className="min-w-0">
                 <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block">出生</label>
-                <p className="text-[9px] font-Semibold text-[#2d2a23] leading-none uppercase mt-0.5">{formatDatePassport(profile?.birthday || '')}</p>
+                <p className="text-[9px] font-normal text-[#2d2a23] leading-none uppercase mt-0.5">
+                  {isPassportExpired ? '-' : formatDatePassport(profile?.birthday || '')}
+                </p>
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
               <div className="min-w-0">
                 <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block">發照</label>
-                <p className="text-[9px] font-Semibold text-[#2d2a23] leading-none uppercase truncate mt-0.5">{formatDatePassport(profile?.createdAt || '')}</p>
+                <p className="text-[9px] font-normal text-[#2d2a23] leading-none uppercase truncate mt-0.5">
+                  {isPassportExpired ? '-' : formatDatePassport(profile?.createdAt || '')}
+                </p>
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-0.5">
                   <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block">已旅國</label>
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowFootprintInfo(true);
-                    }}
-                    className="text-[#035096]/60 hover:text-[#035096] transition-colors"
-                  >
-                    <Info size={5} />
-                  </button>
+                  {!isPassportExpired && (
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowFootprintInfo(true);
+                      }}
+                      className="text-[#035096]/60 hover:text-[#035096] transition-colors"
+                    >
+                      <Info size={5} />
+                    </button>
+                  )}
                 </div>
-                <p className="text-[9px] font-Semibold text-[#2d2a23] leading-none uppercase mt-0.5">{profile?.visitedCities || 0}</p>
+                <p className="text-[9px] font-normal text-[#2d2a23] leading-none uppercase mt-0.5">
+                  {isPassportExpired ? '-' : (profile?.visitedCities || 0)}
+                </p>
               </div>
               <div className="min-w-0">
                 <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block">居住地</label>
-                <p className="text-[9px] font-Semibold text-[#2d2a23] leading-none uppercase truncate mt-0.5">{profile?.residence || '---'}</p>
+                <p className="text-[9px] font-normal text-[#2d2a23] leading-none uppercase truncate mt-0.5">
+                  {isPassportExpired ? '-' : (profile?.residence || '---')}
+                </p>
               </div>
             </div>
           </div>
 
           <div className="mt-1 sm:mt-1.5 md:mt-2 pb-0.5">
             <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block mb-0.5">發照機構</label>
-            <p className="text-[7.5px] font-Semibold text-[#035096] opacity-90 italic leading-none truncate">
-              Synctime Professional Certification Organization
+            <p className="text-[7.5px] font-normal text-[#035096] opacity-90 italic leading-none truncate">
+              Synctime Professional Certification Organization{isPassportExpired ? ' (已過期)' : ''}
             </p>
           </div>
         </div>
@@ -588,16 +657,45 @@ export const ProfilePage: React.FC<{
 
       {/* MRZ Area */}
       <div className="mt-1.5 pt-2 border-t border-[#035096]/15 opacity-70">
-        {profile && generateMRZ(profile).map((line, idx) => (
-          <div key={idx} className="grid grid-cols-[repeat(45,1fr)] w-full mb-0.5">
-            {line.split('').map((char, charIdx) => (
-              <span key={charIdx} className="font-mono text-[8.5px] text-center leading-none text-[#035096] uppercase font-bold">
-                {char}
-              </span>
-            ))}
-          </div>
-        ))}
+        {isPassportExpired ? (
+          <>
+            <div className="grid grid-cols-[repeat(45,1fr)] w-full mb-0.5">
+              {Array.from({ length: 45 }).map((_, idx) => (
+                <span key={idx} className="font-mono text-[8.5px] text-center leading-none text-[#035096]/40 uppercase font-normal">
+                  -
+                </span>
+              ))}
+            </div>
+            <div className="grid grid-cols-[repeat(45,1fr)] w-full mb-0.5">
+              {Array.from({ length: 45 }).map((_, idx) => (
+                <span key={idx} className="font-mono text-[8.5px] text-center leading-none text-[#035096]/40 uppercase font-normal">
+                  -
+                </span>
+              ))}
+            </div>
+          </>
+        ) : (
+          profile && generateMRZ(profile).map((line, idx) => (
+            <div key={idx} className="grid grid-cols-[repeat(45,1fr)] w-full mb-0.5">
+              {line.split('').map((char, charIdx) => (
+                <span key={charIdx} className="font-mono text-[8.5px] text-center leading-none text-[#035096] uppercase font-bold">
+                  {char}
+                </span>
+              ))}
+            </div>
+          ))
+        )}
       </div>
+
+      {/* Overprint Expired Stamp on Passport */}
+      {isPassportExpired && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+          <div className="border-[3px] border-red-500/85 text-red-500 font-bold px-4 py-1.5 rounded-xl uppercase -rotate-12 bg-white/80 backdrop-blur-[1px] shadow-sm flex flex-col items-center select-none">
+            <span className="text-[9px] font-bold tracking-widest text-red-500/90 mb-0.5">PASSPORT EXPIRED</span>
+            <span className="text-sm font-black tracking-wider">該護照已過期</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -1025,15 +1123,76 @@ export const ProfilePage: React.FC<{
     return onSnapshot(q, (s) => setFriendsList(s.docs.map(d => d.data() as UserProfile)));
   }, [profile?.friends]);
 
+  useEffect(() => {
+    if (!showBlocklist || !myProfile?.blockedUsers?.length) return;
+    const fetchBlockedDetails = async () => {
+      const details: Record<string, UserProfile> = {};
+      for (const uid of myProfile.blockedUsers!) {
+        if (!blockedUsersDetails[uid]) {
+          try {
+            const uSnap = await getDoc(doc(db, 'users', uid));
+            if (uSnap.exists()) {
+              details[uid] = uSnap.data() as UserProfile;
+            }
+          } catch (e) {
+            console.error('Fetch blocked user profile error:', e);
+          }
+        }
+      }
+      if (Object.keys(details).length > 0) {
+        setBlockedUsersDetails(prev => ({ ...prev, ...details }));
+      }
+    };
+    fetchBlockedDetails();
+  }, [showBlocklist, myProfile?.blockedUsers]);
+
+  const handleConfirmBlockUser = async () => {
+    if (!effectiveUserId) return;
+    setIsBlockingAction(true);
+    try {
+      await blockUser(effectiveUserId);
+      setShowBlockConfirmModal(false);
+      setShowProfileMenu(false);
+    } catch (e: any) {
+      console.error(e);
+      alert(`封鎖失敗：${e.message || '請稍後再試'}`);
+    } finally {
+      setIsBlockingAction(false);
+    }
+  };
+
+  const handleUnblockUser = async (targetUid?: string) => {
+    const uidToUnblock = targetUid || effectiveUserId;
+    if (!uidToUnblock) return;
+    setIsBlockingAction(true);
+    try {
+      await unblockUser(uidToUnblock);
+      setShowProfileMenu(false);
+    } catch (e: any) {
+      console.error(e);
+      alert(`解除封鎖失敗：${e.message || '請稍後再試'}`);
+    } finally {
+      setIsBlockingAction(false);
+    }
+  };
+
   const handleSearch = async () => {
     if (!searchId.trim()) return;
     setIsSearching(true);
     setSearchResult(null);
+    setSearchBlockedNotice(false);
     try {
       const q = query(collection(db, 'users'), where('username', '==', searchId.trim().toLowerCase()));
       const s = await getDocs(q);
       if (!s.empty) {
-        setSearchResult(s.docs[0].data() as UserProfile);
+        const found = s.docs[0].data() as UserProfile;
+        const blockedByMe = myProfile?.blockedUsers?.includes(found.uid);
+        const blockedByThem = (found.blockedUsers?.includes(user?.uid || '')) || blockedByUsers.includes(found.uid);
+        if (blockedByMe || blockedByThem) {
+          setSearchBlockedNotice(true);
+        } else {
+          setSearchResult(found);
+        }
       } else {
         alert('找不到該用戶');
       }
@@ -1319,14 +1478,99 @@ export const ProfilePage: React.FC<{
           ) : <div className="w-11 h-11" />
         )}
         
-        {!onBack && isOwnProfile && (
-          <button 
-            onClick={() => setShowSettings(true)}
-            className="w-11 h-11 rounded-full bg-white/70 border border-apple-gray-100 flex items-center justify-center text-apple-gray-900 pointer-events-auto active:scale-90 transition-transform shadow-2xs"
-            aria-label="設定"
-          >
-            <Settings size={22} />
-          </button>
+        {isOwnProfile ? (
+          !onBack ? (
+            <button 
+              onClick={() => setShowSettings(true)}
+              className="w-11 h-11 rounded-full bg-white/70 border border-apple-gray-100 flex items-center justify-center text-apple-gray-900 pointer-events-auto active:scale-90 transition-transform shadow-2xs cursor-pointer"
+              aria-label="設定"
+            >
+              <Settings size={22} />
+            </button>
+          ) : <div className="w-11 h-11" />
+        ) : (
+          <div className="relative pointer-events-auto">
+            <button 
+              onClick={() => setShowProfileMenu(prev => !prev)}
+              className="w-11 h-11 rounded-full bg-white/70 border border-apple-gray-100 flex items-center justify-center text-apple-gray-900 pointer-events-auto active:scale-90 transition-transform shadow-2xs cursor-pointer"
+              aria-label="更多選項"
+            >
+              <MoreHorizontal size={22} />
+            </button>
+
+            <AnimatePresence>
+              {showProfileMenu && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setShowProfileMenu(false)} 
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -6 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -6 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 top-13 z-50 w-52 bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl border border-apple-gray-100/90 py-1.5 overflow-hidden text-left"
+                  >
+                    {/* 1. (Block Icon) 封鎖這位旅客 */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        if (isBlockedByMe) {
+                          handleUnblockUser();
+                        } else {
+                          setShowBlockConfirmModal(true);
+                        }
+                      }}
+                      className="w-full px-4 py-3 text-sm font-medium text-red-600 active:bg-red-50/70 flex items-center gap-3 transition-colors text-left cursor-pointer"
+                    >
+                      <Ban size={18} className="shrink-0 text-red-500" />
+                      <span>{isBlockedByMe ? '解除封鎖這位旅客' : '封鎖這位旅客'}</span>
+                    </button>
+
+                    <div className="h-[1px] bg-apple-gray-100 my-1 mx-3" />
+
+                    {/* 2. (Report Text Icon) 檢舉護照訊息 */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        setReportModalConfig({
+                          isOpen: true,
+                          targetType: 'passport',
+                          targetId: effectiveUserId || '',
+                          targetTitle: `${profile?.displayName || '旅客'} 的護照訊息`
+                        });
+                      }}
+                      className="w-full px-4 py-3 text-sm font-medium text-apple-gray-800 active:bg-apple-gray-50 flex items-center gap-3 transition-colors text-left cursor-pointer"
+                    >
+                      <FileWarning size={18} className="shrink-0 text-amber-500" />
+                      <span>檢舉護照訊息</span>
+                    </button>
+
+                    {/* 3. (Report User Icon) 檢舉旅客 */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        setReportModalConfig({
+                          isOpen: true,
+                          targetType: 'user',
+                          targetId: effectiveUserId || '',
+                          targetTitle: `${profile?.displayName || '旅客'} (@${profile?.username || ''})`
+                        });
+                      }}
+                      className="w-full px-4 py-3 text-sm font-medium text-apple-gray-800 active:bg-apple-gray-50 flex items-center gap-3 transition-colors text-left cursor-pointer"
+                    >
+                      <UserX size={18} className="shrink-0 text-red-500" />
+                      <span>檢舉旅客</span>
+                    </button>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
         )}
       </div>
 
@@ -1335,14 +1579,14 @@ export const ProfilePage: React.FC<{
         {showSettings && (
           <motion.div 
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-            className="fixed inset-0 z-[200] bg-apple-gray-50 flex flex-col"
+            className="fixed inset-0 z-[200] bg-white flex flex-col max-w-md mx-auto w-full overscroll-none"
           >
             <div className="px-5 pt-[max(env(safe-area-inset-top,0px),48px)] pb-4 flex items-center justify-between border-b border-apple-gray-100 bg-white shrink-0 shadow-2xs z-10">
               <h2 className="text-lg font-bold text-apple-gray-900">設定</h2>
               <button onClick={() => setShowSettings(false)} className="text-apple-blue font-semibold px-2 py-1 active:opacity-60 transition-opacity">完成</button>
             </div>
             
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-[max(env(safe-area-inset-bottom,0px),32px)]">
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-[max(env(safe-area-inset-bottom,0px),32px)] bg-apple-gray-50">
               <div className="bg-white rounded-2xl overflow-hidden shadow-apple-sm border border-apple-gray-100">
                 <ProfileItem icon={Edit2} label="修改護照資料" onClick={() => {
                   setShowEditPassport(true);
@@ -1470,7 +1714,7 @@ export const ProfilePage: React.FC<{
 
               <div className="space-y-2">
                 <h3 className="text-lg font-bold text-apple-gray-900">
-                  是否確定要住註銷帳號？
+                  是否確定要註銷帳號？
                 </h3>
                 <div className="p-3.5 bg-red-50/70 rounded-2xl border border-red-100/80 text-left">
                   <p className="text-xs text-red-700 leading-relaxed font-Semibold">
@@ -1892,6 +2136,17 @@ export const ProfilePage: React.FC<{
                     />
                   </div>
 
+                  {searchBlockedNotice && (
+                    <div className="p-3.5 bg-apple-gray-50/80 rounded-xl border border-apple-gray-200/60 flex items-center gap-3 text-apple-gray-700 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="w-8 h-8 rounded-full bg-apple-gray-200/70 flex items-center justify-center shrink-0">
+                        <Lock size={16} className="text-apple-gray-500" />
+                      </div>
+                      <span className="text-xs font-bold leading-relaxed text-apple-gray-800">
+                        哇～因為某些原因，你無法查看該旅客的訊息喲～
+                      </span>
+                    </div>
+                  )}
+
                   {searchResult && (
                     <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-apple-gray-100 animate-in fade-in zoom-in-95 duration-300">
                       <div 
@@ -2039,20 +2294,45 @@ export const ProfilePage: React.FC<{
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
-            className="fixed inset-0 z-[200] bg-apple-gray-50 flex flex-col"
+            className="fixed inset-0 z-[200] bg-apple-gray-50 flex flex-col max-w-md mx-auto w-full overscroll-none"
           >
             <div className="px-5 pt-[max(env(safe-area-inset-top,0px),48px)] pb-4 flex items-center justify-between border-b border-apple-gray-100 bg-white shrink-0 shadow-2xs z-10">
               <h2 className="text-lg font-bold text-apple-gray-900">封鎖名單</h2>
               <button onClick={() => setShowBlocklist(false)} className="text-apple-blue font-semibold px-2 py-1 active:opacity-60 transition-opacity">完成</button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-[max(env(safe-area-inset-bottom,0px),32px)]">
-              {profile?.blockedUsers?.length ? (
-                profile.blockedUsers.map(id => (
-                  <div key={id} className="flex justify-between items-center p-4 bg-white rounded-2xl border border-apple-gray-100 shadow-apple-xs">
-                    <span className="text-sm font-Semibold">用戶 ID: {id}</span>
-                    <button className="text-xs text-apple-blue font-semibold">解除封鎖</button>
-                  </div>
-                ))
+              {myProfile?.blockedUsers?.length ? (
+                myProfile.blockedUsers.map(id => {
+                  const bUser = blockedUsersDetails[id];
+                  return (
+                    <div key={id} className="flex justify-between items-center p-3.5 bg-white rounded-2xl border border-apple-gray-100 shadow-apple-xs">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-apple-gray-100 overflow-hidden border border-apple-gray-200 flex items-center justify-center shrink-0">
+                          {bUser?.avatarUrl ? (
+                            <img src={bUser.avatarUrl} alt={bUser.displayName} className="w-full h-full object-cover" />
+                          ) : (
+                            <User className="text-apple-gray-400" size={18} />
+                          )}
+                        </div>
+                        <div className="text-left">
+                          <div className="text-sm font-bold text-apple-gray-900">
+                            {bUser?.displayName || '已封鎖旅客'}
+                          </div>
+                          <div className="text-[11px] text-apple-gray-400">
+                            @{bUser?.username || id.slice(0, 8)}
+                          </div>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => handleUnblockUser(id)}
+                        disabled={isBlockingAction}
+                        className="px-3.5 py-1.5 rounded-xl bg-apple-gray-100 hover:bg-red-50 hover:text-red-600 text-xs text-apple-blue font-bold active:scale-95 transition-all cursor-pointer shrink-0"
+                      >
+                        解除封鎖
+                      </button>
+                    </div>
+                  );
+                })
               ) : (
                 <div className="text-center py-20 text-apple-gray-300 italic">名單為空</div>
               )}
@@ -2061,11 +2341,75 @@ export const ProfilePage: React.FC<{
         )}
       </AnimatePresence>
 
-      {/* Passport Header */}
-      <div className="px-4 pt-4">
+      {/* Block Confirmation Modal */}
+      <AnimatePresence>
+        {showBlockConfirmModal && (
+          <div className="fixed inset-0 z-[250] flex items-center justify-center p-5 bg-black/40 backdrop-blur-xs">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl text-center"
+            >
+              <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 mx-auto flex items-center justify-center mb-3">
+                <Ban size={24} />
+              </div>
+              <h3 className="text-base font-bold text-apple-gray-900 mb-1.5">封鎖這位旅客？</h3>
+              <p className="text-xs text-apple-gray-400 leading-relaxed mb-5">
+                封鎖後，雙方將無法瀏覽彼此的個人檔案、發布的旅文與徵文。你可以隨時在「設定 &gt; 隱私與封鎖名單」中解除封鎖。
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowBlockConfirmModal(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-apple-gray-100 text-apple-gray-700 text-xs font-bold active:scale-95 transition-transform cursor-pointer"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmBlockUser}
+                  disabled={isBlockingAction}
+                  className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold active:scale-95 transition-transform shadow-xs cursor-pointer"
+                >
+                  {isBlockingAction ? '處理中...' : '確認封鎖'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {isBlockedRelationship ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center min-h-[60vh]">
+          <div className="w-20 h-20 rounded-full bg-apple-gray-100/90 border border-apple-gray-200/80 flex items-center justify-center text-apple-gray-400 mb-5 shadow-apple-xs">
+            <Lock size={36} className="text-apple-gray-400" />
+          </div>
+          <h3 className="text-base font-bold text-apple-gray-900 mb-2">
+            哇～因為某些原因，你無法查看該旅客的訊息喲～
+          </h3>
+          <p className="text-xs text-apple-gray-400 max-w-xs leading-relaxed mb-6">
+            {isBlockedByMe 
+              ? '你已封鎖此旅客。封鎖期間雙方皆無法瀏覽彼此的個人檔案、旅文與徵文。' 
+              : '該旅客的個人檔案目前無法查看。'}
+          </p>
+          {isBlockedByMe && (
+            <button
+              onClick={() => handleUnblockUser()}
+              disabled={isBlockingAction}
+              className="px-6 py-2.5 rounded-full bg-apple-blue hover:bg-apple-blue/90 active:scale-95 text-white text-xs font-bold shadow-apple-xs transition-all cursor-pointer"
+            >
+              解除封鎖
+            </button>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* Passport Header */}
+          <div className="px-4 pt-4">
         <motion.div 
-          onClick={() => setIsPassportExpanded(true)}
-          className="w-full aspect-[1.36/1] bg-[#F7FAFD] rounded-[24px] shadow-2xl border border-[#035096]/20 overflow-hidden relative flex flex-col cursor-pointer active:scale-[0.99] transition-transform"
+          onClick={() => !isPassportExpired && setIsPassportExpanded(true)}
+          className={`w-full aspect-[1.36/1] bg-[#F7FAFD] rounded-[24px] shadow-2xl border border-[#035096]/20 overflow-hidden relative flex flex-col ${isPassportExpired ? 'cursor-default opacity-95' : 'cursor-pointer active:scale-[0.99]'} transition-transform`}
         >
           {/* Passport Texture Overlay */}
           <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#035096 0.5px, transparent 0.5px)', backgroundSize: '10px 10px' }} />
@@ -2074,7 +2418,7 @@ export const ProfilePage: React.FC<{
           {renderPassportContent()}
           
           {/* Apple Style Edit Trigger */}
-          {isOwnProfile && (
+          {isOwnProfile && !isPassportExpired && (
             <button 
               onClick={(e) => {
                 e.stopPropagation();
@@ -2089,8 +2433,15 @@ export const ProfilePage: React.FC<{
           )}
         </motion.div>
 
-        {/* Travel Footprints Trajectory Trigger Button */}
-        {profileLoading ? (
+        {/* Travel Footprints Trajectory Trigger Button / Notice */}
+        {isPassportExpired ? (
+          <div className="mt-4">
+            <div className="w-full py-2.5 px-4 bg-red-50/90 border border-red-200/90 text-red-600 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 shadow-xs select-none">
+              <AlertCircle size={15} className="text-red-500 shrink-0" />
+              <span>該護照已過期・此帳號已註銷</span>
+            </div>
+          </div>
+        ) : profileLoading ? (
           <div className="mt-4">
             <div className="w-full h-11 bg-apple-gray-100/75 border border-apple-gray-100 text-apple-gray-400 rounded-2xl font-black text-xs flex items-center justify-center gap-2 select-none animate-pulse">
               <span>正在確認隱私設定...</span>
@@ -2117,7 +2468,7 @@ export const ProfilePage: React.FC<{
         )}
 
         {/* Action Buttons for non-own profile */}
-        {!isOwnProfile && (
+        {!isOwnProfile && !isPassportExpired && (
           <div className="flex justify-center gap-4 mt-6">
             <button 
               onClick={() => effectiveUserId && handleAddFriend(effectiveUserId)}
@@ -2448,39 +2799,42 @@ export const ProfilePage: React.FC<{
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Navigation Tabs - New Style */}
-        <div className="mt-8 border-b border-apple-gray-100 px-4">
-          <div className="flex justify-between relative px-2">
-            {[
-              { id: 'trips', label: `旅程 (${myTrips.length})` },
-              { id: 'saved', label: `收藏 (${savedTrips.length + savedBarPosts.length})` },
-              { id: 'friends', label: `好友 (${profile?.friends?.length || 0})` },
-              { id: 'posts', label: `發佈 (${postsCount})` },
-              { id: 'about', label: '關於' }
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`pb-3 text-sm font-black transition-all relative ${
-                  activeTab === tab.id ? 'text-apple-gray-900' : 'text-apple-gray-300'
-                }`}
-              >
-                {tab.label}
-                {activeTab === tab.id && (
-                  <motion.div 
-                    layoutId={`activeTab-${effectiveUserId}`}
-                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-apple-gray-900 rounded-full"
-                  />
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
 
-      {/* Tab Content Area */}
-      <div className="flex-1 px-4 py-6 pb-32">
+      {/* Bottom Area (Tabs & Tab Content) */}
+      <div className="relative">
+        <div className={`transition-all duration-300 ${isPassportExpired ? 'grayscale opacity-30 pointer-events-none select-none filter' : ''}`}>
+          {/* Navigation Tabs - New Style */}
+          <div className="mt-8 border-b border-apple-gray-100 px-4">
+            <div className="flex justify-between relative px-2">
+              {[
+                { id: 'trips', label: `旅程 (${isPassportExpired ? 0 : myTrips.length})` },
+                { id: 'saved', label: `收藏 (${isPassportExpired ? 0 : savedTrips.length + savedBarPosts.length})` },
+                { id: 'friends', label: `好友 (${isPassportExpired ? 0 : (profile?.friends?.length || 0)})` },
+                { id: 'posts', label: `發佈 (${isPassportExpired ? 0 : postsCount})` },
+                { id: 'about', label: '關於' }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`pb-3 text-sm font-black transition-all relative ${
+                    activeTab === tab.id ? 'text-apple-gray-900' : 'text-apple-gray-300'
+                  }`}
+                >
+                  {tab.label}
+                  {activeTab === tab.id && (
+                    <motion.div 
+                      layoutId={`activeTab-${effectiveUserId}`}
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-apple-gray-900 rounded-full"
+                    />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tab Content Area */}
+          <div className="flex-1 px-4 py-6 pb-32">
         {activeTab === 'trips' && (
           <div className="space-y-4">
             <div className="flex bg-apple-gray-50 p-1 rounded-xl mb-4">
@@ -3240,6 +3594,28 @@ export const ProfilePage: React.FC<{
           </div>
         )}
       </div>
+    </div>
+
+    {/* Expired Overlay Notice */}
+    {isPassportExpired && (
+      <div className="absolute inset-0 flex flex-col items-center justify-start pt-24 px-6 z-20 pointer-events-none">
+        <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 max-w-xs w-full shadow-apple-md border border-apple-gray-200/80 flex flex-col items-center text-center pointer-events-auto">
+          <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center mb-3">
+            <FileX2 size={24} />
+          </div>
+          <h4 className="text-base font-bold text-apple-gray-900 mb-1">該護照已過期</h4>
+          <p className="text-xs text-apple-gray-500 leading-relaxed mb-3">
+            此使用者的帳號已註銷，過往所有旅程、貼文及個人資料均已清空，無法檢視。
+          </p>
+          <span className="px-3 py-1 rounded-full bg-apple-gray-100 text-apple-gray-500 text-[11px] font-medium">
+            內容已清空・無法檢視
+          </span>
+        </div>
+      </div>
+    )}
+  </div>
+  </>
+)}
 
       {/* Travel Footprint Detail Modal */}
       <AnimatePresence>
@@ -3592,6 +3968,15 @@ export const ProfilePage: React.FC<{
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Report Modal */}
+      <ReportModal
+        isOpen={reportModalConfig.isOpen}
+        onClose={() => setReportModalConfig(prev => ({ ...prev, isOpen: false }))}
+        targetType={reportModalConfig.targetType}
+        targetId={reportModalConfig.targetId}
+        targetTitle={reportModalConfig.targetTitle}
+      />
     </div>
   );
 };

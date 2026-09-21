@@ -5681,7 +5681,7 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
 };
 
 export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (userId: string) => void, onBackToTrip?: (tripId: string) => void }> = ({ initialRoomId, onAvatarClick, onBackToTrip }) => {
-  const { user, profile } = useAuth();
+  const { user, profile, isUserBlocked } = useAuth();
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(initialRoomId);
   const [activeTab, setActiveTab] = useState<'friends' | 'chat' | 'group'>('chat');
@@ -5692,6 +5692,7 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
   const [searchId, setSearchId] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResult, setSearchResult] = useState<UserProfile | null>(null);
+  const [searchBlockedNotice, setSearchBlockedNotice] = useState(false);
 
   useEffect(() => {
     setSelectedRoomId(initialRoomId);
@@ -5733,11 +5734,12 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
     fetchUsers();
   }, [user]);
 
-  // Derived Friends List
+  // Derived Friends List (exclude blocked users)
   const friendsList = React.useMemo(() => {
-    let friends = allUsers;
+    let friends = allUsers.filter(u => !isUserBlocked(u.uid));
     if (profile?.friends && profile.friends.length > 0) {
-      const friendSet = new Set(profile.friends);
+      const validFriendIds = profile.friends.filter(fId => !isUserBlocked(fId));
+      const friendSet = new Set(validFriendIds);
       const matched = allUsers.filter(u => friendSet.has(u.uid));
       if (matched.length > 0) friends = matched;
     }
@@ -5749,18 +5751,23 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
       (f.username && f.username.toLowerCase().includes(q)) ||
       (f.bio && f.bio.toLowerCase().includes(q))
     );
-  }, [allUsers, profile, searchQuery]);
+  }, [allUsers, profile, searchQuery, isUserBlocked]);
 
-  // Derived 1-on-1 Chat Rooms
+  // Derived 1-on-1 Chat Rooms (exclude blocked users)
   const directRooms = React.useMemo(() => {
-    const filtered = rooms.filter(r => r.type !== 'group');
+    const filtered = rooms.filter(r => {
+      if (r.type === 'group') return false;
+      const otherParticipant = r.participants?.find(p => p !== user?.uid);
+      if (otherParticipant && isUserBlocked(otherParticipant)) return false;
+      return true;
+    });
     if (!searchQuery.trim()) return filtered;
     const q = searchQuery.toLowerCase().trim();
     return filtered.filter(r => 
       (r.name && r.name.toLowerCase().includes(q)) || 
       (r.lastMessage && r.lastMessage.toLowerCase().includes(q))
     );
-  }, [rooms, searchQuery]);
+  }, [rooms, searchQuery, user?.uid, isUserBlocked]);
 
   // Derived Group Chat Rooms
   const groupRooms = React.useMemo(() => {
@@ -5803,13 +5810,34 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
     if (!searchId.trim()) return;
     setIsSearching(true);
     setSearchResult(null);
+    setSearchBlockedNotice(false);
     try {
       const q = query(collection(db, 'users'), where('username', '==', searchId.trim().toLowerCase()));
       const s = await getDocs(q);
       if (!s.empty) {
-        setSearchResult(s.docs[0].data() as UserProfile);
+        const found = s.docs[0].data() as UserProfile;
+        if (isUserBlocked(found.uid)) {
+          setSearchBlockedNotice(true);
+          setSearchResult(null);
+          return;
+        }
+        setSearchBlockedNotice(false);
+        setSearchResult(found);
       } else {
-        alert('找不到該用戶');
+        // Fallback: check direct UID
+        const docSnap = await getDoc(doc(db, 'users', searchId.trim()));
+        if (docSnap.exists()) {
+          const found = docSnap.data() as UserProfile;
+          if (isUserBlocked(found.uid)) {
+            setSearchBlockedNotice(true);
+            setSearchResult(null);
+            return;
+          }
+          setSearchBlockedNotice(false);
+          setSearchResult(found);
+        } else {
+          alert('找不到該用戶');
+        }
       }
     } catch (e) {
       console.error(e);
@@ -5874,6 +5902,17 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
                   onClear={() => setSearchId('')}
                 />
               </div>
+
+              {searchBlockedNotice && (
+                <div className="p-3.5 bg-apple-gray-50/90 rounded-2xl border border-apple-gray-200/70 flex items-center gap-3 text-apple-gray-800 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="w-8 h-8 rounded-full bg-apple-gray-200/70 flex items-center justify-center shrink-0">
+                    <Lock size={16} className="text-apple-gray-500" />
+                  </div>
+                  <span className="text-xs font-bold leading-relaxed text-apple-gray-800">
+                    哇～因為某些原因，你無法查看該旅客的訊息喲～
+                  </span>
+                </div>
+              )}
 
               {searchResult && (
                 <div className="flex items-center justify-between p-4 bg-apple-gray-50 rounded-2xl border border-apple-gray-100">

@@ -24,7 +24,7 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isOwner(userId) && isValidUser(request.resource.data);
       allow update: if isSignedIn() && (
-        (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'username', 'blockedUsers', 'friends', 'nationality', 'birthday', 'gender', 'residence', 'visitedCities', 'hiddenItems', 'gestureSettings', 'isTrajectoryPublic', 'bio'])) ||
+        (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'username', 'blockedUsers', 'friends', 'nationality', 'birthday', 'gender', 'residence', 'visitedCities', 'hiddenItems', 'gestureSettings', 'isTrajectoryPublic', 'bio', 'isDeleted', 'deletedAt'])) ||
         (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['friends']))
       );
       allow delete: if isOwner(userId);
@@ -38,7 +38,8 @@ service cloud.firestore {
             && data.get('residence', '') is string && data.get('residence', '').size() < 200
             && data.get('visitedCities', 0) is number
             && data.get('bio', '') is string && data.get('bio', '').size() <= 2000
-            && (data.get('isTrajectoryPublic', true) == true || data.get('isTrajectoryPublic', true) == false);
+            && (data.get('isTrajectoryPublic', true) == true || data.get('isTrajectoryPublic', true) == false)
+            && (data.get('isDeleted', false) == true || data.get('isDeleted', false) == false);
       }
 
       match /savedTrips/{tripId} {

@@ -23,11 +23,12 @@ import {
 } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, MoreVertical, Send, ShieldAlert, Trash2, Edit2, Calendar, MapPin, Users, Wallet, Plane, Info, Heart, MessageCircle, Plus, X, Ticket, Star } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Send, ShieldAlert, Trash2, Edit2, Calendar, MapPin, Users, Wallet, Plane, Info, Heart, MessageCircle, Plus, X, Ticket, Star, Lock } from 'lucide-react';
 import { getOrCreateChatRoom } from '../lib/chatUtils';
 import { CreateTripView } from './CreateTrip';
 import { CommentReply } from '../types';
 import { getTripDeletionInfo } from './Chat';
+import { ReportModal } from '../components/ReportModal';
 
 interface CommentItemProps {
   comment: TripComment;
@@ -254,13 +255,14 @@ const FriendItem: React.FC<{
 };
 
 export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, onChatOpen, onAvatarClick }) => {
-  const { user, profile } = useAuth();
+  const { user, profile, isUserBlocked } = useAuth();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [author, setAuthor] = useState<UserProfile | null>(null);
   const [comments, setComments] = useState<TripComment[]>([]);
   const [commentAuthors, setCommentAuthors] = useState<Record<string, UserProfile>>({});
   const [newComment, setNewComment] = useState('');
   const [showMenu, setShowMenu] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   const [isEditingFull, setIsEditingFull] = useState(false);
   const [isPostingComment, setIsPostingComment] = useState(false);
   const [memberProfiles, setMemberProfiles] = useState<UserProfile[]>([]);
@@ -760,25 +762,9 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
     }
   };
 
-  const handleReportTrip = async () => {
-    if (!user || !trip) return;
-    if (!confirm('確定要檢舉這則徵人啟事嗎？我們會盡快審核。')) return;
-    
-    try {
-      await addDoc(collection(db, 'reports'), {
-        reporterId: user.uid,
-        targetId: tripId,
-        targetType: 'tripPost',
-        authorId: trip.authorId,
-        createdAt: serverTimestamp(),
-        status: 'pending'
-      });
-      alert('感謝您的回報，我們會盡快處理！');
-      setShowMenu(false);
-    } catch (e) {
-      console.error(e);
-      alert('檢舉失敗，請稍後再試。');
-    }
+  const handleReportTrip = () => {
+    setShowReportModal(true);
+    setShowMenu(false);
   };
 
   const isAuthor = user && trip ? user.uid === trip.authorId : false;
@@ -877,6 +863,31 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
   }
 
   if (!trip || !author) return null;
+
+  if (isUserBlocked(trip.authorId)) {
+    return (
+      <div className="flex flex-col min-h-screen bg-apple-gray-50">
+        <div className="sticky top-0 bg-white/80 backdrop-blur-md z-10 px-5 pt-[max(env(safe-area-inset-top,0px),48px)] pb-3 border-b border-apple-gray-100 flex items-center">
+          <button onClick={onBack} className="p-2 -ml-2 text-apple-gray-900 active:scale-90 transition-transform cursor-pointer">
+            <ArrowLeft size={22} />
+          </button>
+          <h1 className="text-base font-bold text-apple-gray-900 ml-2">旅程詳情</h1>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center min-h-[60vh]">
+          <div className="w-16 h-16 rounded-full bg-apple-gray-100 flex items-center justify-center text-apple-gray-400 mb-4 shadow-apple-xs">
+            <Lock size={32} />
+          </div>
+          <h3 className="text-base font-bold text-apple-gray-900 mb-2">哇～因為某些原因，你無法查看該旅客的訊息喲～</h3>
+          <p className="text-xs text-apple-gray-400 max-w-xs mb-6 leading-relaxed">
+            你或此旅伴已將彼此列入封鎖名單，因此無法查看此旅程的完整內容。
+          </p>
+          <button onClick={onBack} className="px-6 py-2.5 bg-apple-blue text-white rounded-full text-xs font-bold active:scale-95 shadow-apple-xs cursor-pointer">
+            返回
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const handleOpenGroupChat = async () => {
     if (!user || !tripId || !trip) return;
@@ -1807,6 +1818,17 @@ export const TripDetailView: React.FC<TripDetailViewProps> = ({ tripId, onBack, 
           />
         )}
       </AnimatePresence>
+
+      {/* Report Modal */}
+      {showReportModal && trip && (
+        <ReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          targetType="trip"
+          targetId={trip.id}
+          targetTitle={`徵人啟事: ${trip.country} ${trip.cities?.join(' ')} (發起人: ${author.displayName})`}
+        />
+      )}
     </div>
   );
 };

@@ -10,6 +10,7 @@ import { SwipeableWrapper } from '../components/SwipeableWrapper';
 import { motion, AnimatePresence } from 'motion/react';
 import { HomeTripFilter, TripFilters, INITIAL_TRIP_FILTERS } from '../components/HomeTripFilter';
 import { getContinentByCountry } from '../lib/continentUtils';
+import { ReportModal } from '../components/ReportModal';
 
 interface HomeViewProps {
   onAvatarClick: (userId: string) => void;
@@ -18,7 +19,7 @@ interface HomeViewProps {
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({ onAvatarClick, onTripClick, onAddClick }) => {
-  const { user, profile } = useAuth();
+  const { user, profile, isUserBlocked } = useAuth();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [profiles, setProfiles] = useState<Record<string, UserProfile>>({});
   const [search, setSearch] = useState('');
@@ -26,6 +27,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onAvatarClick, onTripClick, 
   const [savedTripIds, setSavedTripIds] = useState<Set<string>>(new Set());
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filters, setFilters] = useState<TripFilters>(INITIAL_TRIP_FILTERS);
+  const [reportingTrip, setReportingTrip] = useState<Trip | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -94,16 +96,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onAvatarClick, onTripClick, 
         });
       }
     } else if (action === '檢舉') {
-      if (!confirm('確定要檢舉這則徵人啟事嗎？我們會盡快審核。')) return;
-      await addDoc(collection(db, 'reports'), {
-        reporterId: user.uid,
-        targetId: trip.id,
-        targetType: 'tripPost',
-        authorId: trip.authorId,
-        createdAt: serverTimestamp(),
-        status: 'pending'
-      });
-      alert('感謝回報！');
+      setReportingTrip(trip);
     }
   };
 
@@ -133,6 +126,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onAvatarClick, onTripClick, 
   const filteredTrips = trips.filter(trip => {
     // 隱藏邏輯: 如果在 Firestore 中已隱藏，則過濾掉
     if (profile?.hiddenItems?.includes(trip.id)) return false;
+
+    // 封鎖邏輯: 雙向封鎖的使用者內容互相不可見
+    if (isUserBlocked(trip.authorId)) return false;
 
     // 1. Privacy Logic
     const isPublic = !trip.isFriendsOnly;
@@ -424,6 +420,17 @@ export const HomeView: React.FC<HomeViewProps> = ({ onAvatarClick, onTripClick, 
           </div>
         )}
       </div>
+
+      {/* Report Modal */}
+      {reportingTrip && (
+        <ReportModal
+          isOpen={!!reportingTrip}
+          onClose={() => setReportingTrip(null)}
+          targetType="trip"
+          targetId={reportingTrip.id}
+          targetTitle={`${reportingTrip.country} ${reportingTrip.cities?.join(' ')} (由 ${profiles[reportingTrip.authorId]?.displayName || '旅客'} 發起)`}
+        />
+      )}
     </div>
   );
 };

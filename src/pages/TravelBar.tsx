@@ -8,6 +8,7 @@ import { GlassSearchInput } from '../components/GlassSearchInput';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { SwipeableWrapper } from '../components/SwipeableWrapper';
+import { ReportModal } from '../components/ReportModal';
 
 export const TravelBarView: React.FC<{ 
   onChatClick: (roomId: string) => void,
@@ -21,7 +22,8 @@ export const TravelBarView: React.FC<{
   const [newPostContent, setNewPostContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
-  const { user, profile } = useAuth();
+  const [reportingPost, setReportingPost] = useState<BarPost | null>(null);
+  const { user, profile, isUserBlocked } = useAuth();
 
   useEffect(() => {
     if (!user) {
@@ -142,16 +144,7 @@ export const TravelBarView: React.FC<{
         });
       }
     } else if (action === '檢舉') {
-      if (!confirm('確定要檢舉這則見聞嗎？我們會盡快審核。')) return;
-      await addDoc(collection(db, 'reports'), {
-        reporterId: user.uid,
-        targetId: post.id,
-        targetType: 'barPost',
-        authorId: post.authorId,
-        createdAt: serverTimestamp(),
-        status: 'pending'
-      });
-      alert('感謝回報！');
+      setReportingPost(post);
     }
   };
 
@@ -176,6 +169,7 @@ export const TravelBarView: React.FC<{
 
   const filteredPosts = posts.filter(post => {
     if (profile?.hiddenItems?.includes(post.id)) return false;
+    if (isUserBlocked(post.authorId)) return false;
 
     const s = search.toLowerCase();
     const author = authors[post.authorId];
@@ -309,6 +303,17 @@ export const TravelBarView: React.FC<{
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Report Modal */}
+      {reportingPost && (
+        <ReportModal
+          isOpen={!!reportingPost}
+          onClose={() => setReportingPost(null)}
+          targetType="bar_post"
+          targetId={reportingPost.id}
+          targetTitle={`見聞貼文: ${reportingPost.content.slice(0, 30)}${reportingPost.content.length > 30 ? '...' : ''} (由 ${authors[reportingPost.authorId]?.displayName || '旅客'} 發布)`}
+        />
+      )}
     </div>
   );
 };
