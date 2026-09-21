@@ -510,7 +510,7 @@ export const ProfilePage: React.FC<{
         </div>
 
         {/* Passport Information - Right Side */}
-        <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
+        <div className="flex-1 min-w-0 flex flex-col justify-start py-1">
           {/* Row 1: Age / Code / Passport ID */}
           <div className="flex border-b border-[#035096]/15 gap-4 pb-1.5 mb-1.5">
             <div className="w-8">
@@ -528,13 +528,13 @@ export const ProfilePage: React.FC<{
           </div>
 
           {/* Row 2: Name */}
-          <div className="py-1">
+          <div className="py-0 -mt-1">
             <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block">姓名</label>
-            <p className="text-[19px] font-Semibold text-[#2d2a23] leading-none truncate tracking-tight py-1">{profile?.displayName}</p>
+            <p className="text-[18px] font-Semibold text-[#2d2a23] leading-none truncate tracking-tight py-1">{profile?.displayName}</p>
           </div>
 
           {/* Bio Info Rows */}
-          <div className="space-y-3">
+          <div className="space-y-1 sm:space-y-1.5 md:space-y-2">
             <div className="grid grid-cols-3 gap-2">
               <div className="min-w-0">
                 <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block">國籍</label>
@@ -577,8 +577,8 @@ export const ProfilePage: React.FC<{
             </div>
           </div>
 
-          <div className="mt-auto pt-2 pb-0.5">
-            <label className="text-[5px] font-bold text-[#035096] uppercase tracking-tighter block mb-0.5">發照機構</label>
+          <div className="mt-1 sm:mt-1.5 md:mt-2 pb-0.5">
+            <label className="text-[9px] font-bold text-[#035096] uppercase tracking-tighter block mb-0.5">發照機構</label>
             <p className="text-[7.5px] font-Semibold text-[#035096] opacity-90 italic leading-none truncate">
               Synctime Professional Certification Organization
             </p>
@@ -1550,7 +1550,7 @@ export const ProfilePage: React.FC<{
 
             <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 pb-[max(env(safe-area-inset-bottom,0px),32px)]">
               {/* Home Section */}
-              <div className="space-y-3">
+              <div className="space-y-1 sm:space-y-1.5 md:space-y-2">
                 <h3 className="px-2 text-xs font-black text-apple-gray-300 uppercase tracking-widest">主頁徵文</h3>
                 <div className="bg-white rounded-2xl overflow-hidden border border-apple-gray-100 shadow-apple-xs">
                   <button 
@@ -1577,7 +1577,7 @@ export const ProfilePage: React.FC<{
               </div>
 
               {/* Bar Section */}
-              <div className="space-y-3">
+              <div className="space-y-1 sm:space-y-1.5 md:space-y-2">
                 <h3 className="px-2 text-xs font-black text-apple-gray-300 uppercase tracking-widest">旅文 BAR</h3>
                 <div className="bg-white rounded-2xl overflow-hidden border border-apple-gray-100 shadow-apple-xs">
                   <button 
@@ -2861,7 +2861,7 @@ export const ProfilePage: React.FC<{
                   </div>
 
                   {isEditingBio ? (
-                    <div className="space-y-3">
+                    <div className="space-y-1 sm:space-y-1.5 md:space-y-2">
                       <textarea
                         value={bioEditVal}
                         onChange={(e) => setBioEditVal(e.target.value)}
