@@ -124,9 +124,9 @@ export const ReportModal: React.FC<ReportModalProps> = ({
       });
 
       setSubmitted(true);
+      onSuccess?.();
       setTimeout(() => {
         handleClose();
-        onSuccess?.();
       }, 1600);
     } catch (err: any) {
       console.error('Submit report error:', err);

@@ -24,6 +24,7 @@ export interface UserProfile {
   hiddenItems?: string[]; // IDs of hidden trips or bar posts
   isTrajectoryPublic?: boolean; // Whether user's travel trajectory is visible to others
   bio?: string; // Self introduction
+  interestTags?: string[]; // User selected interest tags (max 6)
   customExpenseCategories?: string[]; // User-defined expense categories persisted across trips
   isDeleted?: boolean;
   deletedAt?: string;
@@ -159,6 +160,7 @@ export interface BarPost {
   likesCount?: number;
   commentsCount?: number;
   favoritesCount?: number;
+  tags?: string[];
   createdAt: string;
 }
 
@@ -307,6 +309,14 @@ export interface LocationData {
   query?: string;
   createdAt?: string;
   creatorId?: string;
+  placeId?: string;
+  lat?: number;
+  lng?: number;
+  rating?: number;
+  userRatingCount?: number;
+  googleMapsUri?: string;
+  photoUrl?: string;
+  types?: string[];
 }
 
 export interface Message {

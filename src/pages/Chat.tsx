@@ -7,6 +7,8 @@ import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { GlassSearchInput } from '../components/GlassSearchInput';
 import { GlassSendButton } from '../components/GlassSendButton';
+import { GoogleMapsLocationModal } from '../components/GoogleMapsLocationModal';
+import { GoogleMapsLocationCard } from '../components/GoogleMapsLocationCard';
 
 export interface TripDeletionInfo {
   isGroupTripEnded: boolean;
@@ -1340,54 +1342,7 @@ function getPlacesSearchResults(query: string, categoryFilter: string = 'all'): 
   return matches;
 }
 
-interface LocationCardProps {
-  location: LocationData;
-  msgTime: string;
-  isMe: boolean;
-}
-
-const LocationCard: React.FC<LocationCardProps> = ({ location, msgTime }) => {
-  const queryStr = location.query || `${location.name} ${location.address || ''}`.trim();
-
-  const handleOpenMaps = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryStr)}`;
-    window.open(url, '_blank');
-  };
-
-  return (
-    <div className="w-[280px] sm:w-[320px] bg-[#ECFDF5] rounded-[18px] p-4 border border-[#10B981]/30 shadow-apple-xs font-sans text-left flex flex-col relative overflow-hidden">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-1.5 text-[#047857] font-bold text-xs bg-white/90 px-2.5 py-1 rounded-full border border-[#10B981]/20 shadow-2xs">
-          <MapPin size={15} className="text-[#10B981] stroke-[2.5]" />
-          <span>📍 Google 地圖地點</span>
-        </div>
-        {msgTime && <span className="text-[10px] text-[#059669] font-medium">{msgTime}</span>}
-      </div>
-
-      <div className="my-1.5">
-        <h4 className="font-extrabold text-base text-apple-gray-900 leading-snug break-words">
-          {location.name}
-        </h4>
-        {location.address && (
-          <p className="text-xs text-apple-gray-500 mt-1 line-clamp-2 leading-relaxed">
-            {location.address}
-          </p>
-        )}
-      </div>
-
-      <button
-        type="button"
-        onClick={handleOpenMaps}
-        className="mt-2 w-full py-2.5 px-3 bg-[#10B981] hover:bg-[#059669] active:scale-98 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
-      >
-        <Navigation size={14} />
-        <span>開啟 Google Maps 導航</span>
-        <ExternalLink size={12} className="opacity-80" />
-      </button>
-    </div>
-  );
-};
+const LocationCard = GoogleMapsLocationCard;
 
 const EmptyArchiveState: React.FC<{ icon: any, label: string }> = ({ icon: Icon, label }) => (
   <div className="py-16 flex flex-col items-center justify-center text-center">
@@ -3047,25 +3002,34 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
     }
   };
 
-  const handleSendLocation = async (name: string, address?: string, customQuery?: string) => {
+  const handleSendLocation = async (locInput: LocationData | string, address?: string, customQuery?: string) => {
     if (!user || !roomId) return;
-    const query = customQuery || `${name} ${address || ''}`.trim();
-    const locObj: LocationData = {
-      id: 'loc_' + Date.now(),
-      name,
-      address: address || '',
-      query,
-      createdAt: new Date().toISOString(),
-      creatorId: user.uid
-    };
+    let locObj: LocationData;
+    if (typeof locInput === 'object') {
+      locObj = {
+        ...locInput,
+        creatorId: user.uid,
+        createdAt: locInput.createdAt || new Date().toISOString()
+      };
+    } else {
+      const query = customQuery || `${locInput} ${address || ''}`.trim();
+      locObj = {
+        id: 'loc_' + Date.now(),
+        name: locInput,
+        address: address || '',
+        query,
+        createdAt: new Date().toISOString(),
+        creatorId: user.uid
+      };
+    }
     try {
       await addDoc(collection(db, 'chatRooms', roomId, 'messages'), {
         senderId: user.uid,
-        text: `📍 地點：${name}`,
+        text: `📍 地點：${locObj.name}`,
         location: locObj,
         createdAt: new Date().toISOString()
       });
-      await updateRoomAndNotifyRecipients(roomId, `📍 地點：${name}`, user.uid);
+      await updateRoomAndNotifyRecipients(roomId, `📍 地點：${locObj.name}`, user.uid);
     } catch (err) {
       console.error("Failed to send location message:", err);
     }
@@ -3962,162 +3926,12 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
         )}
       </AnimatePresence>
 
-      {/* 3. 地點 Modal */}
-      <AnimatePresence>
-        {showLocationModal && (
-          <div className="fixed inset-0 z-[115] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-            <motion.div 
-              initial={{ scale: 0.92, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.92, opacity: 0 }}
-              className="bg-white rounded-3xl max-w-sm sm:max-w-md w-full p-5 shadow-2xl border border-apple-gray-100 relative max-h-[88vh] flex flex-col"
-            >
-              <div className="flex justify-between items-center mb-3">
-                <div className="flex items-center gap-2 text-[#10B981]">
-                  <MapPin size={22} className="stroke-[2.2]" />
-                  <div>
-                    <h3 className="font-bold text-apple-gray-800 text-base leading-tight">搜尋與分享 Google Maps 地點</h3>
-                    <p className="text-[10px] text-apple-gray-400 font-medium">資料庫比對搜尋地標、美食與景點</p>
-                  </div>
-                </div>
-                <button onClick={() => setShowLocationModal(false)} className="text-apple-gray-400 hover:text-apple-gray-600 p-1">
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Search Bar with Clear Button */}
-              <div className="mb-2 flex-shrink-0">
-                <GlassSearchInput
-                  value={locationSearchQuery}
-                  onChange={e => setLocationSearchQuery(e.target.value)}
-                  placeholder="搜尋景點、地標或地址 (如: taipei 101, 東京鐵塔)"
-                  onClear={() => setLocationSearchQuery('')}
-                />
-              </div>
-
-              {/* Category Filter Pills */}
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-2 mb-2 flex-shrink-0">
-                {[
-                  { id: 'all', label: '全部' },
-                  { id: 'landmark', label: '🏢 地標' },
-                  { id: 'food', label: '🍜 美食' },
-                  { id: 'shopping', label: '🛍️ 購物' },
-                  { id: 'transport', label: '🚉 交通' },
-                  { id: 'hotel', label: '🏨 住宿' },
-                  { id: 'culture', label: '⛩️ 名勝' }
-                ].map(cat => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setLocationCategoryFilter(cat.id)}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition-all cursor-pointer ${
-                      locationCategoryFilter === cat.id
-                        ? 'bg-[#10B981] text-white shadow-xs'
-                        : 'bg-apple-gray-100 text-apple-gray-600 hover:bg-apple-gray-200'
-                    }`}
-                  >
-                    {cat.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Search Results List */}
-              {(() => {
-                const searchResults = getPlacesSearchResults(locationSearchQuery, locationCategoryFilter);
-                return (
-                  <div className="flex-1 overflow-y-auto space-y-2 mb-3 pr-0.5 no-scrollbar min-h-[160px]">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-apple-gray-400 mb-1 px-1">
-                      <span>
-                        {locationSearchQuery.trim() ? `🔍 資料庫搜尋結果 (${searchResults.length} 個地點)` : `🔥 熱門推薦地點 (${searchResults.length} 個)`}
-                      </span>
-                      {locationSearchQuery.trim() && (
-                        <span className="text-emerald-600 text-[10px]">點擊選擇並發送</span>
-                      )}
-                    </div>
-
-                    {searchResults.length === 0 ? (
-                      <div className="py-8 text-center text-apple-gray-400 text-xs">
-                        未找到符合的地點，您可以於下方手動輸入自訂地點
-                      </div>
-                    ) : (
-                      searchResults.map((spot) => (
-                        <div
-                          key={spot.id}
-                          className="p-3 rounded-2xl bg-[#F8FAFC] hover:bg-[#F0FDF4] border border-apple-gray-100 hover:border-[#10B981]/40 transition-all text-xs flex items-center justify-between gap-2 group cursor-pointer"
-                          onClick={() => {
-                            handleSendLocation(spot.name, spot.addr, spot.query);
-                            setShowLocationModal(false);
-                          }}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-bold text-apple-gray-900 group-hover:text-[#047857] transition-colors leading-tight">
-                                📍 {spot.name}
-                              </span>
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-[#10B981] border border-emerald-100/60 flex-shrink-0">
-                                {spot.categoryLabel}
-                              </span>
-                            </div>
-                            <div className="text-[11px] text-apple-gray-400 mt-1 truncate">
-                              {spot.addr}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSendLocation(spot.name, spot.addr, spot.query);
-                              setShowLocationModal(false);
-                            }}
-                            className="px-3 py-1.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-white font-bold text-[11px] shadow-2xs transition-transform active:scale-95 flex-shrink-0 cursor-pointer flex items-center gap-1"
-                          >
-                            <span>發送</span>
-                            <Send size={11} />
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* Custom Location Section */}
-              <div className="border-t border-apple-gray-100 pt-2.5 space-y-2 flex-shrink-0">
-                <div className="text-[11px] font-bold text-apple-gray-400">自訂名稱與地址 (若資料庫未包含)：</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <input 
-                    value={customLocationName}
-                    onChange={e => setCustomLocationName(e.target.value)}
-                    placeholder="自訂名稱 (如: 飯店大廳)"
-                    className="w-full h-8.5 bg-apple-gray-50 rounded-xl px-2.5 text-xs focus:outline-none focus:bg-white border border-transparent focus:border-[#10B981]"
-                  />
-                  <input 
-                    value={customLocationAddress}
-                    onChange={e => setCustomLocationAddress(e.target.value)}
-                    placeholder="詳細地址 (可選)"
-                    className="w-full h-8.5 bg-apple-gray-50 rounded-xl px-2.5 text-xs focus:outline-none focus:bg-white border border-transparent focus:border-[#10B981]"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (customLocationName.trim()) {
-                      handleSendLocation(customLocationName.trim(), customLocationAddress.trim());
-                      setCustomLocationName('');
-                      setCustomLocationAddress('');
-                      setShowLocationModal(false);
-                    }
-                  }}
-                  disabled={!customLocationName.trim()}
-                  className="w-full h-9 rounded-xl bg-apple-gray-800 text-white font-bold text-xs hover:bg-black disabled:opacity-40 transition-colors shadow-xs cursor-pointer"
-                >
-                  發送自訂地點卡片
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {/* 3. Google Maps 地點 Modal */}
+      <GoogleMapsLocationModal
+        isOpen={showLocationModal}
+        onClose={() => setShowLocationModal(false)}
+        onSendLocation={(locData) => handleSendLocation(locData)}
+      />
 
       {/* 4. 行程 Modal */}
       <AnimatePresence>

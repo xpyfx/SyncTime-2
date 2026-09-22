@@ -16,6 +16,9 @@ import { TripDetailView } from './pages/TripDetailView';
 import { UserProfileView } from './pages/UserProfileView';
 import { UserPostsView } from './pages/UserPostsView';
 import { getRoomUnreadCount, ChatRoom } from './types';
+import { APIProvider } from '@vis.gl/react-google-maps';
+
+const GOOGLE_MAPS_API_KEY = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyAoS-vpCohYDF996T98anRdWwZyrrYHil8').trim();
 
 const AppContent = () => {
   const { user, loading, login, loginWithApple, authModal, closeAuthModal } = useAuth();
@@ -29,6 +32,7 @@ const AppContent = () => {
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [viewingUserPostsId, setViewingUserPostsId] = useState<string | null>(null);
+  const [travelBarTab, setTravelBarTab] = useState<'hot' | 'recommended' | 'friends'>('hot');
 
   // Listen for unread chat messages & non-chat notifications
   useEffect(() => {
@@ -185,8 +189,21 @@ const AppContent = () => {
 
   const renderPage = () => {
     switch (activeTab) {
-      case 'home': return <HomeView onTripClick={setSelectedTripId} onAvatarClick={setSelectedUserId} onAddClick={() => setActiveTab('add')} />;
-      case 'bar': return <TravelBarView onChatClick={handleOpenChat} onAvatarClick={setSelectedUserId} />;
+      case 'home': return (
+        <HomeView 
+          onTripClick={setSelectedTripId} 
+          onAvatarClick={setSelectedUserId} 
+          onAddClick={() => setActiveTab('add')} 
+        />
+      );
+      case 'bar': return (
+        <TravelBarView 
+          key={travelBarTab}
+          initialTab={travelBarTab}
+          onChatClick={handleOpenChat} 
+          onAvatarClick={setSelectedUserId} 
+        />
+      );
       case 'add': return <CreateTripView onCancel={() => setActiveTab('home')} />;
       case 'chat': return (
         <ChatPage 
@@ -213,7 +230,13 @@ const AppContent = () => {
           onUserClick={setSelectedUserId}
         />
       );
-      default: return <HomeView onTripClick={setSelectedTripId} onAvatarClick={setSelectedUserId} onAddClick={() => setActiveTab('add')} />;
+      default: return (
+        <HomeView 
+          onTripClick={setSelectedTripId} 
+          onAvatarClick={setSelectedUserId} 
+          onAddClick={() => setActiveTab('add')} 
+        />
+      );
     }
   };
 
@@ -295,8 +318,14 @@ const AppContent = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <APIProvider 
+      apiKey={GOOGLE_MAPS_API_KEY}
+      solutionChannel="gmp_git_agentskills_v1"
+      libraries={['places', 'marker', 'geocoding', 'geometry']}
+    >
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </APIProvider>
   );
 }

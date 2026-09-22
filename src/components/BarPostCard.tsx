@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ThumbsUp, Bookmark, MessageCircle, Send, MoreHorizontal, Trash2, Edit2, ShieldAlert, ArrowUp } from 'lucide-react';
+import { ThumbsUp, Bookmark, MessageCircle, Send, MoreHorizontal, Trash2, Edit2, ShieldAlert, ArrowUp, Check, Flame, Sparkles, Tag } from 'lucide-react';
 import { BarPost, UserProfile } from '../types';
 import { GlassSendButton } from './GlassSendButton';
 import { motion, AnimatePresence } from 'motion/react';
@@ -15,6 +15,10 @@ interface BarPostCardProps {
   onChatClick?: (roomId: string) => void;
   onAvatarClick?: (uid: string) => void;
   onReport?: (post: BarPost) => void;
+  isReported?: boolean;
+  rank?: number;
+  recommendationReason?: string;
+  matchedTags?: string[];
 }
 
 interface BarComment {
@@ -24,11 +28,23 @@ interface BarComment {
   createdAt: string;
 }
 
-export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatClick, onAvatarClick, onReport }) => {
+export const BarPostCard: React.FC<BarPostCardProps> = ({ 
+  post, 
+  author, 
+  onChatClick, 
+  onAvatarClick, 
+  onReport,
+  isReported: propIsReported = false,
+  rank,
+  recommendationReason,
+  matchedTags
+}) => {
   const { user } = useAuth();
   const [showMenu, setShowMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isReporting, setIsReporting] = useState(false);
+  const [localReported, setLocalReported] = useState(false);
+  const isReported = propIsReported || localReported;
   const [editedContent, setEditedContent] = useState(post.content);
   const [isLiked, setIsLiked] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
@@ -270,6 +286,20 @@ export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatCl
             </div>
             
             <div className="flex items-center gap-2">
+              {rank !== undefined && rank < 10 && (
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                  rank === 0
+                    ? 'bg-orange-50 text-orange-600 border border-orange-200/80 shadow-2xs'
+                    : rank === 1
+                    ? 'bg-amber-50 text-amber-700 border border-amber-200/80'
+                    : rank === 2
+                    ? 'bg-rose-50 text-rose-600 border border-rose-200/80'
+                    : 'bg-apple-gray-100 text-apple-gray-600'
+                }`}>
+                  <Flame size={10} className={rank === 0 ? 'fill-orange-500 text-orange-500' : 'text-apple-gray-400'} />
+                  <span>TOP {rank + 1}</span>
+                </span>
+              )}
               <span className="text-[10px] text-apple-gray-300">
                 {post.createdAt ? (
                   typeof post.createdAt === 'string' 
@@ -277,6 +307,29 @@ export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatCl
                     : (post.createdAt.toDate ? post.createdAt.toDate().toLocaleDateString() : '剛剛')
                 ) : '剛剛'}
               </span>
+
+              <AnimatePresence>
+                {isReported && (
+                  <motion.div
+                    key="reported-badge"
+                    initial={{ opacity: 0, scale: 0.7, x: 4 }}
+                    animate={{ opacity: 1, scale: 1, x: 0 }}
+                    exit={{ opacity: 0, scale: 0.7 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 22 }}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200/60 text-[10px] font-bold"
+                  >
+                    <motion.div
+                      initial={{ scale: 0, rotate: -45 }}
+                      animate={{ scale: [0, 1.3, 1], rotate: 0 }}
+                      transition={{ type: "spring", stiffness: 600, damping: 18, delay: 0.05 }}
+                    >
+                      <Check size={10} strokeWidth={3} />
+                    </motion.div>
+                    <span>已檢舉</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {user && (
               <div className="relative">
                 <button 
@@ -313,9 +366,35 @@ export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatCl
                         ) : (
                           <button 
                             onClick={handleReport}
-                            className="w-full flex items-center gap-2 px-4 py-3 text-xs font-bold text-red-500 active:bg-apple-gray-50 transition-colors"
+                            disabled={isReported}
+                            className={`w-full flex items-center gap-2 px-4 py-3 text-xs font-bold transition-all ${
+                              isReported 
+                                ? 'text-emerald-600 bg-emerald-50/50 cursor-default' 
+                                : 'text-red-500 active:bg-apple-gray-50'
+                            }`}
                           >
-                            <ShieldAlert size={14} /> 檢舉
+                            {isReported ? (
+                              <motion.div 
+                                className="flex items-center gap-1.5"
+                                initial={{ scale: 0.85, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ type: "spring", stiffness: 450, damping: 20 }}
+                              >
+                                <motion.div
+                                  initial={{ scale: 0, rotate: -45 }}
+                                  animate={{ scale: [0, 1.35, 1], rotate: 0 }}
+                                  transition={{ type: "spring", stiffness: 500, damping: 18, delay: 0.05 }}
+                                  className="w-4 h-4 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600"
+                                >
+                                  <Check size={11} strokeWidth={3} />
+                                </motion.div>
+                                <span>已檢舉</span>
+                              </motion.div>
+                            ) : (
+                              <>
+                                <ShieldAlert size={14} /> 檢舉
+                              </>
+                            )}
                           </button>
                         )}
                       </motion.div>
@@ -326,6 +405,21 @@ export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatCl
             )}
             </div>
           </div>
+
+          {/* Recommendation Reason & Tags */}
+          {recommendationReason && (
+            <div className="flex items-center gap-1.5 flex-wrap pt-0.5 pb-1">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#E6F5FF] text-[#035096] text-[11px] font-bold border border-[#035096]/15 shadow-apple-xs">
+                <Sparkles size={12} className="text-[#035096] fill-[#035096]/20" />
+                <span>{recommendationReason}</span>
+              </span>
+              {matchedTags && matchedTags.length > 0 && matchedTags.map(tag => (
+                <span key={tag} className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-apple-gray-100 text-apple-gray-600 border border-apple-gray-200/60">
+                  #{tag}
+                </span>
+              ))}
+            </div>
+          )}
 
           {isEditing ? (
             <div className="space-y-2">
@@ -341,9 +435,20 @@ export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatCl
               </div>
             </div>
           ) : (
-            <p className="text-[15px] leading-relaxed font-normal text-apple-gray-600 whitespace-pre-wrap">
-              {post.content}
-            </p>
+            <div className="space-y-1.5">
+              <p className="text-[15px] leading-relaxed font-normal text-apple-gray-600 whitespace-pre-wrap">
+                {post.content}
+              </p>
+              {Array.isArray(post.tags) && post.tags.length > 0 && !recommendationReason && (
+                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                  {post.tags.map(t => (
+                    <span key={t} className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-apple-gray-100/90 text-apple-gray-500">
+                      #{t}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           {post.imageUrl && (
@@ -462,6 +567,9 @@ export const BarPostCard: React.FC<BarPostCardProps> = ({ post, author, onChatCl
           targetType="bar_post"
           targetId={post.id}
           targetTitle={`見聞貼文: ${post.content.slice(0, 30)}${post.content.length > 30 ? '...' : ''} (由 ${author?.displayName || '旅客'} 發布)`}
+          onSuccess={() => {
+            setLocalReported(true);
+          }}
         />
       )}
     </div>

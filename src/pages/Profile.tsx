@@ -36,8 +36,13 @@ import {
   MoreHorizontal,
   Ban,
   FileWarning,
-  UserX
+  UserX,
+  Bot,
+  Plus
 } from 'lucide-react';
+import { UserTagsSelectModal } from '../components/UserTagsSelectModal';
+import { getTagItem, DEFAULT_USER_TAGS } from '../data/userInterestTags';
+import { AppAIAssistantModal } from '../components/AppAIAssistantModal';
 import { getOrCreateChatRoom } from '../lib/chatUtils';
 import { motion, AnimatePresence } from 'motion/react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
@@ -266,6 +271,7 @@ export const ProfilePage: React.FC<{
   const [firendsList, setFriendsList] = useState<UserProfile[]>([]);
   const [showBlocklist, setShowBlocklist] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
@@ -372,6 +378,7 @@ export const ProfilePage: React.FC<{
   const [stampRegionFilter, setStampRegionFilter] = useState<'all' | 'unlocked' | 'asia' | 'europe' | 'americas' | 'oceania' | 'middle_east' | 'africa'>('all');
   const [stampSearchQuery, setStampSearchQuery] = useState('');
   const [selectedStamp, setSelectedStamp] = useState<CountryStamp | null>(null);
+  const [showTagsSelectModal, setShowTagsSelectModal] = useState(false);
 
   // Map of unlocked stamps for the profile user based on trips and profile info
   const userStampMap = React.useMemo(() => {
@@ -887,6 +894,24 @@ export const ProfilePage: React.FC<{
     } catch (e) {
       console.error(e);
       alert('更新失敗');
+    }
+  };
+
+  const handleSaveInterestTags = async (newTags: string[]) => {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        interestTags: newTags
+      });
+      if (profile) {
+        setProfile({
+          ...profile,
+          interestTags: newTags
+        });
+      }
+    } catch (e) {
+      console.error('更新標籤失敗:', e);
+      throw e;
     }
   };
 
@@ -1587,7 +1612,33 @@ export const ProfilePage: React.FC<{
             </div>
             
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-[max(env(safe-area-inset-bottom,0px),32px)] bg-apple-gray-50">
+              {/* SyncTime Dedicated AI Assistant Card */}
+              <div className="bg-gradient-to-br from-emerald-50 via-teal-50/40 to-white rounded-2xl p-4 border border-emerald-200/80 shadow-2xs">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                      <Bot size={22} className="stroke-[2.2]" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-bold text-apple-gray-900 leading-tight">SyncTime 專屬 AI 小助手</span>
+                        <span className="px-1.5 py-0.5 rounded-md bg-emerald-500 text-white font-bold text-[9px]">官方</span>
+                      </div>
+                      <p className="text-[11px] text-apple-gray-500 mt-0.5 font-medium">解答功能操作、旅伴篩選、聊天室工具與疑難排解</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAIAssistant(true)}
+                    className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-2xs transition-all active:scale-95 cursor-pointer shrink-0"
+                  >
+                    立即諮詢
+                  </button>
+                </div>
+              </div>
+
               <div className="bg-white rounded-2xl overflow-hidden shadow-apple-sm border border-apple-gray-100">
+                <ProfileItem icon={Bot} label="SyncTime 專屬 AI 小助手" onClick={() => setShowAIAssistant(true)} />
                 <ProfileItem icon={Edit2} label="修改護照資料" onClick={() => {
                   setShowEditPassport(true);
                   setShowSettings(false);
@@ -2569,25 +2620,79 @@ export const ProfilePage: React.FC<{
                     </p>
                   </div>
 
-                  {/* Video-Style Tags / Interest Pills */}
-                  <div className="mt-5 grid grid-cols-3 gap-2">
-                    {[
-                      { icon: '🏛️', label: 'History' },
-                      { icon: '🍸', label: 'Nightlife' },
-                      { icon: '🍲', label: 'Street Food' },
-                      { icon: '💻', label: 'Technology' },
-                      { icon: '🎶', label: 'Music' },
-                      { icon: '🛍️', label: 'Shopping' }
-                    ].map((item, idx) => (
-                      <div 
-                        key={idx}
-                        className="px-2 py-2.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.12] border border-white/10 text-xs font-semibold text-white/90 flex items-center justify-center gap-1.5 backdrop-blur-md shadow-xs select-none transition-all"
-                      >
-                        <span className="text-sm leading-none">{item.icon}</span>
-                        <span className="truncate text-[11px] sm:text-xs">{item.label}</span>
+                  {/* User Selected Interest Tags / Badges */}
+                  {(() => {
+                    const currentTags = profile?.interestTags;
+                    const hasSelectedTags = Array.isArray(currentTags) && currentTags.length > 0;
+                    const displayTags = (hasSelectedTags ? currentTags : (isOwnProfile ? DEFAULT_USER_TAGS : [])).slice(0, 6);
+
+                    return (
+                      <div className="mt-5">
+                        <div className="flex items-center justify-between mb-2 px-1">
+                          <span className="text-[11px] font-bold text-white/50 tracking-wider flex items-center gap-1.5">
+                            <span>個人標籤</span>
+                            {displayTags.length > 0 && (
+                              <span className="text-[10px] text-white/40">({displayTags.length}/6)</span>
+                            )}
+                          </span>
+                          {isOwnProfile && (
+                            <button
+                              type="button"
+                              onClick={() => setShowTagsSelectModal(true)}
+                              className="text-[11px] font-bold text-[#0099FF] hover:text-[#0099FF]/80 flex items-center gap-1 transition-colors cursor-pointer py-0.5 px-2 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] active:scale-95"
+                              title="編輯個人標籤（最多 6 個）"
+                            >
+                              <Edit2 size={11} />
+                              <span>{hasSelectedTags ? '編輯標籤' : '自訂標籤'}</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {displayTags.length > 0 ? (
+                          <div className="grid grid-cols-3 gap-2">
+                            {displayTags.map((tagName, idx) => {
+                              const tagItem = getTagItem(tagName);
+                              const Icon = tagItem.icon;
+                              return (
+                                <div 
+                                  key={`${tagName}-${idx}`}
+                                  onClick={() => {
+                                    if (isOwnProfile) setShowTagsSelectModal(true);
+                                  }}
+                                  className={`px-2 py-2.5 rounded-xl border text-xs font-semibold text-white flex items-center justify-center gap-1.5 backdrop-blur-md shadow-xs select-none transition-all ${
+                                    isOwnProfile ? 'cursor-pointer hover:scale-[1.02] active:scale-95 hover:border-white/40' : ''
+                                  }`}
+                                  style={{
+                                    backgroundColor: `${tagItem.color}80`,
+                                    borderColor: `${tagItem.color}cc`
+                                  }}
+                                  title={isOwnProfile ? `點擊編輯標籤（分類：${tagItem.categoryName}）` : `${tagItem.categoryName}：${tagName}`}
+                                >
+                                  <Icon size={14} className="shrink-0 text-white/90" />
+                                  <span className="truncate text-[11px] sm:text-xs font-bold">{tagName}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          isOwnProfile ? (
+                            <button
+                              type="button"
+                              onClick={() => setShowTagsSelectModal(true)}
+                              className="w-full py-3.5 px-3 rounded-xl border border-dashed border-white/20 bg-white/[0.04] hover:bg-white/[0.08] text-white/70 hover:text-white flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer active:scale-98"
+                            >
+                              <Plus size={14} className="text-[#0099FF]" />
+                              <span>點擊選擇個人熱門標籤（最多 6 個）</span>
+                            </button>
+                          ) : (
+                            <div className="py-2.5 text-center text-xs text-white/35 italic">
+                              尚未選擇個人標籤
+                            </div>
+                          )
+                        )}
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })()}
 
                   {/* Bottom Stats & Info Row (Video Style) */}
                   <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-2 gap-2.5">
@@ -3976,6 +4081,20 @@ export const ProfilePage: React.FC<{
         targetType={reportModalConfig.targetType}
         targetId={reportModalConfig.targetId}
         targetTitle={reportModalConfig.targetTitle}
+      />
+
+      {/* SyncTime AI Assistant Modal */}
+      <AppAIAssistantModal
+        isOpen={showAIAssistant}
+        onClose={() => setShowAIAssistant(false)}
+      />
+
+      {/* User Interest Tags Select Modal */}
+      <UserTagsSelectModal
+        isOpen={showTagsSelectModal}
+        onClose={() => setShowTagsSelectModal(false)}
+        currentTags={profile?.interestTags ?? DEFAULT_USER_TAGS}
+        onSave={handleSaveInterestTags}
       />
     </div>
   );
