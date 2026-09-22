@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
@@ -56,16 +57,18 @@ const SYSTEM_INSTRUCTION = `你是由 SyncTime (共時) 官方團隊精心開發
    - 遇到操作問題時，以清晰的步驟列點指引（例如：點擊右上角「...」> 選擇「...」）。
    - 主動關心用戶是否解決了在 SyncTime 上的疑惑。`;
 
+let currentApiKey = '';
 let aiClient: GoogleGenAI | null = null;
 
 function getAIClient(): GoogleGenAI {
-  if (!aiClient) {
-    const key = process.env.GEMINI_API_KEY;
+  const key = process.env.GEMINI_API_KEY || '';
+  if (!aiClient || currentApiKey !== key) {
+    currentApiKey = key;
     if (!key) {
       console.warn('GEMINI_API_KEY environment variable is not defined.');
     }
     aiClient = new GoogleGenAI({
-      apiKey: key || '',
+      apiKey: key,
       httpOptions: {
         headers: {
           'User-Agent': 'aistudio-build',
@@ -306,7 +309,9 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = fs.existsSync(path.join(process.cwd(), 'dist'))
+      ? path.join(process.cwd(), 'dist')
+      : path.join(process.cwd(), 'build');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));

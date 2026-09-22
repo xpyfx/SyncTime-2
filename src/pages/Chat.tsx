@@ -3022,14 +3022,22 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
         creatorId: user.uid
       };
     }
+    // Sanitize location object to remove any undefined fields before writing to Firestore
+    const sanitizedLocation: Record<string, any> = {};
+    Object.entries(locObj).forEach(([k, v]) => {
+      if (v !== undefined) {
+        sanitizedLocation[k] = v;
+      }
+    });
+
     try {
       await addDoc(collection(db, 'chatRooms', roomId, 'messages'), {
         senderId: user.uid,
-        text: `📍 地點：${locObj.name}`,
-        location: locObj,
+        text: `📍 地點：${locObj.name || '地點資訊'}`,
+        location: sanitizedLocation,
         createdAt: new Date().toISOString()
       });
-      await updateRoomAndNotifyRecipients(roomId, `📍 地點：${locObj.name}`, user.uid);
+      await updateRoomAndNotifyRecipients(roomId, `📍 地點：${locObj.name || '地點資訊'}`, user.uid);
     } catch (err) {
       console.error("Failed to send location message:", err);
     }

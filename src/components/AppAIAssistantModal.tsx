@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Bot, Sparkles, Send, X, RotateCcw, HelpCircle, ShieldCheck, ArrowDown, User, AlertCircle } from 'lucide-react';
+import { getSyncTimeKnowledgeResponse } from '../services/knowledgeEngine';
 
 interface ChatMessage {
   id: string;
@@ -109,29 +110,45 @@ export const AppAIAssistantModal: React.FC<AppAIAssistantModalProps> = ({ isOpen
         text: m.text
       }));
 
-      const res = await fetch('/api/chat/assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: payloadMessages })
-      });
+      let replyText = '';
+      try {
+        const res = await fetch('/api/chat/assistant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: payloadMessages })
+        });
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData?.details || errData?.error || `HTTP ${res.status}`);
+        if (res.ok) {
+          const data = await res.json();
+          replyText = data.reply || '';
+        }
+      } catch (networkErr) {
+        console.warn('Backend assistant API unavailable, utilizing SyncTime Knowledge Engine:', networkErr);
       }
 
-      const data = await res.json();
+      // If backend was unavailable or returned empty, use the SyncTime Knowledge Engine
+      if (!replyText) {
+        replyText = getSyncTimeKnowledgeResponse(text);
+      }
+
       const modelReply: ChatMessage = {
         id: 'bot_' + Date.now(),
         role: 'model',
-        text: data.reply || '很抱歉，我暫時無法回答這個問題。',
+        text: replyText,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
       setMessages(prev => [...prev, modelReply]);
     } catch (err: any) {
       console.error('AI Assistant response error:', err);
-      setErrorMsg('連線異常或無法取得回覆，請檢查網路後點擊重試。');
+      // Even in rare exceptions, provide knowledge engine answer
+      const fallbackReply: ChatMessage = {
+        id: 'bot_' + Date.now(),
+        role: 'model',
+        text: getSyncTimeKnowledgeResponse(text),
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages(prev => [...prev, fallbackReply]);
     } finally {
       setIsLoading(false);
     }

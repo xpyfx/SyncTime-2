@@ -376,17 +376,27 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
   const handleConfirmSend = (place: PlaceItem) => {
     const locData: LocationData = {
       id: 'loc_' + Date.now(),
-      name: place.name,
-      address: place.address,
-      query: `${place.name} ${place.address}`.trim(),
-      placeId: place.id,
-      lat: place.lat,
-      lng: place.lng,
-      rating: place.rating,
-      userRatingCount: place.userRatingCount,
-      googleMapsUri: place.googleMapsUri || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name)}`,
+      name: place.name || '地點資訊',
+      address: place.address || '',
+      query: `${place.name || ''} ${place.address || ''}`.trim(),
+      placeId: place.id || '',
+      googleMapsUri: place.googleMapsUri || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name || place.address || '地點')}`,
       createdAt: new Date().toISOString()
     };
+
+    if (typeof place.lat === 'number' && !isNaN(place.lat)) {
+      locData.lat = place.lat;
+    }
+    if (typeof place.lng === 'number' && !isNaN(place.lng)) {
+      locData.lng = place.lng;
+    }
+    if (typeof place.rating === 'number' && !isNaN(place.rating)) {
+      locData.rating = place.rating;
+    }
+    if (typeof place.userRatingCount === 'number' && !isNaN(place.userRatingCount)) {
+      locData.userRatingCount = place.userRatingCount;
+    }
+
     onSendLocation(locData);
     onClose();
   };
