@@ -5,7 +5,9 @@ import {
   Search,
   X,
   Send,
-  ExternalLink
+  ExternalLink,
+  Loader2,
+  Check
 } from 'lucide-react';
 import { LocationData } from '../types';
 
@@ -15,58 +17,158 @@ interface GoogleMapsLocationModalProps {
   onSendLocation: (location: LocationData) => void;
 }
 
+interface PhotonPlace {
+  id: string;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+}
+
 export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = ({
   isOpen,
   onClose,
   onSendLocation
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedQuery, setSelectedQuery] = useState('');
+  const [results, setResults] = useState<PhotonPlace[]>([]);
+  const [selectedPlace, setSelectedPlace] = useState<PhotonPlace | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
 
   if (!isOpen) return null;
 
-  const buildGoogleMapsUrl = (query: string) => {
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-      query
-    )}`;
+  const buildAddress = (properties: any) => {
+    const streetLine = [
+      properties.housenumber,
+      properties.street
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    const parts = [
+      streetLine,
+      properties.district,
+      properties.locality,
+      properties.city,
+      properties.county,
+      properties.state,
+      properties.postcode,
+      properties.country
+    ].filter(Boolean);
+
+    // 避免重複城市 / 州 / 國家名稱
+    return [...new Set(parts)].join(', ');
   };
 
-  const handleSearch = () => {
+  const buildGoogleMapsUrl = (lat: number, lng: number) => {
+    // 直接開啟選定地點的實際座標，
+    // 不再只是把使用者輸入的文字塞到 Google Maps 搜尋框
+    return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+  };
+
+  const handleSearch = async () => {
     const query = searchQuery.trim();
 
     if (!query) return;
 
-    setSelectedQuery(query);
+    setIsSearching(true);
+    setSearchError('');
+    setSelectedPlace(null);
+
+    try {
+      const url =
+        `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5`;
+
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`Photon request failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      const places: PhotonPlace[] = (data.features || [])
+        .map((feature: any, index: number) => {
+          const properties = feature.properties || {};
+          const coordinates = feature.geometry?.coordinates || [];
+
+          const lng = Number(coordinates[0]);
+          const lat = Number(coordinates[1]);
+
+          const name =
+            properties.name ||
+            properties.street ||
+            properties.city ||
+            query;
+
+          const address = buildAddress(properties);
+
+          return {
+            id:
+              `${properties.osm_type || 'osm'}_` +
+              `${properties.osm_id || index}`,
+            name,
+            address,
+            lat,
+            lng
+          };
+        })
+        .filter(
+          (place: PhotonPlace) =>
+            Number.isFinite(place.lat) &&
+            Number.isFinite(place.lng)
+        );
+
+      setResults(places);
+
+      if (places.length === 0) {
+        setSearchError('找不到符合的地點，請嘗試輸入更完整的名稱。');
+      }
+    } catch (error) {
+      console.error('Photon place search failed:', error);
+      setResults([]);
+      setSearchError('目前無法取得地點搜尋結果，請稍後再試。');
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const handleSend = () => {
-    const query = (selectedQuery || searchQuery).trim();
+    if (!selectedPlace) return;
 
-    if (!query) return;
+    const googleMapsUri = buildGoogleMapsUrl(
+      selectedPlace.lat,
+      selectedPlace.lng
+    );
 
     const location: LocationData = {
       id: `loc_${Date.now()}`,
-      name: query,
-      query,
-      googleMapsUri: buildGoogleMapsUrl(query),
+      name: selectedPlace.name,
+      address: selectedPlace.address,
+      query: `${selectedPlace.name} ${selectedPlace.address}`.trim(),
+      lat: selectedPlace.lat,
+      lng: selectedPlace.lng,
+      googleMapsUri,
       createdAt: new Date().toISOString()
     };
 
     onSendLocation(location);
 
+    resetAndClose();
+  };
+
+  const resetAndClose = () => {
     setSearchQuery('');
-    setSelectedQuery('');
+    setResults([]);
+    setSelectedPlace(null);
+    setSearchError('');
+    setIsSearching(false);
     onClose();
   };
 
-  const handleClose = () => {
-    setSearchQuery('');
-    setSelectedQuery('');
-    onClose();
-  };
-
-  const mapsUrl = selectedQuery
-    ? buildGoogleMapsUrl(selectedQuery)
+  const selectedMapsUrl = selectedPlace
+    ? buildGoogleMapsUrl(selectedPlace.lat, selectedPlace.lng)
     : '';
 
   return (
@@ -86,14 +188,17 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
         className="
           bg-white
           rounded-3xl
-          max-w-sm
+          max-w-sm sm:max-w-md
           w-full
           p-5
           shadow-2xl
           border border-apple-gray-100
+          max-h-[85vh]
+          flex flex-col
         "
       >
-        <div className="flex items-center justify-between mb-4">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4 shrink-0">
           <div className="flex items-center gap-2">
             <div
               className="
@@ -113,14 +218,14 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
               </h3>
 
               <p className="text-[11px] text-apple-gray-400 mt-0.5">
-                輸入地點名稱並分享至聊天室
+                搜尋並選擇要分享的地點
               </p>
             </div>
           </div>
 
           <button
             type="button"
-            onClick={handleClose}
+            onClick={resetAndClose}
             className="
               w-8 h-8
               rounded-full
@@ -133,12 +238,13 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
           </button>
         </div>
 
+        {/* Search */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             handleSearch();
           }}
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 shrink-0"
         >
           <div
             className="
@@ -160,12 +266,9 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
-
-                if (selectedQuery) {
-                  setSelectedQuery('');
-                }
+                setSelectedPlace(null);
               }}
-              placeholder="搜尋地點，例如：台北 101"
+              placeholder="例如：台北 101、東京鐵塔"
               className="
                 flex-1
                 bg-transparent
@@ -180,7 +283,7 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
 
           <button
             type="submit"
-            disabled={!searchQuery.trim()}
+            disabled={!searchQuery.trim() || isSearching}
             className="
               h-11
               px-4
@@ -190,44 +293,124 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
               text-xs
               font-bold
               disabled:opacity-40
+              flex items-center justify-center
+              min-w-[58px]
             "
           >
-            搜尋
+            {isSearching ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              '搜尋'
+            )}
           </button>
         </form>
 
-        {selectedQuery && (
+        {/* Search Error */}
+        {searchError && (
+          <div className="mt-3 text-xs text-red-500 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+            {searchError}
+          </div>
+        )}
+
+        {/* Candidate Results */}
+        {results.length > 0 && (
+          <div className="mt-4 overflow-y-auto no-scrollbar flex-1 min-h-0">
+            <div className="text-[11px] font-bold text-apple-gray-400 mb-2 px-1">
+              搜尋結果
+            </div>
+
+            <div className="space-y-2">
+              {results.map((place) => {
+                const isSelected = selectedPlace?.id === place.id;
+
+                return (
+                  <button
+                    key={place.id}
+                    type="button"
+                    onClick={() => setSelectedPlace(place)}
+                    className={`
+                      w-full
+                      text-left
+                      p-3
+                      rounded-2xl
+                      border
+                      transition-all
+                      flex items-start
+                      gap-3
+                      ${
+                        isSelected
+                          ? 'bg-emerald-50 border-emerald-400 ring-1 ring-emerald-300'
+                          : 'bg-white border-apple-gray-200 hover:bg-apple-gray-50'
+                      }
+                    `}
+                  >
+                    <div
+                      className={`
+                        w-8 h-8
+                        rounded-xl
+                        flex items-center justify-center
+                        shrink-0
+                        ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-emerald-50 text-emerald-600'
+                        }
+                      `}
+                    >
+                      {isSelected ? (
+                        <Check size={16} />
+                      ) : (
+                        <MapPin size={16} />
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-sm text-apple-gray-900 leading-snug">
+                        {place.name}
+                      </div>
+
+                      {place.address && (
+                        <div className="text-[11px] text-apple-gray-500 mt-1 leading-relaxed">
+                          {place.address}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Selected Place Actions */}
+        {selectedPlace && (
           <motion.div
-            initial={{ opacity: 0, y: 8 }}
+            initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             className="
               mt-4
-              p-4
-              rounded-2xl
-              bg-emerald-50
-              border border-emerald-200
+              pt-4
+              border-t border-apple-gray-100
+              shrink-0
             "
           >
-            <div className="flex items-start gap-2.5">
-              <MapPin
-                size={18}
-                className="text-emerald-600 mt-0.5 shrink-0"
-              />
-
-              <div className="flex-1 min-w-0">
-                <div className="font-bold text-sm text-apple-gray-900">
-                  {selectedQuery}
-                </div>
-
-                <div className="text-[11px] text-apple-gray-500 mt-1">
-                  傳送後，聊天室成員可直接前往 Google Maps 查看詳細資訊。
-                </div>
-              </div>
+            <div className="text-[11px] text-apple-gray-400 mb-2">
+              已選擇
             </div>
 
-            <div className="flex gap-2 mt-4">
+            <div className="font-bold text-sm text-apple-gray-900">
+              📍 {selectedPlace.name}
+            </div>
+
+            {selectedPlace.address && (
+              <div className="text-[11px] text-apple-gray-500 mt-1">
+                {selectedPlace.address}
+              </div>
+            )}
+
+            <div className="flex gap-2 mt-3">
               <a
-                href={mapsUrl}
+                href={selectedMapsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="
@@ -239,11 +422,12 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
                   text-emerald-700
                   text-xs
                   font-bold
-                  flex items-center justify-center gap-1.5
+                  flex items-center justify-center
+                  gap-1.5
                 "
               >
-                <ExternalLink size={14} />
-                Google Maps 查看
+                <ExternalLink size={13} />
+                先查看
               </a>
 
               <button
@@ -257,21 +441,28 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
                   text-white
                   text-xs
                   font-bold
-                  flex items-center justify-center gap-1.5
+                  flex items-center justify-center
+                  gap-1.5
                 "
               >
-                <Send size={14} />
-                發送
+                <Send size={13} />
+                發送地點
               </button>
             </div>
           </motion.div>
         )}
 
-        {!selectedQuery && (
-          <p className="mt-4 text-[10px] text-center text-apple-gray-400">
-            不需在 App 內載入 Google 地圖，詳細地點資訊將於 Google Maps 查看
-          </p>
-        )}
+        {/* Attribution */}
+        <div className="mt-3 text-center shrink-0">
+          <a
+            href="https://www.openstreetmap.org/copyright"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[9px] text-apple-gray-300 hover:text-apple-gray-500"
+          >
+            Search data © OpenStreetMap contributors · Photon
+          </a>
+        </div>
       </motion.div>
     </div>
   );
