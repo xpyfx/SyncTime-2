@@ -16,9 +16,7 @@ import { TripDetailView } from './pages/TripDetailView';
 import { UserProfileView } from './pages/UserProfileView';
 import { UserPostsView } from './pages/UserPostsView';
 import { getRoomUnreadCount, ChatRoom } from './types';
-import { APIProvider } from '@vis.gl/react-google-maps';
 
-const GOOGLE_MAPS_API_KEY = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyAoS-vpCohYDF996T98anRdWwZyrrYHil8').trim();
 
 const AppContent = () => {
   const { user, loading, login, loginWithApple, authModal, closeAuthModal } = useAuth();
@@ -318,14 +316,8 @@ const AppContent = () => {
 
 export default function App() {
   return (
-    <APIProvider 
-      apiKey={GOOGLE_MAPS_API_KEY}
-      solutionChannel="gmp_git_agentskills_v1"
-      libraries={['places', 'marker', 'geocoding', 'geometry']}
-    >
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </APIProvider>
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
