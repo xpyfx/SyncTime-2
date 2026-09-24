@@ -265,6 +265,8 @@ async function startServer() {
       }));
 
       let replyText = '';
+      let source: 'gemini' | 'fallback' = 'gemini';
+      let geminiError = '';
       try {
         const response = await ai.models.generateContent({
           model: 'gemini-3.8-flash',
@@ -277,13 +279,19 @@ async function startServer() {
         });
         replyText = response.text || '';
       } catch (genAiError: any) {
-        console.warn('Gemini generateContent call encountered an issue, invoking SyncTime Knowledge Engine fallback:', genAiError?.message);
-        
+        console.warn(
+          'Gemini generateContent call encountered an issue, invoking SyncTime Knowledge Engine fallback:',
+          genAiError?.message
+        );
+
+        source = 'fallback';
+        geminiError = genAiError?.message || String(genAiError);
+
         const lastUserMsg = messages
           .filter((m: any) => m.role === 'user' || !m.role)
           .map((m: any) => String(m.text || m.content || ''))
           .pop() || '';
-          
+
         replyText = getSyncTimeKnowledgeResponse(lastUserMsg);
       }
 
@@ -291,7 +299,11 @@ async function startServer() {
         replyText = '很抱歉，我目前暫時無法取得回覆，請稍後再試。';
       }
 
-      return res.json({ reply: replyText });
+      return res.json({
+      reply: replyText,
+      source,
+      geminiError
+    });
     } catch (err: any) {
       console.error('Error in /api/chat/assistant:', err);
       return res.status(500).json({
