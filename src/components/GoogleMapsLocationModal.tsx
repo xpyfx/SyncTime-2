@@ -61,10 +61,19 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
     return [...new Set(parts)].join(', ');
   };
 
-  const buildGoogleMapsUrl = (lat: number, lng: number) => {
-    // 直接開啟選定地點的實際座標，
-    // 不再只是把使用者輸入的文字塞到 Google Maps 搜尋框
-    return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+  const buildGoogleMapsUrl = (
+  name: string,
+  address: string,
+  lat: number,
+    lng: number
+  ) => {
+    const query = address
+      ? `${name}, ${address}`
+      : `${lat},${lng}`;
+
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+      query
+    )}`;
   };
 
   const handleSearch = async () => {
@@ -138,6 +147,8 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
     if (!selectedPlace) return;
 
     const googleMapsUri = buildGoogleMapsUrl(
+      selectedPlace.name,
+      selectedPlace.address,
       selectedPlace.lat,
       selectedPlace.lng
     );
@@ -168,8 +179,13 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
   };
 
   const selectedMapsUrl = selectedPlace
-    ? buildGoogleMapsUrl(selectedPlace.lat, selectedPlace.lng)
-    : '';
+  ? buildGoogleMapsUrl(
+      selectedPlace.name,
+      selectedPlace.address,
+      selectedPlace.lat,
+      selectedPlace.lng
+    )
+  : '';
 
   return (
     <div
@@ -204,9 +220,9 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
               className="
                 w-9 h-9
                 rounded-full
-                bg-emerald-500/10
+                bg-[#B6cada]/40
                 flex items-center justify-center
-                text-emerald-600
+                text-[#035096]
               "
             >
               <MapPin size={19} />
@@ -232,6 +248,8 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
               bg-apple-gray-100
               flex items-center justify-center
               text-apple-gray-500
+              hover:bg-apple-gray-200
+              transition-colors
             "
           >
             <X size={17} />
@@ -252,9 +270,13 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
               flex items-center gap-2
               bg-apple-gray-50
               border border-apple-gray-200
+              focus-within:border-[#035096]
+              focus-within:ring-2
+              focus-within:ring-[#B6cada]/60
               rounded-2xl
               px-3.5
               h-11
+              transition-all
             "
           >
             <Search
@@ -288,13 +310,17 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
               h-11
               px-4
               rounded-2xl
-              bg-emerald-600
+              bg-[#035096]
+              hover:bg-[#02457D]
               text-white
               text-xs
               font-bold
               disabled:opacity-40
               flex items-center justify-center
               min-w-[58px]
+              active:scale-95
+              transition-all
+              shadow-xs
             "
           >
             {isSearching ? (
@@ -339,8 +365,8 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
                       gap-3
                       ${
                         isSelected
-                          ? 'bg-emerald-50 border-emerald-400 ring-1 ring-emerald-300'
-                          : 'bg-white border-apple-gray-200 hover:bg-apple-gray-50'
+                          ? 'bg-[#B6cada]/30 border-[#035096] ring-1 ring-[#035096]/30 shadow-xs'
+                          : 'bg-white border-apple-gray-200 hover:bg-[#B6cada]/10'
                       }
                     `}
                   >
@@ -350,10 +376,11 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
                         rounded-xl
                         flex items-center justify-center
                         shrink-0
+                        transition-colors
                         ${
                           isSelected
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-emerald-50 text-emerald-600'
+                            ? 'bg-[#035096] text-white shadow-2xs'
+                            : 'bg-[#B6cada]/35 text-[#035096]'
                         }
                       `}
                     >
@@ -365,7 +392,7 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="font-bold text-sm text-apple-gray-900 leading-snug">
+                      <div className={`font-bold text-sm leading-snug ${isSelected ? 'text-[#035096]' : 'text-apple-gray-900'}`}>
                         {place.name}
                       </div>
 
@@ -390,23 +417,25 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
             className="
               mt-4
               pt-4
-              border-t border-apple-gray-100
+              border-t border-[#B6cada]/40
               shrink-0
             "
           >
-            <div className="text-[11px] text-apple-gray-400 mb-2">
-              已選擇
+            <div className="text-[11px] font-bold text-[#035096]/70 mb-1.5 flex items-center gap-1">
+              <span>已選擇地點</span>
             </div>
 
-            <div className="font-bold text-sm text-apple-gray-900">
-              📍 {selectedPlace.name}
-            </div>
-
-            {selectedPlace.address && (
-              <div className="text-[11px] text-apple-gray-500 mt-1">
-                {selectedPlace.address}
+            <div className="p-3 bg-[#B6cada]/20 rounded-2xl border border-[#035096]/20">
+              <div className="font-bold text-sm text-[#035096]">
+                📍 {selectedPlace.name}
               </div>
-            )}
+
+              {selectedPlace.address && (
+                <div className="text-[11px] text-apple-gray-600 mt-1 leading-relaxed">
+                  {selectedPlace.address}
+                </div>
+              )}
+            </div>
 
             <div className="flex gap-2 mt-3">
               <a
@@ -418,12 +447,14 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
                   h-10
                   rounded-xl
                   bg-white
-                  border border-emerald-200
-                  text-emerald-700
+                  border border-[#035096]/30
+                  text-[#035096]
+                  hover:bg-[#B6cada]/20
                   text-xs
                   font-bold
                   flex items-center justify-center
                   gap-1.5
+                  transition-all
                 "
               >
                 <ExternalLink size={13} />
@@ -437,12 +468,16 @@ export const GoogleMapsLocationModal: React.FC<GoogleMapsLocationModalProps> = (
                   flex-1
                   h-10
                   rounded-xl
-                  bg-emerald-600
+                  bg-[#035096]
+                  hover:bg-[#02457D]
                   text-white
                   text-xs
                   font-bold
                   flex items-center justify-center
                   gap-1.5
+                  active:scale-95
+                  transition-all
+                  shadow-xs
                 "
               >
                 <Send size={13} />

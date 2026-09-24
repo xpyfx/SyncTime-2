@@ -266,7 +266,7 @@ export const PopularTravelBarSection: React.FC<PopularTravelBarSectionProps> = (
               {/* Engagement Metrics Bottom Bar */}
               <div className="pt-2 border-t border-apple-gray-100 flex items-center justify-between text-xs">
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1 font-bold text-[#10B981] bg-emerald-50 px-2 py-0.5 rounded-full">
+                  <div className="flex items-center gap-1 font-bold text-[#035096] bg-[#035096]/10 px-2 py-0.5 rounded-full">
                     <MessageCircle size={12} className="stroke-[2.5]" />
                     <span className="text-[11px]">{commentsCount} 則討論</span>
                   </div>

@@ -3200,13 +3200,32 @@ const ChatView: React.FC<{ roomId: string, onBack: () => void, onBackToTrip?: (t
     }
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  // 記錄哪一個聊天室已經完成第一次定位
+const initialScrollRoomRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+  messagesEndRef.current?.scrollIntoView({
+    behavior,
+    block: 'end'
+  });
+};
+
+// 第一次進入聊天室：在畫面繪製前直接跳到最新訊息
+// 後續收到新訊息：才使用平滑捲動
+React.useLayoutEffect(() => {
+  if (messages.length === 0) return;
+
+  const isFirstOpenForThisRoom =
+    initialScrollRoomRef.current !== roomId;
+
+  scrollToBottom(
+    isFirstOpenForThisRoom ? 'auto' : 'smooth'
+  );
+
+  if (isFirstOpenForThisRoom) {
+    initialScrollRoomRef.current = roomId;
+  }
+}, [messages, roomId]);
 
   useEffect(() => {
     const handleViewportResize = () => {
@@ -5710,9 +5729,14 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
       <AnimatePresence>
         {showSearch && (
           <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} className="fixed inset-0 z-[100] bg-white pt-[max(env(safe-area-inset-top,0px),48px)]">
-            <div className="px-5 flex items-center justify-between mb-4 border-b border-apple-gray-50 pb-4">
-              <h2 className="text-lg font-bold">尋找好友</h2>
-              <button onClick={() => setShowSearch(false)} className="text-apple-gray-600 font-medium px-2 py-1">關閉</button>
+            <div className="px-5 flex items-center justify-between mb-4 border-b border-apple-gray-100 pb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-[#B6cada]/40 flex items-center justify-center text-[#035096]">
+                  <Search size={16} />
+                </div>
+                <h2 className="text-lg font-bold text-apple-gray-900">尋找好友</h2>
+              </div>
+              <button onClick={() => setShowSearch(false)} className="text-apple-gray-600 hover:text-apple-gray-900 font-medium px-2 py-1">關閉</button>
             </div>
             <div className="p-4 space-y-4">
               <div className="w-full">
@@ -5737,24 +5761,24 @@ export const ChatPage: React.FC<{ initialRoomId: string | null, onAvatarClick: (
               )}
 
               {searchResult && (
-                <div className="flex items-center justify-between p-4 bg-apple-gray-50 rounded-2xl border border-apple-gray-100">
+                <div className="flex items-center justify-between p-4 bg-[#B6cada]/15 rounded-2xl border border-[#035096]/20 shadow-xs">
                   <div className="flex items-center gap-3 cursor-pointer" onClick={() => { setShowSearch(false); onAvatarClick(searchResult.uid); }}>
-                    <div className="w-12 h-12 rounded-full bg-white overflow-hidden border border-apple-gray-100">
+                    <div className="w-12 h-12 rounded-full bg-white overflow-hidden border border-[#035096]/20">
                       {searchResult.avatarUrl ? <img src={searchResult.avatarUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-apple-gray-200">?</div>}
                     </div>
                     <div>
-                      <div className="text-sm font-bold">{searchResult.displayName}</div>
-                      <div className="text-[10px] text-apple-gray-300">@{searchResult.username}</div>
+                      <div className="text-sm font-bold text-[#035096]">{searchResult.displayName}</div>
+                      <div className="text-[10px] text-apple-gray-400">@{searchResult.username}</div>
                     </div>
                   </div>
                   {profile?.friends?.includes(searchResult.uid) ? (
-                    <span className="text-xs text-apple-gray-300 font-medium">已是好友</span>
+                    <span className="text-xs text-apple-gray-400 font-medium">已是好友</span>
                   ) : searchResult.uid === user?.uid ? (
-                    <span className="text-xs text-apple-gray-300 font-medium">你自己</span>
+                    <span className="text-xs text-apple-gray-400 font-medium">你自己</span>
                   ) : (
                     <button 
                       onClick={() => handleAddFriendFromChat(searchResult.uid)}
-                      className="text-white bg-apple-blue px-4 py-2 rounded-xl text-xs font-bold"
+                      className="text-white bg-[#035096] hover:bg-[#02457D] px-4 py-2 rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all"
                     >
                       加入好友
                     </button>
