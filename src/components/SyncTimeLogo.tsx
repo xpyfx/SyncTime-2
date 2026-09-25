@@ -73,7 +73,7 @@ export const SyncTimeLogo: React.FC<SyncTimeLogoProps> = ({
           alt="SyncTime Mascot Logo"
           className="w-full h-full object-contain filter drop-shadow-md select-none"
           referrerPolicy="no-referrer"
-          onError={() => setLoadError(true)}
+          onError={() => console.error('LOGO.png failed to load')}
         />
       </div>
     );

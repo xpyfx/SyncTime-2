@@ -7,7 +7,7 @@ import {
   Edit2, Users, Lock
 } from 'lucide-react';
 import { doc, collection, getDocs, getDoc, addDoc, deleteDoc, query, where, writeBatch, updateDoc, setDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
 import { GlassSearchInput } from '../components/GlassSearchInput';
 import { Stay, UserProfile } from '../types';
 import EXIF from 'exif-js';
@@ -136,7 +136,22 @@ interface TravelTrajectoryProps {
   isOwnProfile: boolean;
   onUserClick?: (uid: string) => void;
   userProfile?: UserProfile | null;
+  userEmail?: string;
 }
+
+// Only this account retains the demonstration travel trajectory; all other user accounts start blank
+const PRESERVED_ACCOUNT_EMAIL = 'phoebe.pyf@gmail.com';
+
+const SAMPLE_REMARKS = new Set([
+  'Breathtaking ocean views',
+  'Prague Astronomical Clock',
+  'Loved the pierogi!',
+  'Berlin-Brandenburg',
+  '要回捷克啦',
+  'Arctic Ocean Aurora!',
+  '東京自駕',
+  '舊金山 Golden Gate'
+]);
 
 // Helper to compute CSS gradient backgrounds matching country flag colors to avoid generic iOS emoji flags
 function getCustomFlagBadgeGradient(countryName: string): string {
@@ -179,7 +194,7 @@ function getCustomFlagBadgeGradient(countryName: string): string {
   return mapping[countryName] || 'linear-gradient(135deg, #e2e8f0, #cbd5e1)';
 }
 
-export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUserClick, userProfile: initialUserProfile }: TravelTrajectoryProps) {
+export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUserClick, userProfile: initialUserProfile, userEmail }: TravelTrajectoryProps) {
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(initialUserProfile || null);
   const [activeTab, setActiveTab] = useState<'stays' | 'insights'>('stays');
   const [stays, setStays] = useState<Stay[]>([]);
@@ -244,10 +259,16 @@ export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUser
           throw new Error('Canvas element not found ref');
         }
 
+        const isPreservedPhoebe = Boolean(
+          (userEmail && userEmail.toLowerCase().trim() === PRESERVED_ACCOUNT_EMAIL) ||
+          (auth.currentUser?.email && auth.currentUser.email.toLowerCase().trim() === PRESERVED_ACCOUNT_EMAIL) ||
+          (currentUserProfile?.email && currentUserProfile.email.toLowerCase().trim() === PRESERVED_ACCOUNT_EMAIL)
+        );
+
         const passportInfo: PassportUserInfo = {
-          displayName: currentUserProfile?.displayName || (userId === 'guest' || !userId ? '精采漫空旅客' : '方方老Baby'),
-          username: currentUserProfile?.username || (userId === 'guest' || !userId ? 'GUEST' : 'PHOEBE.PYF'),
-          email: currentUserProfile?.username ? `${currentUserProfile.username}@synctime.app` : 'phoebe.pyf@gmail.com',
+          displayName: currentUserProfile?.displayName || (isPreservedPhoebe ? '方方老Baby' : (userId === 'guest' || !userId ? '漫空旅客' : '個人旅人')),
+          username: currentUserProfile?.username || (isPreservedPhoebe ? 'PHOEBE.PYF' : (userId === 'guest' || !userId ? 'GUEST' : 'TRAVELER')),
+          email: currentUserProfile?.email || auth.currentUser?.email || (isPreservedPhoebe ? PRESERVED_ACCOUNT_EMAIL : (currentUserProfile?.username ? `${currentUserProfile.username}@synctime.app` : 'traveler@synctime.app')),
           avatarUrl: currentUserProfile?.avatarUrl,
           authority: 'Synctime Professional Certification Organization',
         };
@@ -274,10 +295,16 @@ export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUser
     setShareFormat('file');
     setIsGeneratingFile(true);
     try {
+      const isPreservedPhoebe = Boolean(
+        (userEmail && userEmail.toLowerCase().trim() === PRESERVED_ACCOUNT_EMAIL) ||
+        (auth.currentUser?.email && auth.currentUser.email.toLowerCase().trim() === PRESERVED_ACCOUNT_EMAIL) ||
+        (currentUserProfile?.email && currentUserProfile.email.toLowerCase().trim() === PRESERVED_ACCOUNT_EMAIL)
+      );
+
       const passportInfo: PassportUserInfo = {
-        displayName: currentUserProfile?.displayName || (userId === 'guest' || !userId ? '精采漫空旅客' : '方方老Baby'),
-        username: currentUserProfile?.username || (userId === 'guest' || !userId ? 'GUEST' : 'PHOEBE.PYF'),
-        email: currentUserProfile?.username ? `${currentUserProfile.username}@synctime.app` : 'phoebe.pyf@gmail.com',
+        displayName: currentUserProfile?.displayName || (isPreservedPhoebe ? '方方老Baby' : (userId === 'guest' || !userId ? '漫空旅客' : '個人旅人')),
+        username: currentUserProfile?.username || (isPreservedPhoebe ? 'PHOEBE.PYF' : (userId === 'guest' || !userId ? 'GUEST' : 'TRAVELER')),
+        email: currentUserProfile?.email || auth.currentUser?.email || (isPreservedPhoebe ? PRESERVED_ACCOUNT_EMAIL : (currentUserProfile?.username ? `${currentUserProfile.username}@synctime.app` : 'traveler@synctime.app')),
         avatarUrl: currentUserProfile?.avatarUrl,
         authority: 'Synctime Professional Certification Organization',
       };
@@ -355,26 +382,70 @@ export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUser
           console.error('Error fetching companion stays: ', compErr);
         }
 
-        // Seed with sample data if first-time user to make it look active, similar to Image 2
-        if (loadedStays.length === 0 && isOwnProfile) {
-          const defaultData: Omit<Stay, 'id'>[] = [
-            { userId, country: 'Malta', city: 'Valletta', startDate: '2026-04-16', endDate: '2026-04-19', remark: 'Breathtaking ocean views', createdAt: new Date().toISOString() },
-            { userId, country: 'Czechia', city: 'Prague', startDate: '2026-04-06', endDate: '2026-04-15', remark: 'Prague Astronomical Clock', createdAt: new Date().toISOString() },
-            { userId, country: 'Poland', city: 'Krakow', startDate: '2026-04-03', endDate: '2026-04-05', remark: 'Loved the pierogi!', createdAt: new Date().toISOString() },
-            { userId, country: 'Germany', city: 'Berlin', startDate: '2026-03-25', endDate: '2026-03-25', remark: 'Berlin-Brandenburg', createdAt: new Date().toISOString() },
-            { userId, country: 'Finland', city: 'Helsinki', startDate: '2026-03-22', endDate: '2026-03-24', remark: '要回捷克啦', createdAt: new Date().toISOString() },
-            { userId, country: 'Norway', city: 'Tromso', startDate: '2026-03-21', endDate: '2026-03-21', remark: 'Arctic Ocean Aurora!', createdAt: new Date().toISOString() },
-            { userId, country: 'Japan', city: 'Tokyo', startDate: '2025-07-23', endDate: '2025-07-30', remark: '東京自駕', createdAt: new Date().toISOString() },
-            { userId, country: 'United States', city: 'San Francisco', startDate: '2025-01-11', endDate: '2025-01-22', remark: '舊金山 Golden Gate', createdAt: new Date().toISOString() }
-          ];
-
-          const batch = writeBatch(db);
-          for (const d of defaultData) {
-            const newDocRef = doc(collection(db, 'stays'));
-            batch.set(newDocRef, d);
-            loadedStays.push({ id: newDocRef.id, ...d });
+        // Determine whether this trajectory belongs to the preserved account: phoebe.pyf@gmail.com
+        let targetEmail = (userEmail || '').trim().toLowerCase();
+        if (!targetEmail && isOwnProfile && auth.currentUser?.email) {
+          targetEmail = auth.currentUser.email.trim().toLowerCase();
+        }
+        if (!targetEmail && currentUserProfile?.email) {
+          targetEmail = currentUserProfile.email.trim().toLowerCase();
+        }
+        if (!targetEmail && initialUserProfile?.email) {
+          targetEmail = initialUserProfile.email.trim().toLowerCase();
+        }
+        if (!targetEmail && userId && userId !== 'guest') {
+          try {
+            const userSnap = await getDoc(doc(db, 'users', userId));
+            if (userSnap.exists()) {
+              targetEmail = (userSnap.data()?.email || '').trim().toLowerCase();
+            }
+          } catch (e) {
+            console.warn('Could not read user email from firestore:', e);
           }
-          await batch.commit();
+        }
+
+        const isPhoebeAccount = targetEmail === PRESERVED_ACCOUNT_EMAIL;
+
+        if (isPhoebeAccount) {
+          // If Phoebe has no stays yet, seed the default demonstration stays specifically for Phoebe's account
+          if (loadedStays.length === 0 && isOwnProfile) {
+            const defaultData: Omit<Stay, 'id'>[] = [
+              { userId, country: 'Malta', city: 'Valletta', startDate: '2026-04-16', endDate: '2026-04-19', remark: 'Breathtaking ocean views', createdAt: new Date().toISOString() },
+              { userId, country: 'Czechia', city: 'Prague', startDate: '2026-04-06', endDate: '2026-04-15', remark: 'Prague Astronomical Clock', createdAt: new Date().toISOString() },
+              { userId, country: 'Poland', city: 'Krakow', startDate: '2026-04-03', endDate: '2026-04-05', remark: 'Loved the pierogi!', createdAt: new Date().toISOString() },
+              { userId, country: 'Germany', city: 'Berlin', startDate: '2026-03-25', endDate: '2026-03-25', remark: 'Berlin-Brandenburg', createdAt: new Date().toISOString() },
+              { userId, country: 'Finland', city: 'Helsinki', startDate: '2026-03-22', endDate: '2026-03-24', remark: '要回捷克啦', createdAt: new Date().toISOString() },
+              { userId, country: 'Norway', city: 'Tromso', startDate: '2026-03-21', endDate: '2026-03-21', remark: 'Arctic Ocean Aurora!', createdAt: new Date().toISOString() },
+              { userId, country: 'Japan', city: 'Tokyo', startDate: '2025-07-23', endDate: '2025-07-30', remark: '東京自駕', createdAt: new Date().toISOString() },
+              { userId, country: 'United States', city: 'San Francisco', startDate: '2025-01-11', endDate: '2025-01-22', remark: '舊金山 Golden Gate', createdAt: new Date().toISOString() }
+            ];
+
+            const batch = writeBatch(db);
+            for (const d of defaultData) {
+              const newDocRef = doc(collection(db, 'stays'));
+              batch.set(newDocRef, d);
+              loadedStays.push({ id: newDocRef.id, ...d });
+            }
+            await batch.commit();
+          }
+        } else {
+          // ANY OTHER USER:
+          // Must start with blank / empty trajectory!
+          // Clean up previously auto-seeded demo records from Firestore if found on this user's account
+          const demoDocs = loadedStays.filter(s => s.userId === userId && SAMPLE_REMARKS.has(s.remark || ''));
+          if (demoDocs.length > 0 && isOwnProfile) {
+            for (const d of demoDocs) {
+              try {
+                await deleteDoc(doc(db, 'stays', d.id));
+              } catch (delErr) {
+                console.warn('Error cleaning up demo stay doc:', delErr);
+              }
+            }
+          }
+          // Filter out demo stays completely from display for non-Phoebe accounts
+          const cleanStays = loadedStays.filter(s => !SAMPLE_REMARKS.has(s.remark || ''));
+          loadedStays.length = 0;
+          loadedStays.push(...cleanStays);
         }
 
         // Sort stays by start date descending
@@ -388,7 +459,7 @@ export default function TravelTrajectory({ onClose, userId, isOwnProfile, onUser
     };
 
     fetchStays();
-  }, [userId, isOwnProfile]);
+  }, [userId, isOwnProfile, userEmail]);
 
   useEffect(() => {
     if (initialUserProfile) {

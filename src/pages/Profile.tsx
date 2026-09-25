@@ -4064,6 +4064,7 @@ export const ProfilePage: React.FC<{
               userId={effectiveUserId!} 
               isOwnProfile={isOwnProfile}
               userProfile={profile}
+              userEmail={isOwnProfile ? (user?.email || profile?.email) : profile?.email}
               onClose={() => setShowTravelTrajectory(false)} 
               onUserClick={(uid) => {
                 setShowTravelTrajectory(false);

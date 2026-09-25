@@ -7,6 +7,7 @@
       "properties": {
         "displayName": { "type": "string" },
         "username": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
         "avatarUrl": { "type": "string" },
         "nationality": { "type": "string" },
         "birthday": { "type": "string" },

@@ -575,15 +575,15 @@ export async function generatePortablePassportPDF(
         authority: 'Synctime Professional Certification Organization',
       }
     : {
-        displayName: userInfo.displayName || userInfo.username || 'Traveller',
-        username: (userInfo.username || userInfo.displayName || 'PHOEBE.PYF').toUpperCase(),
+        displayName: userInfo.displayName || userInfo.username || '漫空旅人',
+        username: (userInfo.username || userInfo.displayName || 'TRAVELER').toUpperCase(),
         email: userInfo.email || '',
         avatarUrl: userInfo.avatarUrl,
         authority: userInfo.authority || 'Synctime Professional Certification Organization',
       };
 
-  const userName = resolvedInfo.displayName || '方方老Baby';
-  const passportId = resolvedInfo.username || 'PHOEBE.PYF';
+  const userName = resolvedInfo.displayName || '漫空旅人';
+  const passportId = resolvedInfo.username || 'TRAVELER';
   const authority = resolvedInfo.authority || 'Synctime Professional Certification Organization';
 
   // Load Chinese font for vector rendering

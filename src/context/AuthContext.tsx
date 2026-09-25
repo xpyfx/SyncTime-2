@@ -49,7 +49,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Real-time listener for profile
         unsubscribeProfile = onSnapshot(doc(db, 'users', user.uid), async (docSnap) => {
           if (docSnap.exists()) {
-            setProfile(docSnap.data() as UserProfile);
+            const data = docSnap.data() as UserProfile;
+            if (!data.email && user.email) {
+              updateDoc(doc(db, 'users', user.uid), { email: user.email }).catch(() => {});
+            }
+            setProfile({ ...data, email: data.email || user.email || '' });
             setLoading(false);
           } else {
             // Initialize profile if it doesn't exist
@@ -58,10 +62,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               displayName: user.displayName || '新用戶',
               username: user.email?.split('@')[0] || user.uid.slice(0, 8),
               avatarUrl: user.photoURL || '',
+              email: user.email || '',
               createdAt: new Date().toISOString(),
             };
             await setDoc(doc(db, 'users', user.uid), {
               ...newProfile,
+              email: user.email || '',
               createdAt: serverTimestamp(),
             });
             // onSnapshot will trigger again after setDoc

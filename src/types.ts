@@ -9,6 +9,7 @@ export interface UserProfile {
   uid: string;
   displayName: string;
   username: string;
+  email?: string;
   avatarUrl?: string;
   blockedUsers?: string[];
   friends?: string[];
