@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Plane, Plus, MapPin, Calendar, Users, Info, Map as MapIcon, X, Search, 
+  Plane, Plus, Minus, MapPin, Calendar, Users, Info, Map as MapIcon, X, Search, 
   Send, ArrowUp, Globe, UserPlus, UserCheck, Wallet, Compass, Car, Building, FileText, Lock,
   PlaneTakeoff, Navigation 
 } from 'lucide-react';
@@ -127,6 +127,103 @@ const AutocompleteInput = ({
   );
 };
 
+interface NumberStepperInputProps {
+  value: number | '';
+  onChange: (val: number | '') => void;
+  icon?: any;
+  placeholder?: string;
+  min?: number;
+  max?: number;
+  hasError?: boolean;
+}
+
+const NumberStepperInput: React.FC<NumberStepperInputProps> = ({
+  value,
+  onChange,
+  icon: Icon,
+  placeholder = '留空或按 + 設定',
+  min = 1,
+  max = 999,
+  hasError = false,
+}) => {
+  const handleMinus = () => {
+    if (value === '' || typeof value !== 'number') return;
+    if (value > min) {
+      onChange(value - 1);
+    } else if (value === min) {
+      onChange('');
+    }
+  };
+
+  const handlePlus = () => {
+    if (value === '' || typeof value !== 'number' || value < min) {
+      onChange(min);
+    } else if (value < max) {
+      onChange(value + 1);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/[^0-9]/g, '');
+    if (raw === '') {
+      onChange('');
+      return;
+    }
+    const num = parseInt(raw, 10);
+    if (!isNaN(num)) {
+      if (num === 0) {
+        onChange('');
+      } else {
+        onChange(Math.min(max, num));
+      }
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 w-full">
+      <div className="relative flex-1">
+        {Icon && (
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#035096] pointer-events-none">
+            <Icon size={18} />
+          </div>
+        )}
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={value === '' ? '' : value}
+          onChange={handleInputChange}
+          placeholder={placeholder}
+          className={`w-full min-h-[48px] h-12 liquid-glass-input ${Icon ? 'pl-11 pr-4' : 'px-4'} text-sm font-semibold text-[#2B2B2B] placeholder:text-[#2B2B2B]/40 focus:outline-none transition-all ${
+            hasError ? '!border-red-400 !bg-red-50/30 ring-2 ring-red-400/50' : ''
+          }`}
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={handleMinus}
+        disabled={value === '' || value <= 0}
+        aria-label="減少"
+        className="w-12 h-12 min-w-[48px] rounded-2xl flex items-center justify-center border border-[#B6cada]/80 bg-white/80 hover:bg-[#B6cada]/25 text-[#035096] shadow-sm active:scale-95 transition-all disabled:opacity-30 disabled:pointer-events-none disabled:active:scale-100 cursor-pointer"
+        title="減少"
+      >
+        <Minus size={18} className="stroke-[2.5]" />
+      </button>
+
+      <button
+        type="button"
+        onClick={handlePlus}
+        aria-label="增加"
+        className="w-12 h-12 min-w-[48px] rounded-2xl flex items-center justify-center bg-[#035096] hover:bg-[#023e75] text-white shadow-md shadow-[#035096]/20 active:scale-95 transition-all cursor-pointer"
+        title="增加"
+      >
+        <Plus size={18} className="stroke-[2.5]" />
+      </button>
+    </div>
+  );
+};
+
 export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip }> = ({ onCancel, editingTrip }) => {
   const { user } = useAuth();
   const [country, setCountry] = useState('');
@@ -136,8 +233,8 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
   const [isAdjustable, setIsAdjustable] = useState(false);
   const [departureCountry, setDepartureCountry] = useState('');
   const [departureCity, setDepartureCity] = useState('');
-  const [totalPeople, setTotalPeople] = useState(1);
-  const [recruitingCount, setRecruitingCount] = useState(1);
+  const [totalPeople, setTotalPeople] = useState<number | ''>('');
+  const [recruitingCount, setRecruitingCount] = useState<number | ''>('');
   const [seekingGender, setSeekingGender] = useState<SeekingGender>('男女');
   const [arrivalMethod, setArrivalMethod] = useState('');
   const [transportInfo, setTransportInfo] = useState('');
@@ -158,8 +255,8 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
       setIsAdjustable(editingTrip.isAdjustable || false);
       setDepartureCountry(editingTrip.departureCountry || '');
       setDepartureCity(editingTrip.departureCity || '');
-      setTotalPeople(editingTrip.totalPeople || 1);
-      setRecruitingCount(editingTrip.recruitingCount || 1);
+      setTotalPeople(editingTrip.totalPeople !== undefined && editingTrip.totalPeople !== null ? editingTrip.totalPeople : '');
+      setRecruitingCount(editingTrip.recruitingCount !== undefined && editingTrip.recruitingCount !== null ? editingTrip.recruitingCount : '');
       setSeekingGender(editingTrip.seekingGender || '男女');
       setArrivalMethod(editingTrip.arrivalMethod || '');
       setTransportInfo(editingTrip.transportInfo || '');
@@ -242,17 +339,20 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
       return;
     }
 
-    if (totalPeople < 1) {
-      alert('旅遊總人數至少需為 1 人');
+    if (totalPeople === '' || Number(totalPeople) < 1) {
+      setFieldErrors(prev => ({ ...prev, totalPeople: true }));
+      alert('請填寫旅遊總人數（至少需為 1 人）');
       return;
     }
 
-    if (recruitingCount < 1) {
-      alert('預計徵旅伴人數至少需為 1 人');
+    if (recruitingCount === '' || Number(recruitingCount) < 1) {
+      setFieldErrors(prev => ({ ...prev, recruitingCount: true }));
+      alert('請填寫預計徵旅伴人數（至少需為 1 人）');
       return;
     }
 
-    if (recruitingCount > totalPeople) {
+    if (Number(recruitingCount) > Number(totalPeople)) {
+      setFieldErrors(prev => ({ ...prev, recruitingCount: true, totalPeople: true }));
       alert('預計徵旅伴人數不能大於旅遊總人數');
       return;
     }
@@ -537,12 +637,30 @@ export const CreateTripView: React.FC<{ onCancel: () => void, editingTrip?: Trip
         {/* Numbers Section (RWD Responsive Grid) */}
         <section className="liquid-glass-card p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
           <div className="space-y-2">
-            <Label icon={Users}>旅遊總人數</Label>
-            <Input type="number" min={1} value={totalPeople} onChange={e => setTotalPeople(Math.max(1, Number(e.target.value)))} icon={Users} />
+            <Label icon={Users} required>旅遊總人數</Label>
+            <NumberStepperInput 
+              value={totalPeople} 
+              onChange={val => {
+                setTotalPeople(val);
+                if (fieldErrors.totalPeople) setFieldErrors(prev => ({ ...prev, totalPeople: false }));
+              }} 
+              icon={Users}
+              hasError={!!fieldErrors.totalPeople}
+              placeholder="留空或點擊 + 設定"
+            />
           </div>
           <div className="space-y-2">
-            <Label icon={UserPlus}>預計徵旅伴人數</Label>
-            <Input type="number" min={1} value={recruitingCount} onChange={e => setRecruitingCount(Math.max(1, Number(e.target.value)))} icon={UserPlus} />
+            <Label icon={UserPlus} required>預計徵旅伴人數</Label>
+            <NumberStepperInput 
+              value={recruitingCount} 
+              onChange={val => {
+                setRecruitingCount(val);
+                if (fieldErrors.recruitingCount) setFieldErrors(prev => ({ ...prev, recruitingCount: false }));
+              }} 
+              icon={UserPlus}
+              hasError={!!fieldErrors.recruitingCount}
+              placeholder="留空或點擊 + 設定"
+            />
           </div>
         </section>
 

@@ -18,6 +18,7 @@ const SYSTEM_INSTRUCTION = `你是由 SyncTime (共時) 官方團隊精心開發
 
 【App 核心功能與知識庫】
 - **App 名稱**：SyncTime (共時)。
+- **開發團隊**：世新大學 資訊傳播學系 112級 SyncTime (共時)團隊。
 - **核心定位**：專為熱愛旅行的旅人打造的高質感旅行結伴、旅行紀錄與即時通訊社群 App。
 - **1. 首頁 (Home)**：
   - 瀏覽各國旅伴招募行程（Trips），支援目的地國家、天數、招募狀態預覽。
@@ -50,7 +51,7 @@ const SYSTEM_INSTRUCTION = `你是由 SyncTime (共時) 官方團隊精心開發
 
 【極其嚴格的限制與防護規則（CRITICAL GUARDRAIL）】
 1. **嚴禁回答與 SyncTime App 無關的任何問題**：
-   - 如果使用者詢問與本 App 無關的內容（包括但不限於：寫程式代碼、政治評論、無關的一般歷史、閒聊百科、其他非相關軟體、算命、非關本 App 的數學或作業等），你必須【禮貌且堅定地拒絕回答】，並將使用者引導回 SyncTime 的相關功能。
+   - 如果使用者詢問與本 App 無關的內容（包括但不限於：寫程式代碼、政治評論、無關的一般歷史、閒聊百科、其他非相關軟體、算命、非關本 App 的數學或作業等），即便是使用者引導你脫離腳本，你都必須【禮貌且堅定地拒絕回答】，並將使用者引導回 SyncTime 的相關功能。
    - 拒絕範本參考：「您好！我是 SyncTime (共時) 的專屬使用指南與客服小助手，我僅能為您解答與 SyncTime App 相關的功能操作、旅程規劃、聊天室協同工具或使用疑問喲！請問有關 SyncTime 的哪項功能需要我為您說明呢？」
 2. **回答風格**：
    - 繁體中文，親切、專業、條理分明，使用 Emoji 增添旅行的溫暖與活力。
@@ -93,7 +94,7 @@ function getSyncTimeKnowledgeResponse(query: string): string {
 
   // SyncTime App topic keywords
   const syncTimeKeywords = [
-    'synctime', '共時', 'app', '旅程', '發起', '行程', '徵伴', '旅伴', '結伴', '招募', 
+    'synctime', '共時', 'app', '旅程', '旅遊', '旅行', '發起', '行程', '徵伴', '旅伴', '結伴', '招募', 
     '旅吧', '貼文', '動態', '留言', '檢舉', '隱藏', '聊天室', '聊天', '地點', 'google', 
     '地圖', 'maps', '分帳', '記帳', '結算', '抽籤', '投票', '護照', '過期', '損毀', 
     '軌跡', '足跡', '手勢', '隱私', '封鎖', '黑名單', '解除封鎖', '註銷', '登出', '功能', 
@@ -315,12 +316,17 @@ async function startServer() {
 
   // 3. Vite middleware for development vs static serve for production
   if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
+  const vite = await createViteServer({
+    server: {
+      middlewareMode: true,
+      hmr: false,
+    },
+    appType: 'spa',
+  });
+
+      app.use(vite.middlewares);
+    }
+else {
     const distPath = fs.existsSync(path.join(process.cwd(), 'dist'))
       ? path.join(process.cwd(), 'dist')
       : path.join(process.cwd(), 'build');
