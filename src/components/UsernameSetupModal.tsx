@@ -88,8 +88,20 @@ export const UsernameSetupModal: React.FC<UsernameSetupModalProps> = ({
       if (mode === 'edit') onClose?.();
     } catch (err: any) {
       const message = err?.message || '';
+      const code = err?.code || '';
 
-      if (message.includes('USERNAME_TAKEN')) {
+      console.error('Username setup error:', {
+        code,
+        message
+      });
+
+      if (
+        code === 'permission-denied' ||
+        message.includes('permission-denied') ||
+        message.includes('Missing or insufficient permissions')
+      ) {
+        setError('SyncTime ID 的 Firestore 權限尚未同步，請先發布最新版 Firestore Rules。');
+      } else if (message.includes('USERNAME_TAKEN')) {
         setError('這個 SyncTime ID 已經有人使用，請換一個。');
       } else if (message.includes('INVALID_USERNAME')) {
         setError('ID 格式不正確。');
@@ -107,8 +119,7 @@ export const UsernameSetupModal: React.FC<UsernameSetupModalProps> = ({
           setError('SyncTime ID 每 30 天只能修改一次。');
         }
       } else {
-        console.error('Username setup error:', err);
-        setError('設定失敗，請稍後再試。');
+        setError(`設定失敗，請稍後再試。${code ? `（${code}）` : ''}`);
       }
     } finally {
       setIsSaving(false);
