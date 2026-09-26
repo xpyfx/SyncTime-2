@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, OAuthProvider, signOut, deleteUser } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
-import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, onSnapshot, updateDoc, collection, query, where, getDocs, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, onSnapshot, updateDoc, collection, query, where, getDocs, arrayUnion, arrayRemove, runTransaction } from 'firebase/firestore';
 import { UserProfile } from '../types';
 
 interface AuthModalState {
@@ -21,6 +21,7 @@ interface AuthContextType {
   loginWithGoogle: () => Promise<void>;
   loginWithApple: () => Promise<void>;
   logout: () => Promise<void>;
+  updateUsername: (username: string) => Promise<void>;
   deleteAccount: () => Promise<void>;
   blockedByUsers: string[];
   blockUser: (targetUid: string) => Promise<void>;
@@ -60,7 +61,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const newProfile: UserProfile = {
               uid: user.uid,
               displayName: user.displayName || '新用戶',
-              username: user.email?.split('@')[0] || user.uid.slice(0, 8),
+
+              // 不再使用 Google email 前綴
+              username: '',
+              usernameCustomized: false,
+
               avatarUrl: user.photoURL || '',
               email: user.email || '',
               createdAt: new Date().toISOString(),
@@ -173,6 +178,102 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     await signOut(auth);
   };
+  const updateUsername = async (rawUsername: string) => {
+  if (!user) {
+    throw new Error('NOT_AUTHENTICATED');
+  }
+
+  const newUsername = rawUsername
+    .trim()
+    .toLowerCase()
+    .replace(/^@/, '');
+
+  // 4～20 字元，只允許英文小寫、數字、底線、句點
+  const usernameRegex = /^[a-z0-9._]{4,20}$/;
+
+  if (!usernameRegex.test(newUsername)) {
+    throw new Error('INVALID_USERNAME');
+  }
+
+  // 避免使用者直接把 Gmail 前綴再次當公開 ID
+  const emailPrefix = user.email
+    ?.split('@')[0]
+    ?.trim()
+    ?.toLowerCase();
+
+  if (emailPrefix && newUsername === emailPrefix) {
+    throw new Error('USERNAME_MATCHES_EMAIL');
+  }
+
+  const userRef = doc(db, 'users', user.uid);
+  const newUsernameRef = doc(
+    db,
+    'usernames',
+    newUsername
+  );
+
+  await runTransaction(db, async (transaction) => {
+    // 先讀目前 user document
+    const userSnap = await transaction.get(userRef);
+
+    if (!userSnap.exists()) {
+      throw new Error('USER_PROFILE_NOT_FOUND');
+    }
+
+    const currentUsername = String(
+      userSnap.data()?.username || ''
+    )
+      .trim()
+      .toLowerCase();
+
+    // 檢查新 ID 是否已經有人使用
+    const newUsernameSnap =
+      await transaction.get(newUsernameRef);
+
+    // 如果有舊的 username reservation，一併讀出
+    const oldUsernameRef =
+      currentUsername &&
+      currentUsername !== newUsername
+        ? doc(db, 'usernames', currentUsername)
+        : null;
+
+    const oldUsernameSnap = oldUsernameRef
+      ? await transaction.get(oldUsernameRef)
+      : null;
+
+    // 新 username 已經屬於別人
+    if (
+      newUsernameSnap.exists() &&
+      newUsernameSnap.data()?.uid !== user.uid
+    ) {
+      throw new Error('USERNAME_TAKEN');
+    }
+
+    // 建立新的 username reservation
+    if (!newUsernameSnap.exists()) {
+      transaction.set(newUsernameRef, {
+        uid: user.uid,
+        createdAt: serverTimestamp()
+      });
+    }
+
+    // 更新公開 profile
+    transaction.update(userRef, {
+      username: newUsername,
+      usernameCustomized: true
+    });
+
+    // 如果原本有舊的 username reservation，
+    // 而且確實屬於自己，就釋放它
+    if (
+      oldUsernameRef &&
+      oldUsernameSnap?.exists() &&
+      oldUsernameSnap.data()?.uid === user.uid
+    ) {
+      transaction.delete(oldUsernameRef);
+    }
+  });
+};
 
   const deleteAccount = async () => {
     const currentUser = auth.currentUser;
@@ -313,6 +414,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithGoogle: login,
         loginWithApple,
         logout,
+        updateUsername,
         deleteAccount,
         blockedByUsers,
         blockUser,

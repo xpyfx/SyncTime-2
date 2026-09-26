@@ -8,7 +8,13 @@ export interface GestureSettings {
 export interface UserProfile {
   uid: string;
   displayName: string;
+
+  // 公開的 SyncTime ID，例如 @angela_travel
   username: string;
+
+  // 是否已由使用者自行設定過 SyncTime ID
+  usernameCustomized?: boolean;
+
   email?: string;
   avatarUrl?: string;
   blockedUsers?: string[];

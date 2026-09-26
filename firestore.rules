@@ -25,18 +25,86 @@ service cloud.firestore {
     }
 
     // User Profile Rules
+    function ownsUsername(username) {
+      return existsAfter(
+        /databases/$(database)/documents/usernames/$(username)
+      )
+      && getAfter(
+        /databases/$(database)/documents/usernames/$(username)
+      ).data.uid == request.auth.uid;
+    }
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create: if isOwner(userId) && isValidUser(request.resource.data);
       allow update: if isSignedIn() && (
-        (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'username', 'email', 'blockedUsers', 'friends', 'nationality', 'birthday', 'gender', 'residence', 'visitedCities', 'hiddenItems', 'gestureSettings', 'isTrajectoryPublic', 'bio', 'isDeleted', 'deletedAt'])) ||
-        (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['friends']))
-      );
+  (
+    isOwner(userId) &&
+    isValidUser(request.resource.data) &&
+    request.resource.data.diff(resource.data)
+      .affectedKeys()
+      .hasOnly([
+        'displayName',
+        'avatarUrl',
+        'username',
+        'usernameCustomized',
+        'email',
+        'blockedUsers',
+        'friends',
+        'nationality',
+        'birthday',
+        'gender',
+        'residence',
+        'visitedCities',
+        'hiddenItems',
+        'gestureSettings',
+        'isTrajectoryPublic',
+        'bio',
+        'isDeleted',
+        'deletedAt'
+      ])
+    &&
+    (
+      request.resource.data.get('username', '') ==
+        resource.data.get('username', '')
+      ||
+      ownsUsername(
+        request.resource.data.get('username', '')
+      )
+    )
+  )
+  ||
+  (
+    isSignedIn() &&
+    request.resource.data
+      .diff(resource.data)
+      .affectedKeys()
+      .hasOnly(['friends'])
+  )
+);
       allow delete: if isOwner(userId);
       
       function isValidUser(data) {
         return data.get('displayName', '') is string && data.get('displayName', '').size() > 0 && data.get('displayName', '').size() < 100
-            && data.get('username', '') is string && data.get('username', '').size() < 50
+            && data.get('username', '') is string
+            && data.get('username', '').size() < 50
+
+            && (
+              data.get('usernameCustomized', false) == true ||
+              data.get('usernameCustomized', false) == false
+            )
+
+            && (
+              data.get('usernameCustomized', false) == false
+              ||
+              (
+                data.get('username', '').size() >= 4
+                &&
+                data.get('username', '').size() <= 20
+                &&
+                data.get('username', '')
+                  .matches('^[a-z0-9._]+$')
+              )
+            )
             && data.get('email', '') is string && data.get('email', '').size() <= 200
             && data.get('nationality', '') is string && data.get('nationality', '').size() < 100
             && data.get('birthday', '') is string && data.get('birthday', '').size() < 20
@@ -57,6 +125,22 @@ service cloud.firestore {
         allow read: if isSignedIn();
         allow write: if isOwner(userId);
       }
+    }
+
+    // Unique public SyncTime usernames
+    match /usernames/{username} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && username.size() >= 4
+        && username.size() <= 20
+        && username.matches('^[a-z0-9._]+$');
+
+      allow update: if false;
+
+      allow delete: if isSignedIn()
+        && resource.data.uid == request.auth.uid;
     }
 
     // Report Rules

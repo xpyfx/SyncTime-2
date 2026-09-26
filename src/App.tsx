@@ -1,3 +1,4 @@
+import { UsernameSetupModal } from './components/UsernameSetupModal';
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
@@ -19,7 +20,7 @@ import { getRoomUnreadCount, ChatRoom } from './types';
 
 
 const AppContent = () => {
-  const { user, loading, login, loginWithApple, authModal, closeAuthModal } = useAuth();
+  const { user, profile, loading, login, loginWithApple, authModal, closeAuthModal } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
   const [selectedChatRoomId, setSelectedChatRoomId] = useState<string | null>(null);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
@@ -255,6 +256,11 @@ const AppContent = () => {
         </AnimatePresence>
       </div>
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} hasUnreadChat={hasUnreadChat} unreadChatCount={unreadChatCount} unreadNotifCount={unreadNotifCount} />
+      {profile &&
+        !profile.isDeleted &&
+        profile.usernameCustomized !== true && (
+          <UsernameSetupModal />
+        )}
 
       {/* Full screen overlays with layered Z-indices */}
       <AnimatePresence>
