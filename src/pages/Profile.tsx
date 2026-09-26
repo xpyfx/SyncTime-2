@@ -1663,27 +1663,83 @@ export const ProfilePage: React.FC<{
             
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-[max(env(safe-area-inset-bottom,0px),32px)] bg-apple-gray-50">
               {/* SyncTime Dedicated AI Assistant Card */}
-              <div className="bg-gradient-to-br from-emerald-50 via-teal-50/40 to-white rounded-2xl p-4 border border-emerald-200/80 shadow-2xs">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-xs shrink-0">
-                      <Bot size={22} className="stroke-[2.2]" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-bold text-apple-gray-900 leading-tight">SyncTime 專屬 AI 小助手</span>
-                        <span className="px-1.5 py-0.5 rounded-md bg-emerald-500 text-white font-bold text-[9px]">官方</span>
-                      </div>
-                      <p className="text-[11px] text-apple-gray-500 mt-0.5 font-medium">解答功能操作、旅伴篩選、聊天室工具與疑難排解</p>
-                    </div>
+              <div className="
+                bg-[#B6cada]/25
+                rounded-2xl
+                p-4
+                border border-[#B6cada]
+                shadow-2xs
+              ">
+                <div className="flex items-center gap-3">
+
+                  {/* AI Icon */}
+                  <div className="
+                    w-11 h-11
+                    rounded-2xl
+                    bg-[#035096]
+                    text-white
+                    flex items-center justify-center
+                    shadow-xs
+                    shrink-0
+                  ">
+                    <Bot size={23} className="stroke-[2.2]" />
                   </div>
+
+                  {/* Text */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="
+                        text-sm
+                        font-bold
+                        text-[#17364D]
+                        leading-tight
+                      ">
+                        SyncTime 專屬 AI 小助手
+                      </span>
+
+                      {/* 官方認證：不用再顯示「官／方」文字 */}
+                      <CheckCircle2
+                        size={15}
+                        className="text-[#035096] shrink-0"
+                        aria-label="SyncTime 官方"
+                      />
+                    </div>
+
+                    <p className="
+                      text-[11px]
+                      text-[#4B6678]
+                      mt-1
+                      font-medium
+                      leading-relaxed
+                    ">
+                      解答功能操作、旅伴篩選、聊天室工具與疑難排解
+                    </p>
+                  </div>
+
+                  {/* CTA */}
                   <button
                     type="button"
                     onClick={() => setShowAIAssistant(true)}
-                    className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-2xs transition-all active:scale-95 cursor-pointer shrink-0"
+                    className="
+                      px-4
+                      h-9
+                      bg-[#035096]
+                      hover:bg-[#02457D]
+                      text-white
+                      text-xs
+                      font-bold
+                      rounded-xl
+                      shadow-2xs
+                      transition-all
+                      active:scale-95
+                      cursor-pointer
+                      shrink-0
+                      whitespace-nowrap
+                    "
                   >
-                    立即諮詢
+                    →
                   </button>
+
                 </div>
               </div>
 
