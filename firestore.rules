@@ -253,7 +253,7 @@ service cloud.firestore {
 
       match /likes/{userId} {
         allow read: if isSignedIn();
-        allow write: if isSignedIn() && request.auth.uid == userId;
+        allow write: if isActiveUser() && request.auth.uid == userId;
       }
 
       match /comments/{commentId} {
