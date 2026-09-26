@@ -51,10 +51,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         unsubscribeProfile = onSnapshot(doc(db, 'users', user.uid), async (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data() as UserProfile;
-            if (!data.email && user.email) {
+            // Never repopulate private identity data onto an expired/tombstoned profile.
+            if (!data.isDeleted && !data.email && user.email) {
               updateDoc(doc(db, 'users', user.uid), { email: user.email }).catch(() => {});
             }
-            setProfile({ ...data, email: data.email || user.email || '' });
+            setProfile(
+              data.isDeleted
+                ? data
+                : { ...data, email: data.email || user.email || '' }
+            );
             setLoading(false);
           } else {
             // Initialize profile if it doesn't exist
@@ -109,10 +114,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
+  const finalizeLegacyDeletedAuthIfNeeded = async (signedInUser: User) => {
+    const profileSnap = await getDoc(doc(db, 'users', signedInUser.uid));
+
+    if (!profileSnap.exists() || profileSnap.data()?.isDeleted !== true) {
+      return false;
+    }
+
+    // Migration path for accounts that were tombstoned by the old flow but
+    // whose Firebase Auth identity was never actually deleted.
+    // Because this runs immediately after a fresh provider sign-in, deleteUser
+    // satisfies Firebase's recent-login requirement.
+    await deleteUser(signedInUser);
+    setUser(null);
+    setProfile(null);
+    setBlockedByUsers([]);
+
+    setAuthModal({
+      isOpen: true,
+      title: '舊帳號已完成註銷',
+      message: '這支舊帳號已正式銷毀。若要重新使用 SyncTime，請再使用同一個登入方式登入一次；系統會建立一支全新的帳號，舊資料不會恢復。',
+      actionType: 'dismiss',
+    });
+
+    return true;
+  };
+
   const login = async () => {
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      await finalizeLegacyDeletedAuthIfNeeded(result.user);
     } catch (error: any) {
       if (error.code === 'auth/cancelled-popup-request' || error.code === 'auth/popup-closed-by-user') {
         // User closed or cancelled popup, no alert needed
@@ -142,7 +174,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const provider = new OAuthProvider('apple.com');
       provider.addScope('email');
       provider.addScope('name');
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      await finalizeLegacyDeletedAuthIfNeeded(result.user);
     } catch (error: any) {
       if (error.code === 'auth/cancelled-popup-request' || error.code === 'auth/popup-closed-by-user') {
         // User closed popup
