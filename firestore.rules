@@ -20,6 +20,14 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    // Deleted/tombstoned accounts may still be readable by other users so old
+    // chats can show an expired passport, but they are never allowed to write.
+    function isActiveUser() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isDeleted', false) == false;
+    }
+
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
@@ -39,6 +47,7 @@ service cloud.firestore {
       allow update: if isSignedIn() && (
   (
     isOwner(userId) &&
+    resource.data.get('isDeleted', false) == false &&
     isValidUser(request.resource.data) &&
     request.resource.data.diff(resource.data)
       .affectedKeys()
@@ -47,6 +56,7 @@ service cloud.firestore {
         'avatarUrl',
         'username',
         'usernameCustomized',
+        'usernameChangedAt',
         'email',
         'blockedUsers',
         'friends',
@@ -59,16 +69,31 @@ service cloud.firestore {
         'gestureSettings',
         'isTrajectoryPublic',
         'bio',
+        'interestTags',
+        'customExpenseCategories',
         'isDeleted',
         'deletedAt'
       ])
     &&
     (
+      // Tombstoning is allowed to clear the public ID immediately.
+      request.resource.data.get('isDeleted', false) == true
+      ||
       request.resource.data.get('username', '') ==
         resource.data.get('username', '')
       ||
-      ownsUsername(
-        request.resource.data.get('username', '')
+      (
+        ownsUsername(
+          request.resource.data.get('username', '')
+        )
+        &&
+        request.resource.data.get('usernameChangedAt', request.time) == request.time
+        &&
+        request.time >=
+          resource.data.get(
+            'usernameChangedAt',
+            request.time - duration.value(31, 'd')
+          ) + duration.value(30, 'd')
       )
     )
   )
@@ -81,7 +106,8 @@ service cloud.firestore {
       .hasOnly(['friends'])
   )
 );
-      allow delete: if isOwner(userId);
+      // Preserve the tombstone document so historical chats keep a stable old UID.
+      allow delete: if false;
       
       function isValidUser(data) {
         return data.get('displayName', '') is string && data.get('displayName', '').size() > 0 && data.get('displayName', '').size() < 100
@@ -105,6 +131,7 @@ service cloud.firestore {
                   .matches('^[a-z0-9._]+$')
               )
             )
+            && data.get('usernameChangedAt', request.time) is timestamp
             && data.get('email', '') is string && data.get('email', '').size() <= 200
             && data.get('nationality', '') is string && data.get('nationality', '').size() < 100
             && data.get('birthday', '') is string && data.get('birthday', '').size() < 20
@@ -131,7 +158,7 @@ service cloud.firestore {
     match /usernames/{username} {
       allow read: if isSignedIn();
 
-      allow create: if isSignedIn()
+      allow create: if isActiveUser()
         && request.resource.data.uid == request.auth.uid
         && username.size() >= 4
         && username.size() <= 20
@@ -139,21 +166,21 @@ service cloud.firestore {
 
       allow update: if false;
 
-      allow delete: if isSignedIn()
+      allow delete: if isActiveUser()
         && resource.data.uid == request.auth.uid;
     }
 
     // Report Rules
     match /reports/{reportId} {
-      allow create: if isSignedIn();
+      allow create: if isActiveUser();
     }
 
     // Stay Rules
     match /stays/{stayId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid && isValidStay(request.resource.data);
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && isValidStay(request.resource.data);
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isActiveUser() && request.resource.data.userId == request.auth.uid && isValidStay(request.resource.data);
+      allow update: if isActiveUser() && resource.data.userId == request.auth.uid && isValidStay(request.resource.data);
+      allow delete: if isActiveUser() && resource.data.userId == request.auth.uid;
 
       function isValidStay(data) {
         return data.userId is string && data.country is string && data.country.size() > 0
@@ -166,7 +193,7 @@ service cloud.firestore {
     // Notification Rules
     match /notifications/{notificationId} {
       allow read: if isSignedIn() && (request.auth.uid == resource.data.fromId || request.auth.uid == resource.data.toId);
-      allow create: if isSignedIn() && request.auth.uid == request.resource.data.fromId;
+      allow create: if isActiveUser() && request.auth.uid == request.resource.data.fromId;
       allow update: if isSignedIn() && (
         (request.auth.uid == resource.data.toId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])) ||
         (request.auth.uid == resource.data.fromId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
@@ -177,13 +204,13 @@ service cloud.firestore {
     // Trip Rules
     match /trips/{tripId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidTrip(request.resource.data) && request.resource.data.authorId == request.auth.uid;
-      allow update: if isSignedIn() && (
+      allow create: if isActiveUser() && isValidTrip(request.resource.data) && request.resource.data.authorId == request.auth.uid;
+      allow update: if isActiveUser() && (
         (resource.data.authorId == request.auth.uid && isValidTrip(request.resource.data)) || 
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentsCount'])) ||
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'status', 'chatRoomId']) && (request.auth.uid == resource.data.authorId || request.auth.uid in resource.data.get('members', [])))
       );
-      allow delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+      allow delete: if isActiveUser() && resource.data.authorId == request.auth.uid;
 
       match /comments/{commentId} {
         allow read: if isSignedIn();
@@ -196,7 +223,7 @@ service cloud.firestore {
         match /replies/{replyId} {
           allow read: if isSignedIn();
           allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
-          allow delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+          allow delete: if isActiveUser() && resource.data.authorId == request.auth.uid;
         }
 
         match /likes/{userId} {
@@ -217,12 +244,12 @@ service cloud.firestore {
     // Bar Post Rules
     match /barPosts/{postId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidBarPost(request.resource.data) && request.resource.data.authorId == request.auth.uid;
-      allow update: if isSignedIn() && (
+      allow create: if isActiveUser() && isValidBarPost(request.resource.data) && request.resource.data.authorId == request.auth.uid;
+      allow update: if isActiveUser() && (
         (resource.data.authorId == request.auth.uid && isValidBarPost(request.resource.data)) ||
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'commentsCount', 'favoritesCount']))
       );
-      allow delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+      allow delete: if isActiveUser() && resource.data.authorId == request.auth.uid;
 
       match /likes/{userId} {
         allow read: if isSignedIn();
@@ -232,7 +259,7 @@ service cloud.firestore {
       match /comments/{commentId} {
         allow read: if isSignedIn();
         allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
-        allow delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+        allow delete: if isActiveUser() && resource.data.authorId == request.auth.uid;
       }
 
       function isValidBarPost(data) {
@@ -243,8 +270,8 @@ service cloud.firestore {
     // Friend Request Rules
     match /friendRequests/{requestId} {
       allow read: if isSignedIn() && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId);
-      allow create: if isSignedIn() && request.auth.uid == request.resource.data.senderId && isValidRequest(request.resource.data);
-      allow update: if isSignedIn() && (
+      allow create: if isActiveUser() && request.auth.uid == request.resource.data.senderId && isValidRequest(request.resource.data);
+      allow update: if isActiveUser() && (
         (request.auth.uid == resource.data.receiverId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])) ||
         (request.auth.uid == resource.data.senderId && request.resource.data.status == 'pending')
       );
@@ -282,11 +309,11 @@ service cloud.firestore {
         request.auth.uid in resource.data.participants || 
         resource.data.get('type', '') == 'group'
       );
-      allow create: if isSignedIn() && request.auth.uid in request.resource.data.participants && (
+      allow create: if isActiveUser() && request.auth.uid in request.resource.data.participants && (
         (request.resource.data.get('type', 'individual') in ['individual', 'direct'] && request.resource.data.participants.size() == 2) ||
         (request.resource.data.get('type', '') == 'group' && (request.auth.uid in request.resource.data.participants || canAccessGroupChat(request.resource.data)))
       );
-      allow update: if isSignedIn() && (
+      allow update: if isActiveUser() && (
         request.auth.uid in resource.data.participants ||
         canAccessGroupChat(resource.data)
       );
@@ -300,11 +327,11 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/chatRooms/$(roomId)) &&
           isRoomMember(get(/databases/$(database)/documents/chatRooms/$(roomId)).data)
         );
-        allow create: if isSignedIn() && (
+        allow create: if isActiveUser() && (
           exists(/databases/$(database)/documents/chatRooms/$(roomId)) &&
           isRoomMember(get(/databases/$(database)/documents/chatRooms/$(roomId)).data)
         ) && request.resource.data.senderId == request.auth.uid;
-        allow update: if isSignedIn() && (
+        allow update: if isActiveUser() && (
           exists(/databases/$(database)/documents/chatRooms/$(roomId)) &&
           isRoomMember(get(/databases/$(database)/documents/chatRooms/$(roomId)).data)
         ) && (
@@ -321,8 +348,8 @@ service cloud.firestore {
     // User Reviews Rules
     match /userReviews/{reviewId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidUserReview(request.resource.data) && request.resource.data.targetUserId != request.auth.uid;
-      allow update, delete: if isSignedIn() && resource.data.reviewerId == request.auth.uid;
+      allow create: if isActiveUser() && isValidUserReview(request.resource.data) && request.resource.data.targetUserId != request.auth.uid;
+      allow update, delete: if isActiveUser() && resource.data.reviewerId == request.auth.uid;
 
       function isValidUserReview(data) {
         return data.get('targetUserId', '') is string && data.get('targetUserId', '').size() < 128
