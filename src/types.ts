@@ -15,6 +15,9 @@ export interface UserProfile {
   // 是否已由使用者自行設定過 SyncTime ID
   usernameCustomized?: boolean;
 
+  // 上次修改公開 SyncTime ID 的時間；第一次設定後 30 天才能再次修改
+  usernameChangedAt?: any;
+
   email?: string;
   avatarUrl?: string;
   blockedUsers?: string[];
