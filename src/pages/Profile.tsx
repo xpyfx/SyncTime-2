@@ -43,6 +43,7 @@ import {
 import { UserTagsSelectModal } from '../components/UserTagsSelectModal';
 import { getTagItem, DEFAULT_USER_TAGS } from '../data/userInterestTags';
 import { AppAIAssistantModal } from '../components/AppAIAssistantModal';
+import { UsernameSetupModal } from '../components/UsernameSetupModal';
 import { getOrCreateChatRoom } from '../lib/chatUtils';
 import { motion, AnimatePresence } from 'motion/react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
@@ -273,6 +274,7 @@ export const ProfilePage: React.FC<{
   const [showSettings, setShowSettings] = useState(false);
   const [showAIAssistant, setShowAIAssistant] = useState(false);
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [showUsernameEditModal, setShowUsernameEditModal] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
   const [showGestureSettings, setShowGestureSettings] = useState(false);
@@ -1643,6 +1645,10 @@ export const ProfilePage: React.FC<{
                   setShowEditPassport(true);
                   setShowSettings(false);
                 }} />
+                <ProfileItem icon={User} label="修改 SyncTime ID" onClick={() => {
+                  setShowUsernameEditModal(true);
+                  setShowSettings(false);
+                }} />
                 
                 {/* Basic Settings Section */}
                 <div className="px-4 py-3 bg-apple-gray-50/50 border-b border-apple-gray-50">
@@ -1769,7 +1775,7 @@ export const ProfilePage: React.FC<{
                 </h3>
                 <div className="p-3.5 bg-red-50/70 rounded-2xl border border-red-100/80 text-left">
                   <p className="text-xs text-red-700 leading-relaxed font-Semibold">
-                    叮叮叮！！！你注意了！這個操作意味著我們會直接銷毀你的護照，你將失去所有該帳號原先擁有的資料，即便你重新註冊，該帳號的過往內容也不會復原，你的護照也將徹底失效。
+                    註銷後，這支 SyncTime 帳號會永久失效並停止使用。公開旅程、旅吧貼文與個人足跡等帳號內容會被清除；既有聊天室中的歷史訊息會保留，但其他人點進你的舊帳號時只會看到「該護照已被銷毀」。日後仍可使用同一個 Google 或 Apple 帳號重新註冊，但會建立全新的 SyncTime 帳號，舊帳號的好友、內容與資料不會恢復。
                   </p>
                 </div>
               </div>
@@ -1795,7 +1801,9 @@ export const ProfilePage: React.FC<{
                       console.error('Delete account failed:', err);
                       setIsDeletingAccount(false);
                       if (err.message === 'REQUIRES_RECENT_LOGIN') {
-                        setDeleteAccountError('為了保障您的帳號安全，註銷帳號需要您最近驗證過身分。請重新登入後再次嘗試註銷。');
+                        setDeleteAccountError('為了保障帳號安全，請完成 Google／Apple 身分驗證後再註銷。');
+                      } else if (err.message === 'REAUTH_CANCELLED') {
+                        setDeleteAccountError('你已取消身分驗證，因此帳號尚未註銷。');
                       } else {
                         setDeleteAccountError(`註銷失敗：${err.message || '請稍後再試'}`);
                       }
@@ -3376,7 +3384,7 @@ export const ProfilePage: React.FC<{
                     </div>
 
                     <div className="p-3 bg-apple-gray-50/50 rounded-2xl">
-                      <span className="text-[10px] font-black text-apple-gray-300 block uppercase">註冊帳號 (Username)</span>
+                      <span className="text-[10px] font-black text-apple-gray-300 block uppercase">SyncTime ID</span>
                       <span className="text-sm font-black text-apple-gray-900 mt-0.5 block">@{profile?.username || '未設定'}</span>
                     </div>
 
@@ -4049,6 +4057,14 @@ export const ProfilePage: React.FC<{
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Edit public SyncTime ID */}
+      {showUsernameEditModal && (
+        <UsernameSetupModal
+          mode="edit"
+          onClose={() => setShowUsernameEditModal(false)}
+        />
+      )}
 
       {/* Travel Trajectory Full-screen Screen overlay layer */}
       <AnimatePresence>
