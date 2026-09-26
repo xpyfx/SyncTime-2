@@ -280,6 +280,7 @@ export const ProfilePage: React.FC<{
   const [showGestureSettings, setShowGestureSettings] = useState(false);
   const [gestureSubMenu, setGestureSubMenu] = useState<keyof GestureSettings | null>(null);
   const [showEditPassport, setShowEditPassport] = useState(false);
+  const profilePageScrollYRef = useRef(0);
   const [showTravelTrajectory, setShowTravelTrajectory] = useState(false);
   const [showFootprintInfo, setShowFootprintInfo] = useState(false);
   const [showFootprintDetail, setShowFootprintDetail] = useState(false);
@@ -332,6 +333,53 @@ export const ProfilePage: React.FC<{
   const [residenceSearch, setResidenceSearch] = useState('');
   const [showResidenceDropdown, setShowResidenceDropdown] = useState(false);
   const residenceDropdownRef = useRef<HTMLDivElement>(null);
+
+  // The passport editor is a full-screen overlay with its own scroll area.
+  // Lock the underlying profile page while it is open so trackpad/touch
+  // scrolling at the editor's top/bottom cannot scroll the page behind it.
+  useEffect(() => {
+    if (!showEditPassport) return;
+
+    const scrollY = window.scrollY;
+    profilePageScrollYRef.current = scrollY;
+
+    const body = document.body;
+    const html = document.documentElement;
+
+    const previousBodyStyles = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      overflow: body.style.overflow
+    };
+    const previousHtmlOverflow = html.style.overflow;
+
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+    html.style.overflow = 'hidden';
+
+    return () => {
+      body.style.position = previousBodyStyles.position;
+      body.style.top = previousBodyStyles.top;
+      body.style.left = previousBodyStyles.left;
+      body.style.right = previousBodyStyles.right;
+      body.style.width = previousBodyStyles.width;
+      body.style.overflow = previousBodyStyles.overflow;
+      html.style.overflow = previousHtmlOverflow;
+
+      window.scrollTo({
+        top: profilePageScrollYRef.current,
+        left: 0,
+        behavior: 'auto'
+      });
+    };
+  }, [showEditPassport]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -1645,10 +1693,6 @@ export const ProfilePage: React.FC<{
                   setShowEditPassport(true);
                   setShowSettings(false);
                 }} />
-                <ProfileItem icon={User} label="修改 SyncTime ID" onClick={() => {
-                  setShowUsernameEditModal(true);
-                  setShowSettings(false);
-                }} />
                 
                 {/* Basic Settings Section */}
                 <div className="px-4 py-3 bg-apple-gray-50/50 border-b border-apple-gray-50">
@@ -1962,14 +2006,17 @@ export const ProfilePage: React.FC<{
         {showEditPassport && (
           <motion.div 
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-            className="fixed inset-0 z-[200] bg-white flex flex-col"
+            className="fixed inset-0 z-[200] bg-white flex flex-col overscroll-none"
           >
             <div className="px-5 pt-[max(env(safe-area-inset-top,0px),48px)] pb-4 flex items-center justify-between border-b border-apple-gray-50 bg-white shrink-0">
               <h2 className="text-lg font-bold">修改護照資料</h2>
               <button onClick={() => setShowEditPassport(false)} className="text-apple-gray-400 px-2 py-1">取消</button>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-6 space-y-8">
+            <div
+              className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-6 space-y-8"
+              style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}
+            >
               {/* Avatar Editor */}
               <div className="flex flex-col items-center">
                 <div 
@@ -2044,6 +2091,30 @@ export const ProfilePage: React.FC<{
                     onChange={e => setPassportForm(p => ({ ...p, displayName: e.target.value }))}
                     className="w-full bg-apple-gray-50 rounded-xl px-4 h-12 text-sm focus:outline-apple-blue font-bold"
                   />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-apple-gray-300 mb-2 block uppercase">
+                    SyncTime ID
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowUsernameEditModal(true)}
+                    className="w-full min-h-12 bg-apple-gray-50 rounded-xl px-4 py-3 flex items-center justify-between gap-3 text-left active:bg-apple-gray-100 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-bold text-apple-gray-900 truncate">
+                        @{profile?.username || '未設定'}
+                      </div>
+                      <div className="text-[10px] text-apple-gray-400 mt-0.5">
+                        公開給其他旅人搜尋・每 30 天可修改一次
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 text-[#035096] shrink-0">
+                      <span className="text-xs font-bold">修改</span>
+                      <ChevronRight size={15} />
+                    </div>
+                  </button>
                 </div>
                 <div className="relative" ref={countryDropdownRef}>
                   <label className="text-xs font-bold text-apple-gray-300 mb-2 block uppercase">國籍 (Nationality) <span className="text-red-400">*</span></label>
