@@ -7,6 +7,8 @@
       "properties": {
         "displayName": { "type": "string" },
         "username": { "type": "string" },
+        "usernameCustomized": { "type": "boolean" },
+        "usernameChangedAt": { "type": "string", "format": "date-time" },
         "email": { "type": "string", "format": "email" },
         "avatarUrl": { "type": "string" },
         "nationality": { "type": "string" },
