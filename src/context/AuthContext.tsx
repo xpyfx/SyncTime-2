@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, OAuthProvider, signOut, deleteUser } from 'firebase/auth';
+import { User, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, OAuthProvider, signOut, deleteUser, reauthenticateWithPopup } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
 import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, onSnapshot, updateDoc, collection, query, where, getDocs, arrayUnion, arrayRemove, runTransaction } from 'firebase/firestore';
 import { UserProfile } from '../types';
@@ -179,115 +179,221 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await signOut(auth);
   };
   const updateUsername = async (rawUsername: string) => {
-  if (!user) {
-    throw new Error('NOT_AUTHENTICATED');
-  }
-
-  const newUsername = rawUsername
-    .trim()
-    .toLowerCase()
-    .replace(/^@/, '');
-
-  // 4～20 字元，只允許英文小寫、數字、底線、句點
-  const usernameRegex = /^[a-z0-9._]{4,20}$/;
-
-  if (!usernameRegex.test(newUsername)) {
-    throw new Error('INVALID_USERNAME');
-  }
-
-  // 避免使用者直接把 Gmail 前綴再次當公開 ID
-  const emailPrefix = user.email
-    ?.split('@')[0]
-    ?.trim()
-    ?.toLowerCase();
-
-  if (emailPrefix && newUsername === emailPrefix) {
-    throw new Error('USERNAME_MATCHES_EMAIL');
-  }
-
-  const userRef = doc(db, 'users', user.uid);
-  const newUsernameRef = doc(
-    db,
-    'usernames',
-    newUsername
-  );
-
-  await runTransaction(db, async (transaction) => {
-    // 先讀目前 user document
-    const userSnap = await transaction.get(userRef);
-
-    if (!userSnap.exists()) {
-      throw new Error('USER_PROFILE_NOT_FOUND');
+    if (!user) {
+      throw new Error('NOT_AUTHENTICATED');
     }
 
-    const currentUsername = String(
-      userSnap.data()?.username || ''
-    )
+    const newUsername = rawUsername
       .trim()
-      .toLowerCase();
+      .toLowerCase()
+      .replace(/^@/, '');
 
-    // 檢查新 ID 是否已經有人使用
-    const newUsernameSnap =
-      await transaction.get(newUsernameRef);
+    const usernameRegex = /^[a-z0-9._]{4,20}$/;
 
-    // 如果有舊的 username reservation，一併讀出
-    const oldUsernameRef =
-      currentUsername &&
-      currentUsername !== newUsername
-        ? doc(db, 'usernames', currentUsername)
+    if (!usernameRegex.test(newUsername)) {
+      throw new Error('INVALID_USERNAME');
+    }
+
+    const emailPrefix = user.email
+      ?.split('@')[0]
+      ?.trim()
+      ?.toLowerCase();
+
+    if (emailPrefix && newUsername === emailPrefix) {
+      throw new Error('USERNAME_MATCHES_EMAIL');
+    }
+
+    const userRef = doc(db, 'users', user.uid);
+    const newUsernameRef = doc(db, 'usernames', newUsername);
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+    await runTransaction(db, async (transaction) => {
+      const userSnap = await transaction.get(userRef);
+
+      if (!userSnap.exists()) {
+        throw new Error('USER_PROFILE_NOT_FOUND');
+      }
+
+      const userData = userSnap.data() as UserProfile;
+
+      if (userData.isDeleted) {
+        throw new Error('ACCOUNT_DELETED');
+      }
+
+      const currentUsername = String(userData.username || '')
+        .trim()
+        .toLowerCase();
+
+      if (currentUsername === newUsername) {
+        throw new Error('USERNAME_UNCHANGED');
+      }
+
+      const lastChanged = userData.usernameChangedAt;
+      let lastChangedMs: number | null = null;
+
+      if (lastChanged) {
+        if (typeof (lastChanged as any)?.toMillis === 'function') {
+          lastChangedMs = (lastChanged as any).toMillis();
+        } else if (typeof (lastChanged as any)?.toDate === 'function') {
+          lastChangedMs = (lastChanged as any).toDate().getTime();
+        } else if (typeof (lastChanged as any)?.seconds === 'number') {
+          lastChangedMs = (lastChanged as any).seconds * 1000;
+        } else {
+          const parsed = new Date(lastChanged as any).getTime();
+          lastChangedMs = Number.isNaN(parsed) ? null : parsed;
+        }
+      }
+
+      if (
+        userData.usernameCustomized === true &&
+        lastChangedMs !== null &&
+        Date.now() < lastChangedMs + THIRTY_DAYS_MS
+      ) {
+        const nextChangeAt = new Date(lastChangedMs + THIRTY_DAYS_MS).toISOString();
+        throw new Error(`USERNAME_COOLDOWN|${nextChangeAt}`);
+      }
+
+      const newUsernameSnap = await transaction.get(newUsernameRef);
+
+      const oldUsernameRef =
+        currentUsername && currentUsername !== newUsername
+          ? doc(db, 'usernames', currentUsername)
+          : null;
+
+      const oldUsernameSnap = oldUsernameRef
+        ? await transaction.get(oldUsernameRef)
         : null;
 
-    const oldUsernameSnap = oldUsernameRef
-      ? await transaction.get(oldUsernameRef)
-      : null;
+      if (
+        newUsernameSnap.exists() &&
+        newUsernameSnap.data()?.uid !== user.uid
+      ) {
+        throw new Error('USERNAME_TAKEN');
+      }
 
-    // 新 username 已經屬於別人
-    if (
-      newUsernameSnap.exists() &&
-      newUsernameSnap.data()?.uid !== user.uid
-    ) {
-      throw new Error('USERNAME_TAKEN');
-    }
+      if (!newUsernameSnap.exists()) {
+        transaction.set(newUsernameRef, {
+          uid: user.uid,
+          createdAt: serverTimestamp()
+        });
+      }
 
-    // 建立新的 username reservation
-    if (!newUsernameSnap.exists()) {
-      transaction.set(newUsernameRef, {
-        uid: user.uid,
-        createdAt: serverTimestamp()
+      transaction.update(userRef, {
+        username: newUsername,
+        usernameCustomized: true,
+        usernameChangedAt: serverTimestamp()
       });
-    }
 
-    // 更新公開 profile
-    transaction.update(userRef, {
-      username: newUsername,
-      usernameCustomized: true
+      if (
+        oldUsernameRef &&
+        oldUsernameSnap?.exists() &&
+        oldUsernameSnap.data()?.uid === user.uid
+      ) {
+        transaction.delete(oldUsernameRef);
+      }
     });
+  };
 
-    // 如果原本有舊的 username reservation，
-    // 而且確實屬於自己，就釋放它
-    if (
-      oldUsernameRef &&
-      oldUsernameSnap?.exists() &&
-      oldUsernameSnap.data()?.uid === user.uid
-    ) {
-      transaction.delete(oldUsernameRef);
+  const reauthenticateForDeletion = async (currentUser: User) => {
+    const providerIds = currentUser.providerData.map(p => p.providerId);
+
+    if (providerIds.includes('google.com')) {
+      await reauthenticateWithPopup(currentUser, new GoogleAuthProvider());
+      return;
     }
-  });
-};
+
+    if (providerIds.includes('apple.com')) {
+      const provider = new OAuthProvider('apple.com');
+      provider.addScope('email');
+      provider.addScope('name');
+      await reauthenticateWithPopup(currentUser, provider);
+      return;
+    }
+
+    throw new Error('REAUTH_PROVIDER_UNSUPPORTED');
+  };
 
   const deleteAccount = async () => {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
+
     const uid = currentUser.uid;
+    let tombstoneWritten = false;
 
     try {
-      // 1. Mark user document as deleted and clear all personal passport information in Firestore
-      try {
-        await updateDoc(doc(db, 'users', uid), {
+      // IMPORTANT: verify identity before changing any Firestore data.
+      // This prevents the old bug where the profile was marked deleted even
+      // when Firebase Auth later rejected deleteUser() for stale authentication.
+      await reauthenticateForDeletion(currentUser);
+
+      const userRef = doc(db, 'users', uid);
+      const userSnap = await getDoc(userRef);
+      const userData = userSnap.exists() ? (userSnap.data() as UserProfile) : null;
+      const oldUsername = String(userData?.username || '').trim().toLowerCase();
+
+      // Release the public SyncTime ID so a future account may use it.
+      if (oldUsername) {
+        const usernameRef = doc(db, 'usernames', oldUsername);
+        const usernameSnap = await getDoc(usernameRef);
+        if (usernameSnap.exists() && usernameSnap.data()?.uid === uid) {
+          await deleteDoc(usernameRef);
+        }
+      }
+
+      // Remove the deleted account from both sides of current friendships.
+      for (const friendUid of userData?.friends || []) {
+        await updateDoc(doc(db, 'users', friendUid), {
+          friends: arrayRemove(uid)
+        }).catch(() => {});
+      }
+
+      const deleteDocsFromQuery = async (q: any) => {
+        const snap = await getDocs(q);
+        for (const item of snap.docs) {
+          await deleteDoc(item.ref);
+        }
+      };
+
+      // Remove user-owned public/private content.
+      await deleteDocsFromQuery(
+        query(collection(db, 'trips'), where('authorId', '==', uid))
+      );
+      await deleteDocsFromQuery(
+        query(collection(db, 'barPosts'), where('authorId', '==', uid))
+      );
+      await deleteDocsFromQuery(
+        query(collection(db, 'stays'), where('userId', '==', uid))
+      );
+
+      // Remove personal saved data.
+      await deleteDocsFromQuery(collection(db, 'users', uid, 'savedTrips'));
+      await deleteDocsFromQuery(collection(db, 'users', uid, 'savedPosts'));
+
+      // Remove pending/history records that belong to this account.
+      await deleteDocsFromQuery(
+        query(collection(db, 'friendRequests'), where('senderId', '==', uid))
+      );
+      await deleteDocsFromQuery(
+        query(collection(db, 'friendRequests'), where('receiverId', '==', uid))
+      );
+      await deleteDocsFromQuery(
+        query(collection(db, 'notifications'), where('fromId', '==', uid))
+      );
+      await deleteDocsFromQuery(
+        query(collection(db, 'notifications'), where('toId', '==', uid))
+      );
+
+      // Keep this one tombstone document intentionally.
+      // Old chat messages still point to the old UID, so opening the old
+      // profile can continue to show "該護照已被銷毀".
+      if (userSnap.exists()) {
+        await updateDoc(userRef, {
           isDeleted: true,
-          deletedAt: new Date().toISOString(),
+          deletedAt: serverTimestamp(),
           displayName: '-',
-          username: '-',
+          username: '',
+          usernameCustomized: false,
+          email: '',
           avatarUrl: '',
           nationality: '-',
           birthday: '',
@@ -298,56 +404,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           friends: [],
           blockedUsers: [],
           hiddenItems: [],
+          interestTags: [],
+          customExpenseCategories: [],
           isTrajectoryPublic: false
         });
-      } catch (firestoreErr) {
-        console.warn('Firestore user doc update warning:', firestoreErr);
+        tombstoneWritten = true;
       }
 
-      // 2. Clear all user authored recruitment trips
-      try {
-        const tripsQ = query(collection(db, 'trips'), where('authorId', '==', uid));
-        const tripsSnap = await getDocs(tripsQ);
-        for (const tripDoc of tripsSnap.docs) {
-          await deleteDoc(tripDoc.ref).catch(() => {});
-        }
-      } catch (tripsErr) {
-        console.warn('Trips cleanup warning:', tripsErr);
-      }
-
-      // 3. Clear all user authored bar posts
-      try {
-        const postsQ = query(collection(db, 'barPosts'), where('authorId', '==', uid));
-        const postsSnap = await getDocs(postsQ);
-        for (const postDoc of postsSnap.docs) {
-          await deleteDoc(postDoc.ref).catch(() => {});
-        }
-      } catch (postsErr) {
-        console.warn('Posts cleanup warning:', postsErr);
-      }
-
-      // 4. Clear all user stays/footprints
-      try {
-        const staysQ = query(collection(db, 'stays'), where('userId', '==', uid));
-        const staysSnap = await getDocs(staysQ);
-        for (const stayDoc of staysSnap.docs) {
-          await deleteDoc(stayDoc.ref).catch(() => {});
-        }
-      } catch (staysErr) {
-        console.warn('Stays cleanup warning:', staysErr);
-      }
-
-      // 5. Delete user account from Firebase Auth
+      // Delete the Firebase Authentication identity itself.
+      // Signing in later with the same Google/Apple account creates a fresh
+      // Firebase account instead of reviving this old UID/profile.
       await deleteUser(currentUser);
 
-      // 6. Reset state
       setUser(null);
       setProfile(null);
+      setBlockedByUsers([]);
     } catch (error: any) {
       console.error('Delete account error:', error);
+
       if (error.code === 'auth/requires-recent-login') {
         throw new Error('REQUIRES_RECENT_LOGIN');
       }
+      if (
+        error.code === 'auth/popup-closed-by-user' ||
+        error.code === 'auth/cancelled-popup-request'
+      ) {
+        throw new Error('REAUTH_CANCELLED');
+      }
+
+      if (tombstoneWritten) {
+        // A tombstoned account must never continue operating as an active account.
+        // Security rules also block writes for deleted users.
+        setProfile(prev => prev ? { ...prev, isDeleted: true } : prev);
+      }
+
       throw error;
     }
   };
