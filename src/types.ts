@@ -152,6 +152,8 @@ export type NotificationType =
   | 'chat_message'
   | 'post_like'
   | 'post_comment'
+  | 'comment_like'
+  | 'trip_published'
   | 'trip_comment'
   | 'trip_itinerary_updated';
 
